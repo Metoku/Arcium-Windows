@@ -49,9 +49,15 @@ class FullPrepareSourceTests(unittest.TestCase):
             exec(compile(generated, "test_preparation.py", "exec"), namespace)
             with patch(
                 "scripts.restore_chromium_fixtures.restore_chromium_test_fixtures"
-            ) as restore:
+            ) as restore, patch(
+                "scripts.restore_patch_webui_tests.restore_missing_webui_patch_targets"
+            ) as restore_other:
                 namespace["main"]()
                 restore.assert_called_once_with(Path(tmp) / "src")
+                restore_other.assert_called_once_with(
+                    Path(tmp) / "src",
+                    Path(tmp) / "helium-chromium" / "patches"
+                )
             self.assertEqual(
                 namespace["patches"].calls, [["arcium"], ["windows"]]
             )
