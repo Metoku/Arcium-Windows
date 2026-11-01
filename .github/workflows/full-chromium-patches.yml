@@ -41,6 +41,8 @@ jobs:
       - name: Install upstream Windows builder dependencies
         run: python -m pip install requests Pillow
       - name: Prepare complete Windows Chromium tree and apply both full patch stacks
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python scripts/prepare_full_chromium.py --execute --max-minutes 55
       - name: Upload source-preparation report and diagnostics (never browser binaries)
         if: always()
