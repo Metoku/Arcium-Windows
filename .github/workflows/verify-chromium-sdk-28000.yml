@@ -1,0 +1,96 @@
+name: One-time verify official Chromium-required Windows SDK 28000
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/verify-chromium-sdk-28000.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: arcium-verify-sdk-28000-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  sdk-and-two-objects:
+    name: Install signed Microsoft 28000 SDK; compile two Windows objects
+    if: ${{ github.head_ref == 'experiment/verify-chromium-sdk-28000-20261102' }}
+    runs-on: windows-2025
+    timeout-minutes: 105
+    steps:
+      - name: Checkout reviewed Arcium-Windows build integration
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check installed Windows build tools and available space
+        shell: pwsh
+        run: ./scripts/windows_build_preflight.ps1
+      - name: Provision Chromium 156 required Microsoft Windows SDK (signed installer)
+        shell: pwsh
+        run: ./scripts/provision_chromium_sdk.ps1 -Install
+      - name: Verify required SDK headers, libraries and Chromium BR target
+        shell: pwsh
+        run: |
+          ./scripts/provision_chromium_sdk.ps1
+          $sdk = 'C:\Program Files (x86)\Windows Kits\10\Include\10.0.28000.0\shared\sdkddkver.h'
+          if (!(Test-Path -LiteralPath $sdk -PathType Leaf)) {
+            throw "Missing Chromium-required Windows SDK 28000 version header"
+          }
+          if (!(Select-String -LiteralPath $sdk -Pattern '^\s*#\s*define\s+NTDDI_WIN11_BR\b' -Quiet)) {
+            throw "Windows SDK header does not declare NTDDI_WIN11_BR"
+          }
+          $selected = python -c "from scripts.windows_sdk_compat import select_windows_sdk; print(select_windows_sdk())"
+          if ($LASTEXITCODE -ne 0 -or ($selected | Select-Object -Last 1) -ne '10.0.28000.0') {
+            throw "Installed complete SDK 28000 was not selected by build integration"
+          }
+          Write-Host 'ARCIUM_WINDOWS_SDK_28000_VERIFIED'
+      - name: Check GN and Chromium SDK compatibility adapters
+        run: |
+          python -m unittest discover -s tests -p test_chromium_sdk_pin.py -v
+          python -m unittest discover -s tests -p test_windows_sdk_compat.py -v
+          python -m unittest discover -s tests -p test_gn_smoke.py -v
+      - name: Stage pinned Helium-Windows and Arcium core
+        run: python scripts/windows_port.py stage
+      - name: Check GN adapter without source download
+        run: python scripts/gn_smoke.py --validate
+      - name: Install source build helper dependencies
+        run: python -m pip install requests Pillow
+      - name: Apply all 551 patches and generate GN with required SDK 28000
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/gn_smoke.py --execute --max-minutes 75
+      - name: Compile both previously failing Windows C++ objects only
+        shell: pwsh
+        run: |
+          $source = Join-Path $env:GITHUB_WORKSPACE 'work\windows-platform\build\src'
+          Set-Location $source
+          $env:DEPOT_TOOLS_WIN_TOOLCHAIN = '0'
+          $env:SISO_PATH = Join-Path $source 'third_party\siso\cipd\siso.exe'
+          $targetA = 'obj/base/base/windows_version.obj'
+          $targetB = 'obj/third_party/abseil-cpp/absl/random/internal/seed_material/seed_material.obj'
+          & python third_party/depot_tools/autoninja.py -C out/Default -j 2 $targetA $targetB 2>&1 |
+            Tee-Object -FilePath (Join-Path $env:GITHUB_WORKSPACE 'work\sdk-28000-two-object-probe.log')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Host 'ARCIUM_WINDOWS_SDK_28000_COMPILE_PROBE_PASSED'
+      - name: Upload text diagnostics only; never browser binaries
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arcium-windows-sdk-28000-two-object-diagnostics
+          path: |
+            work/gn-generation.json
+            work/gn-generation.log
+            work/sdk-28000-two-object-probe.log
+            work/windows-audit.json
+            work/windows-toolchain-preflight.json
+          if-no-files-found: warn
+          retention-days: 7
+
+# DO NOT MERGE this isolated diagnostic workflow. The Microsoft-signed
+# installer runs only inside its disposable authorized GitHub Windows runner.
+# No browser, installer target, signing or browser binary is produced or uploaded.
