@@ -1,0 +1,82 @@
+name: Windows source staging and experimental build
+
+on:
+  workflow_dispatch:
+    inputs:
+      compile_browser:
+        type: boolean
+        description: "Experimental Chromium compilation (heavy; requires substantial disk/RAM)"
+        default: false
+        required: true
+      runner:
+        type: choice
+        description: "Windows runner; hosted runners may lack disk/time for Chromium"
+        options:
+          - windows-2025
+          - self-hosted
+        default: windows-2025
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-experiment-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  stage-and-optional-compile:
+    name: "Pinned Windows port candidate"
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run offline Windows bootstrap tests
+        run: python -m unittest discover -s tests -v
+      - name: Show exact pinned source revisions
+        run: python scripts/windows_port.py plan
+      - name: Stage Helium Windows platform with Arcium shared core
+        run: python scripts/windows_port.py stage
+      - name: Upload static compatibility audit (NOT a build)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-source-audit
+          path: work/windows-audit.json
+          if-no-files-found: warn
+      - name: Ensure appropriate resources before Chromium compilation
+        if: ${{ inputs.compile_browser }}
+        shell: pwsh
+        run: |
+          $drive = Get-PSDrive -Name ((Get-Location).Drive.Name)
+          $freeGiB = [math]::Round($drive.Free / 1GB, 1)
+          Write-Host "Free disk: $freeGiB GiB"
+          if ($freeGiB -lt 100) {
+            throw "Need at least 100 GiB free for this experimental Chromium build. Configure a large Windows self-hosted runner."
+          }
+      - name: Install Python requirements for Helium Windows builder
+        if: ${{ inputs.compile_browser }}
+        run: python -m pip install requests Pillow
+      - name: Attempt real Chromium compilation (NO publishing or installer)
+        if: ${{ inputs.compile_browser }}
+        working-directory: work/windows-platform
+        run: python build.py --tarball -j 4
+      - name: Verify compiled executable exists (NOT UI feature validation)
+        if: ${{ inputs.compile_browser }}
+        shell: pwsh
+        run: |
+          $output = Join-Path (Get-Location) 'work/windows-platform/build/src/out/Default'
+          $candidate = @('helium.exe', 'chrome.exe') |
+            ForEach-Object { Join-Path $output $_ } |
+            Where-Object { Test-Path $_ } |
+            Select-Object -First 1
+          if (-not $candidate) {
+            throw "Compilation command returned but no known browser executable was found in $output"
+          }
+          Write-Host "Found compiled browser binary: $candidate"
+          Write-Host "This is only an existence check; actual browser launch, UI, packaging, and updates remain unverified."
