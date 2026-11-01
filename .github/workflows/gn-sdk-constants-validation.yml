@@ -1,0 +1,65 @@
+name: One-time full Windows GN test with pinned Chromium SDK
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/gn-sdk-constants-validation.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chromium-sdk-constant-gn-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  full-gn:
+    name: Complete Windows Chromium GN test (no Ninja)
+    if: ${{ github.head_ref == 'experiment/gn-sdk-constants-20261102' }}
+    runs-on: windows-2025
+    timeout-minutes: 100
+    steps:
+      - name: Checkout pinned Arcium Windows integration
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test pinned GN and Chromium SDK integration
+        run: |
+          python -m unittest discover -s tests -p test_gn_smoke.py -v
+          python -m unittest discover -s tests -p test_windows_sdk_compat.py -v
+          python -m unittest discover -s tests -p test_chromium_sdk_pin.py -v
+      - name: Select complete installed SDK
+        run: python -c "from scripts.windows_sdk_compat import select_windows_sdk; print(select_windows_sdk())"
+      - name: Inspect native Windows build resources
+        shell: pwsh
+        run: ./scripts/windows_build_preflight.ps1
+      - name: Stage exact Helium-Windows and Arcium sources
+        run: python scripts/windows_port.py stage
+      - name: Validate GN-only builder on pinned upstream scripts
+        run: python scripts/gn_smoke.py --validate
+      - name: Install pinned Windows builder dependencies
+        run: python -m pip install requests Pillow
+      - name: Execute all patches and generate GN files (no Ninja)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/gn_smoke.py --execute --max-minutes 75
+      - name: Save GN diagnostic reports, never binaries
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arcium-windows-chromium-sdk-gn-results
+          path: |
+            work/gn-generation.json
+            work/gn-generation.log
+            work/windows-toolchain-preflight.json
+            work/windows-audit.json
+          if-no-files-found: warn
+          retention-days: 7
+
+# Isolated one-time PR experiment; never merge this workflow into main.
+# The job intentionally exits immediately after gn gen, before compiling,
+# signing, installing, launching or publishing a browser.
