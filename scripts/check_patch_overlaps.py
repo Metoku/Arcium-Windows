@@ -349,10 +349,10 @@ def check_overlaps(platform: Path, workspace: Path, report_file: Path,
                 persist()
                 print(json.dumps(result, indent=2), file=sys.stderr)
                 return 1
-        report["status"] = "PASSED_OVERLAP_HUNKS_ONLY"
+        report["status"] = "PASSED_SELECTED_PATCH_HUNKS_ONLY"
         persist()
         print(f"All {len(report['applied'])} selected patch operations passed "
-              "on overlapping Chromium source files.")
+              "on selected Chromium source files.")
         return 0
     except Exception as exc:
         report["status"] = "ERROR"
