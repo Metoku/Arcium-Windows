@@ -5,8 +5,8 @@ import tempfile
 import unittest
 
 from scripts.chromium_sdk_pin import (
-    CHROMIUM_BASELINE_SDK, CHROMIUM_SDK_FILES, SDK_PIN_ANCHOR,
-    inject_chromium_sdk_pin, pin_chromium_sdk_version
+    CHROMIUM_BASELINE_SDK, CHROMIUM_SDK_FILES, CHROMIUM_WINVER_FILE,
+    SDK_PIN_ANCHOR, inject_chromium_sdk_pin, pin_chromium_sdk_version
 )
 
 
@@ -22,13 +22,29 @@ class ChromiumSDKPinTests(unittest.TestCase):
                  "SDK_VERSION = '" + version + "'\r\n"
                  "def toolchain():\r\n    pass\r\n").encode("ascii")
             )
+        target = root / CHROMIUM_WINVER_FILE
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(
+            b'# Copyright Chromium\r\n'
+            b'config("winver") {\r\n'
+            b'  defines = [\r\n'
+            b'    "NTDDI_VERSION=NTDDI_WIN11_BR",\r\n'
+            b'    "_WIN32_WINNT=0x0A00",\r\n'
+            b'  ]\r\n}\r\n'
+        )
 
     def test_updates_both_chromium_constants_and_preserves_newlines(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             self.prepare(root)
             result = pin_chromium_sdk_version(root, "10.0.26100.0")
-            self.assertEqual(tuple(result), CHROMIUM_SDK_FILES)
+            self.assertEqual(
+                tuple(result), CHROMIUM_SDK_FILES + (CHROMIUM_WINVER_FILE,)
+            )
+            winver = (root / CHROMIUM_WINVER_FILE).read_bytes()
+            self.assertIn(b'"NTDDI_VERSION=NTDDI_WIN11_GE",\r\n', winver)
+            self.assertNotIn(b'NTDDI_WIN11_BR', winver)
+            self.assertIn(b'"_WIN32_WINNT=0x0A00",\r\n', winver)
             for relative in CHROMIUM_SDK_FILES:
                 data = (root / relative).read_bytes()
                 self.assertIn(b"SDK_VERSION = '10.0.26100.0'\r\n", data)
@@ -45,6 +61,42 @@ class ChromiumSDKPinTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Unknown pinned Chromium"):
                 pin_chromium_sdk_version(root, "10.0.26100.0")
             self.assertEqual((root / CHROMIUM_SDK_FILES[0]).read_bytes(), before)
+
+    def test_unknown_chromium_winver_leaves_all_files_untouched(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.prepare(root)
+            winver = root / CHROMIUM_WINVER_FILE
+            winver.write_bytes(
+                winver.read_bytes().replace(
+                    b'NTDDI_WIN11_BR', b'NTDDI_WIN11_GE'
+                )
+            )
+            before = {
+                path: (root / path).read_bytes()
+                for path in CHROMIUM_SDK_FILES + (CHROMIUM_WINVER_FILE,)
+            }
+            with self.assertRaisesRegex(ValueError, "Chromium Windows NTDDI"):
+                pin_chromium_sdk_version(root, "10.0.26100.0")
+            for path, data in before.items():
+                self.assertEqual((root / path).read_bytes(), data)
+
+    def test_28000_keeps_br_target(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.prepare(root)
+            pin_chromium_sdk_version(root, "10.0.28000.0")
+            self.assertIn(
+                b'"NTDDI_VERSION=NTDDI_WIN11_BR"',
+                (root / CHROMIUM_WINVER_FILE).read_bytes(),
+            )
+
+    def test_unreviewed_sdk_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.prepare(root)
+            with self.assertRaisesRegex(ValueError, "Unsupported Windows SDK"):
+                pin_chromium_sdk_version(root, "10.0.22621.0")
 
     def test_reject_invalid_target_version(self):
         with tempfile.TemporaryDirectory() as tmp:
