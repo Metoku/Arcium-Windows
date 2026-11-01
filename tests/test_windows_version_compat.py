@@ -33,7 +33,7 @@ class WindowsVersionCompatibilityTests(unittest.TestCase):
             adapt_builder_version_api(OLD_VERSION_BLOCK + OLD_VERSION_BLOCK)
 
     def test_idempotent_second_attempt_rejected(self):
-        adapted = adapt_builder_version_api(OLD_VERSION_BLOCK)
+        adapted = adapt_builder_version_api("def run():\n" + OLD_VERSION_BLOCK)
         with self.assertRaisesRegex(ValueError, "no longer matches"):
             adapt_builder_version_api(adapted)
 
