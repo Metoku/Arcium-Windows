@@ -47,6 +47,9 @@ RESTORE_STEP = (
     "            # Restore test files omitted from prepared Chromium tarballs.\n"
     "            from scripts.restore_chromium_fixtures import restore_chromium_test_fixtures\n"
     "            restore_chromium_test_fixtures(source_tree)\n"
+    "            from scripts.restore_patch_webui_tests import restore_missing_webui_patch_targets\n"
+    "            restore_missing_webui_patch_targets(\n"
+    "                source_tree, _ROOT_DIR / 'helium-chromium' / 'patches')\n"
     "            # Apply patches\n"
 )
 
@@ -114,6 +117,11 @@ def run_gn(platform: Path, report_path: Path, *, execute: bool, max_minutes: int
             raise FileNotFoundError(
                 "Pinned Chromium fixture helper is not merged yet; "
                 "merge the independently verified full-source PR first."
+            )
+        additional_helper = ROOT / "scripts" / "restore_patch_webui_tests.py"
+        if not additional_helper.is_file():
+            raise FileNotFoundError(
+                "Missing dynamic WebUI restore helper; merge PR #7 first."
             )
         marker = platform / "ARCIUM_GN_GENERATED.marker"
         generated = platform / "arcium_gn_only.py"
