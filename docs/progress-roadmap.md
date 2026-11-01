@@ -2,7 +2,7 @@
 
 **Assessment date:** 2026-11-01 (after full-source patch CI pass)
 
-**Estimated completion:** **34% toward a usable, distributable Windows browser**, based on weighted engineering milestones. This is a planning estimate, not measured code completion. The most expensive and uncertain work remains. Reassess once a real Windows executable has compiled and launched.
+**Estimated completion:** **42% toward a usable, distributable Windows browser**, based on weighted engineering milestones. This is a planning estimate, not measured code completion. The most expensive and uncertain work remains. Reassess once a real Windows executable has compiled and launched.
 
 ## Progress breakdown
 
@@ -12,17 +12,17 @@
 | Pinned Helium-Windows platform, version matching and source checkout | 6% | **Complete** | [First source audit](first-windows-audit.md) and passing Windows staging CI |
 | Real patch-hunk compatibility tests | 6% | **Complete for targeted files** | [123 Windows patch targets and 69 applied operations](windows-platform-patch-results.md); not all shared patches |
 | Complete Chromium source preparation and both full patch series | 14% | **Complete** | [Full-source run #41319549555](https://github.com/Metoku/Arcium-Windows/actions/runs/41319549555) passed with all 521 Arcium and 30 Windows patches |
-| Windows GN generation and compile configuration | 8% | **Not attempted** | Reproducible successful Windows GN generation |
+| Windows GN generation and compile configuration | 8% | **Complete** | [GN run #41326670428](https://github.com/Metoku/Arcium-Windows/actions/runs/41326670428) generated 36,002 Ninja targets and verified `out/Default/build.ninja` |
 | Produce a launchable browser executable | 22% | **Not attempted** | Complete native Windows Chromium build with Arcium patches and isolated-profile smoke launch |
 | Implement and adapt Arc-style Windows UI | 18% | **Not attempted** | Spaces, Pins, Favorites, command bar, Peek, split view and Windows title bar functional |
 | Real browser runtime and regression testing | 10% | **Not attempted** | Automated Windows integration tests with isolated profiles and feature persistence |
 | Installer, identity, distribution, signed updater and release gates | 8% | **Not attempted** | Distinct app IDs, safe installation/uninstallation, signed builds, update validation, licensing review |
 
-**Total:** 100%. Verified milestones: 8 + 6 + 6 + 14 = **34%**. Approximately **66% remains**.
+**Total:** 100%. Verified milestones: 8 + 6 + 6 + 14 + 8 = **42%**. Approximately **58% remains**.
 
 The nine milestones are **not equally difficult**, and this estimate can change significantly as Chromium compiler errors reveal additional platform work. A green source test cannot substitute for a working browser.
 
-## Next gate: Windows GN generation
+## Next gate: native Windows Chromium C++ compilation
 
 Our exact baseline:
 
