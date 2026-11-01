@@ -76,6 +76,32 @@ class RestorePinnedFixturesTests(unittest.TestCase):
             )
         self.assertEqual(actual, data)
 
+    def test_large_pinned_chromium_fixture_is_accepted(self):
+        # chromium/new_tab_page/app_test.ts is ~223 KB in this release.
+        data = b"// test\\n" * 30000
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = data
+        with patch("scripts.restore_chromium_fixtures.urllib.request.urlopen",
+                   return_value=response):
+            value = restore.fetch_expected_fixture(
+                "chrome/test/data/webui/new_tab_page/app_test.ts",
+                restore.git_blob_sha1(data)
+            )
+        self.assertEqual(value, data)
+
+    def test_reject_too_large_fixture(self):
+        # Keep the source integrity and bounded-download protection.
+        data = b"x" * (restore.MAX_FIXTURE_BYTES + 1)
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = data
+        with patch("scripts.restore_chromium_fixtures.urllib.request.urlopen",
+                   return_value=response):
+            with self.assertRaisesRegex(ValueError, "unexpectedly large"):
+                restore.fetch_expected_fixture(
+                    "chrome/test/data/webui/new_tab_page/app_test.ts",
+                    restore.git_blob_sha1(data)
+                )
+
     def test_refuse_unexpected_blob_hash(self):
         response = MagicMock()
         response.__enter__.return_value.read.return_value = b"tampered"
