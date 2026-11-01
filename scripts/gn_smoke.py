@@ -46,7 +46,7 @@ def create_gn_only_builder(upstream: str) -> str:
         raise ValueError("Unexpected Windows builder identity")
     if upstream.count(GN_ANCHOR) != 1:
         raise ValueError("Expected one GN/Ninja gate in pinned builder")
-    if "gn.exe" not in upstream or "'gen'" not in upstream:
+    if "gn.exe" not in upstream or "gen" not in upstream:
         raise ValueError("Upstream GN invocation not found")
     if "patches.generate_patches_from_series" not in upstream:
         raise ValueError("Upstream patch stage missing")
