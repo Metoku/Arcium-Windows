@@ -21,6 +21,7 @@ import time
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts.windows_port import ROOT, audit_staged
+from scripts.windows_version_compat import adapt_builder_version_api, assert_arcium_version_api
 
 
 GN_ANCHOR = (
@@ -69,7 +70,8 @@ def create_gn_only_builder(upstream: str) -> str:
         raise ValueError("Expected one Chromium patch-stage entry")
     # Never skip failing Arcium patches. Fetch the exact unmodified
     # Chromium test files omitted by the prepared tarball before patching.
-    candidate = upstream.replace(RESTORE_ANCHOR, RESTORE_STEP, 1)
+    candidate = adapt_builder_version_api(upstream)
+    candidate = candidate.replace(RESTORE_ANCHOR, RESTORE_STEP, 1)
     candidate = candidate.replace(GN_ANCHOR, GN_EXIT + GN_ANCHOR, 1)
     compile(candidate, "arcium_gn_only.py", "exec")
     return candidate
@@ -103,6 +105,9 @@ def run_gn(platform: Path, report_path: Path, *, execute: bool, max_minutes: int
             "expected_core_patches": audit["shared_patch_count"],
             "expected_windows_patches": audit["windows_patch_count"],
         })
+        assert_arcium_version_api(
+            platform / "helium-chromium" / "utils" / "helium_version.py"
+        )
         builder = create_gn_only_builder(
             (platform / "build.py").read_text(encoding="utf-8")
         )
