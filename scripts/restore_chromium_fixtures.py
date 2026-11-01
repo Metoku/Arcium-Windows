@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Restore narrowly scoped Chromium WebUI test fixtures omitted by base archives.
 
-The pinned Arcium patch heliom-profile-avatar-test-support.patch targets three
-Chromium TypeScript tests absent from the prepared Windows source tarball.
-Restore only those exact official Chromium 156.0.8078.47 source blobs, verified
+Pinned Arcium test-support patches target WebUI TypeScript tests absent from
+some prepared Windows source archives. Restore only an explicit allowlist of
+exact Chromium 156.0.8078.47 source blobs, verified
 against their Git blob hashes. Never modify an existing divergent source file.
 
 This is not a general-purpose Chromium downloader or browser build.
@@ -28,6 +28,8 @@ CHROMIUM_WEBUI_FIXTURES = {
         "a096a050c82d5ae2da34dd85d6f985f3909719ea",
     "chrome/test/data/webui/signin/test_profile_customization_browser_proxy.ts":
         "46075b0f7d303984c98111b016cbfb0545773f2e",
+    "chrome/test/data/webui/extensions/sidebar_test.ts":
+        "d62d26b4192539125b213720d1777d08bf37a35d",
 }
 FIXTURE_CHROMIUM_VERSION = "156.0.8078.47"
 MAX_FIXTURE_BYTES = 128 * 1024
@@ -78,7 +80,7 @@ def fetch_expected_fixture(path: str, expected_blob: str,
 
 
 def restore_chromium_test_fixtures(source_tree: Path) -> list[str]:
-    """Verify existing fixtures; download only the three missing source files."""
+    """Verify existing fixtures; download only allowlisted missing files."""
     if chromium_version() != FIXTURE_CHROMIUM_VERSION:
         raise ValueError(
             "Pinned Chromium version changed; revalidate fixture blob hashes first"
