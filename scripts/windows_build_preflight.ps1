@@ -49,7 +49,31 @@ $detectedSdkVersions = @()
 if ($sdkFound) {
     foreach ($sdkDir in (Get-ChildItem -LiteralPath $windowsSdkRoot -Directory)) {
         $version = $sdkDir.Name
-        if ($version -notmatch '^10[.]0[.][0-9]+[.][0-9]+
+        if ($version -notmatch "^10[.]0[.][0-9]+[.][0-9]+") { continue }
+        $detectedSdkVersions += $version
+        $required = @(
+            (Join-Path $sdkDir.FullName 'um'),
+            (Join-Path $sdkDir.FullName 'shared'),
+            (Join-Path $sdkDir.FullName 'ucrt'),
+            (Join-Path $windowsKitRoot ("Lib/$version/um/x64")),
+            (Join-Path $windowsKitRoot ("Lib/$version/ucrt/x64"))
+        )
+        $valid = $true
+        foreach ($folder in $required) {
+            if (-not (Test-Path -LiteralPath $folder -PathType Container)) {
+                $valid = $false
+                break
+            }
+        }
+        if ($valid) { $completeSdkVersions += $version }
+    }
+}
+$completeSdkVersions = @($completeSdkVersions | Sort-Object { [Version]$_ } -Descending)
+$selectedSdkVersion = if ($completeSdkVersions.Count -gt 0) {
+    $completeSdkVersions[0]
+} else {
+    $null
+}
 $sevenZip = Try-Command '7z'
 if (-not $sevenZip) {
     $candidate7z = Join-Path $env:ProgramFiles '7-Zip/7z.exe'
