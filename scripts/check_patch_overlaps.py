@@ -85,12 +85,35 @@ def select_patch_sections(diff: str, targets: set[str]) -> str:
     return "".join(sections)
 
 
+def discover_patch_paths(patch_files: list[Path]) -> tuple[set[str], set[str]]:
+    """Return patched paths and paths created by a /dev/null unified-diff hunk."""
+    touched: set[str] = set()
+    created: set[str] = set()
+    for patch_file in patch_files:
+        lines = patch_file.read_text(encoding="utf-8", errors="replace").splitlines()
+        for idx in range(len(lines) - 1):
+            if not (lines[idx].startswith("--- ") and
+                    lines[idx + 1].startswith("+++ ")):
+                continue
+            old_raw = lines[idx][4:].split(maxsplit=1)[0]
+            old_path = normalize_patch_path(old_raw)
+            new_path = normalize_patch_path(lines[idx + 1][4:])
+            target = new_path or old_path
+            if target is None:
+                continue
+            touched.add(target)
+            if old_raw == "/dev/null":
+                created.add(target)
+    return touched, created
+
+
 def chromium_source_url(version: str, path: str) -> str:
     if not re.fullmatch(r"\d+\.\d+\.\d+\.\d+", version):
         raise ValueError("Expected a pinned Chromium version")
     parsed = PurePosixPath(path)
-    if parsed.is_absolute() or ".." in parsed.parts or not path.startswith("chrome/"):
-        raise ValueError("Unsafe or unsupported Chromium source path")
+    if (parsed.is_absolute() or ".." in parsed.parts or len(parsed.parts) < 2
+            or "\\" in path or ":" in path or path != parsed.as_posix()):
+        raise ValueError("Unsafe Chromium source path")
     return (SOURCE_URL_BASE + "refs/tags/" + version + "/" +
             urllib.parse.quote(path, safe="/") + "?format=TEXT")
 
@@ -133,19 +156,30 @@ def apply_sections(worktree: Path, source: str, patch_name: str, filtered: str) 
     }
 
 
-def check_overlaps(platform: Path, workspace: Path, report_file: Path) -> int:
+def check_overlaps(platform: Path, workspace: Path, report_file: Path,
+                   scope: str = "overlap") -> int:
     original = audit_staged(platform)
-    overlaps = set(original["overlapping_targets"])
     core = platform / "helium-chromium"
     version = chromium_version()
-    if not overlaps:
-        raise RuntimeError("Expected at least one overlapping patched path")
+    core_patches = read_series(core / "patches" / "series")
+    win_patches = read_series(platform / "patches" / "series")
+    if scope == "overlap":
+        targets = set(original["overlapping_targets"])
+    elif scope == "windows":
+        targets, _ = discover_patch_paths(win_patches)
+    else:
+        raise ValueError(f"Unsupported patch audit scope: {scope}")
+    # Some paths are introduced by the first patch that touches them;
+    # there is no original Chromium file to download for those additions.
+    _, newly_created = discover_patch_paths(core_patches + win_patches)
+    if not targets or len(targets) > 180:
+        raise ValueError(f"Unexpected source target count: {len(targets)}")
     if not shutil.which("patch"):
         raise EnvironmentError("GNU patch is required")
 
     report: dict = {
         "status": "STARTED",
-        "scope": "OVERLAPPING_FILES_ONLY",
+        "scope": "OVERLAPPING_FILES_ONLY" if scope == "overlap" else "WINDOWS_PATCH_TARGETS_ONLY",
         "warning": (
             "Only common Chromium patch targets are tested. "
             "Passing is NOT equivalent to full patch application or a browser build."
@@ -153,7 +187,8 @@ def check_overlaps(platform: Path, workspace: Path, report_file: Path) -> int:
         "platform_revision": original["platform_commit"],
         "core_revision": original["arcium_commit"],
         "chromium_version": version,
-        "files": sorted(overlaps),
+        "files": sorted(targets),
+        "newly_created_paths": sorted(targets & newly_created),
         "original_sha256": {},
         "applied": [],
         "failure": None,
@@ -168,21 +203,22 @@ def check_overlaps(platform: Path, workspace: Path, report_file: Path) -> int:
         if workspace.exists() and any(workspace.iterdir()):
             raise FileExistsError(f"Refusing to overwrite workspace: {workspace}")
         workspace.mkdir(parents=True, exist_ok=True)
-        for path in sorted(overlaps):
+        for path in sorted(targets):
+            if path in newly_created:
+                print(f"Patch stack creates new file: {path}", flush=True)
+                continue
             print(f"Fetching Chromium {version}: {path}", flush=True)
             report["original_sha256"][path] = download_original(
                 version, path, workspace / path
             )
 
         series = (
-            [("Arcium", core / "patches", p) for p in
-             read_series(core / "patches" / "series")] +
-            [("Windows", platform / "patches", p) for p in
-             read_series(platform / "patches" / "series")]
+            [("Arcium", core / "patches", p) for p in core_patches] +
+            [("Windows", platform / "patches", p) for p in win_patches]
         )
         for origin, root, patch_file in series:
             diff = patch_file.read_text(encoding="utf-8", errors="replace")
-            selected = select_patch_sections(diff, overlaps)
+            selected = select_patch_sections(diff, targets)
             if not selected:
                 continue
             name = patch_file.relative_to(root).as_posix()
@@ -215,11 +251,14 @@ def main() -> int:
                         default=Path("work/chromium-overlap"))
     parser.add_argument("--report", type=Path,
                         default=Path("work/patch-overlap-results.json"))
+    parser.add_argument("--scope", choices=("overlap", "windows"), default="overlap",
+                        help="Overlap files (default) or every Windows patch target")
     args = parser.parse_args()
     return check_overlaps(
         args.platform_dir.resolve(),
         args.workspace.resolve(),
-        args.report.resolve()
+        args.report.resolve(),
+        scope=args.scope,
     )
 
 
