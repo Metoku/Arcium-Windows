@@ -1,0 +1,20 @@
+# Local build products
+out/
+build-cache/
+chromium-src/
+arcium-core/
+artifacts/
+*.zip
+*.7z
+*.exe
+*.msi
+*.msix
+*.dmp
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+# Editor
+.vscode/
+.idea/
