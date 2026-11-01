@@ -1,12 +1,15 @@
 """Offline tests of the pinned Windows build script GN-only exit adapter."""
 
 import os
+import sys
+import types
+from unittest.mock import Mock, patch
 from pathlib import Path
 import tempfile
 import unittest
 
 from scripts.gn_smoke import (
-    GN_ANCHOR, BUILDER_IDENTIFIER, create_gn_only_builder
+    GN_ANCHOR, RESTORE_ANCHOR, BUILDER_IDENTIFIER, create_gn_only_builder
 )
 
 
@@ -15,10 +18,14 @@ def upstream_fixture() -> str:
         '# Helium build script for Windows\n'
         'import os\n'
         'from pathlib import Path\n'
+        'from types import SimpleNamespace\n'
         'def main():\n'
         '    source_tree = _ROOT_DIR / "src"\n'
+        '    args = SimpleNamespace(dev=False)\n'
         '    (source_tree / "out" / "Default").mkdir(parents=True, exist_ok=True)\n'
-        '    # patches.generate_patches_from_series (unit fixture)\n'
+        '    if True:\n'
+        + RESTORE_ANCHOR +
+        '            # patches.generate_patches_from_series (unit fixture)\n'
         '    # Run gn gen\n'
         '    if True:\n'
         '        (source_tree / "out" / "Default" / "build.ninja").write_text(\n'
@@ -40,7 +47,12 @@ class GNAdapterTests(unittest.TestCase):
                 "_run_build_process": lambda *args: called.append(args),
             }
             exec(compile(code, "generated_builder.py", "exec"), namespace)
-            namespace["main"]()
+            module = types.ModuleType("scripts.restore_chromium_fixtures")
+            restore_mock = Mock()
+            module.restore_chromium_test_fixtures = restore_mock
+            with patch.dict(sys.modules, {"scripts.restore_chromium_fixtures": module}):
+                namespace["main"]()
+            restore_mock.assert_called_once_with(root / "src")
             self.assertEqual(len(called), 1)
             self.assertTrue((root / "ARCIUM_GN_GENERATED.marker").is_file())
             self.assertEqual(
@@ -51,6 +63,12 @@ class GNAdapterTests(unittest.TestCase):
     def test_reject_missing_gn_anchor(self):
         with self.assertRaisesRegex(ValueError, "Expected one"):
             create_gn_only_builder(upstream_fixture().replace(GN_ANCHOR, ""))
+
+    def test_reject_missing_fixture_injection_point(self):
+        with self.assertRaisesRegex(ValueError, "Chromium patch-stage entry"):
+            create_gn_only_builder(
+                upstream_fixture().replace(RESTORE_ANCHOR, "")
+            )
 
     def test_reject_unknown_builder(self):
         with self.assertRaisesRegex(ValueError, "Unexpected Windows builder"):

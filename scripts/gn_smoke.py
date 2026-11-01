@@ -38,6 +38,18 @@ GN_EXIT = (
     "    return\n\n"
 )
 BUILDER_IDENTIFIER = "Helium build script for Windows"
+RESTORE_ANCHOR = (
+    "        if not args.dev:\n"
+    "            # Apply patches\n"
+)
+RESTORE_STEP = (
+    "        if not args.dev:\n"
+    "            # Restore test files omitted from prepared Chromium tarballs.\n"
+    "            from scripts.restore_chromium_fixtures import restore_chromium_test_fixtures\n"
+    "            restore_chromium_test_fixtures(source_tree)\n"
+    "            # Apply patches\n"
+)
+
 
 
 def create_gn_only_builder(upstream: str) -> str:
@@ -50,7 +62,12 @@ def create_gn_only_builder(upstream: str) -> str:
         raise ValueError("Upstream GN invocation not found")
     if "patches.generate_patches_from_series" not in upstream:
         raise ValueError("Upstream patch stage missing")
-    candidate = upstream.replace(GN_ANCHOR, GN_EXIT + GN_ANCHOR, 1)
+    if upstream.count(RESTORE_ANCHOR) != 1:
+        raise ValueError("Expected one Chromium patch-stage entry")
+    # Never skip failing Arcium patches. Fetch the exact unmodified
+    # Chromium test files omitted by the prepared tarball before patching.
+    candidate = upstream.replace(RESTORE_ANCHOR, RESTORE_STEP, 1)
+    candidate = candidate.replace(GN_ANCHOR, GN_EXIT + GN_ANCHOR, 1)
     compile(candidate, "arcium_gn_only.py", "exec")
     return candidate
 
@@ -92,6 +109,12 @@ def run_gn(platform: Path, report_path: Path, *, execute: bool, max_minutes: int
             print("Pinned GN adapter validated; no downloads, compilation, or GN run.")
             return 0
 
+        fixture_helper = ROOT / "scripts" / "restore_chromium_fixtures.py"
+        if not fixture_helper.is_file():
+            raise FileNotFoundError(
+                "Pinned Chromium fixture helper is not merged yet; "
+                "merge the independently verified full-source PR first."
+            )
         marker = platform / "ARCIUM_GN_GENERATED.marker"
         generated = platform / "arcium_gn_only.py"
         if marker.exists() or generated.exists():
@@ -114,6 +137,7 @@ def run_gn(platform: Path, report_path: Path, *, execute: bool, max_minutes: int
         save()
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
+        env["PYTHONPATH"] = str(ROOT) + os.pathsep + env.get("PYTHONPATH", "")
         begin = time.monotonic()
         print("Running complete source preparation, both patch series and GN gen.",
               flush=True)
