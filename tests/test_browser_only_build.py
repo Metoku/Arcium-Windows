@@ -52,8 +52,8 @@ class BrowserOnlyBuilderTests(unittest.TestCase):
             print_diagnostic("build failure █ → ∆ 😀")
         argument = printer.call_args.args[0]
         argument.encode("cp1252", errors="strict")
-        self.assertIn(r"\\u2588", argument)
-        self.assertIn(r"\\U0001f600", argument)
+        self.assertIn(r"\u2588", argument)
+        self.assertIn(r"\U0001f600", argument)
 
     def test_extract_first_siso_failure_not_log_tail(self):
         with tempfile.TemporaryDirectory() as tmp:
