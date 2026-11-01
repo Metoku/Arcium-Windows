@@ -20,6 +20,15 @@ CHROMIUM_SDK_FILES = (
     "build/toolchain/win/setup_toolchain.py",
     "build/vs_toolchain.py",
 )
+# Chromium 156 assumes the BR (28000) SDK in its Windows version config.
+# Older SDKs do not define NTDDI_WIN11_BR, so #if tests accidentally
+# remove FILE_INFO_BY_HANDLE_CLASS from the Windows headers.
+CHROMIUM_WINVER_FILE = "build/config/win/BUILD.gn"
+CHROMIUM_WINVER_BASELINE = b'"NTDDI_VERSION=NTDDI_WIN11_BR",'
+CHROMIUM_SDK_NTDDI = {
+    "10.0.26100.0": b'"NTDDI_VERSION=NTDDI_WIN11_GE",',
+    "10.0.28000.0": CHROMIUM_WINVER_BASELINE,
+}
 SDK_PIN_ANCHOR = "    # Enter source tree to run build commands\n"
 SDK_PIN_STEP = (
     "    # Use a complete, validated Windows SDK for Chromium's own toolchain.\n"
@@ -30,13 +39,15 @@ SDK_VERSION_PATTERN = re.compile(rb"(?m)^SDK_VERSION = '([^'\r\n]+)'\r?$")
 
 
 def pin_chromium_sdk_version(source_tree: Path, selected_version: str) -> list[str]:
-    """Change exactly two pinned Chromium source constants before GN generation.
+    """Align pinned Chromium SDK constants and Windows NTDDI before GN generation.
 
     Fully validate both targets before writing either; fail on unknown sources.
     This intentionally fails closed for a future Chromium release.
     """
     if not re.fullmatch(r"10\.0\.\d+\.\d+", selected_version):
         raise ValueError("Invalid Windows SDK version")
+    if selected_version not in CHROMIUM_SDK_NTDDI:
+        raise ValueError("Unsupported Windows SDK for pinned Chromium 156 NTDDI")
     if not (source_tree / "BUILD.gn").is_file():
         raise FileNotFoundError("Chromium source root missing BUILD.gn")
 
@@ -56,14 +67,30 @@ def pin_chromium_sdk_version(source_tree: Path, selected_version: str) -> list[s
             raise ValueError(f"Unexpected SDK replacement count in {relative}")
         updates.append((target, updated))
 
+    # Ensure the Windows API target matches the selected installed SDK.
+    # Validate all three files before writing any of them, failing closed
+    # if the pinned Chromium 156 source structure changes.
+    winver_file = source_tree / CHROMIUM_WINVER_FILE
+    original_winver = winver_file.read_bytes()
+    if original_winver.count(CHROMIUM_WINVER_BASELINE) != 1:
+        raise ValueError("Unexpected Chromium Windows NTDDI declaration")
+    updates.append((
+        winver_file,
+        original_winver.replace(
+            CHROMIUM_WINVER_BASELINE, CHROMIUM_SDK_NTDDI[selected_version], 1
+        ),
+    ))
+
     for target, updated in updates:
         target.write_bytes(updated)
     print(
         f"Pinned Chromium toolchain SDK {CHROMIUM_BASELINE_SDK} -> "
-        f"{selected_version} in {len(updates)} source files",
+        f"{selected_version}, Windows NTDDI "
+        f"{CHROMIUM_SDK_NTDDI[selected_version].decode('ascii')} "
+        f"in {len(updates)} source files",
         flush=True,
     )
-    return list(CHROMIUM_SDK_FILES)
+    return [*CHROMIUM_SDK_FILES, CHROMIUM_WINVER_FILE]
 
 
 def inject_chromium_sdk_pin(builder: str) -> str:
