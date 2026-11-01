@@ -1,10 +1,12 @@
 """Browser-only compilation guardrails; these tests never compile Chromium."""
 
 import unittest
+from pathlib import Path
+import tempfile
 
 from scripts.browser_only_build import (
     BROWSER_ONLY_TARGETS, ORIGINAL_RELEASE_TARGETS,
-    make_browser_only_builder
+    first_compiler_failure, make_browser_only_builder
 )
 from scripts.gn_smoke import RESTORE_ANCHOR, RESTORE_STEP
 from scripts.windows_version_compat import OLD_VERSION_BLOCK
@@ -41,6 +43,29 @@ class BrowserOnlyBuilderTests(unittest.TestCase):
         self.assertNotIn(ORIGINAL_RELEASE_TARGETS, code)
         self.assertNotIn("helium_version.check_existing_version(", code)
         self.assertNotIn("helium_version.append_version(", code)
+
+    def test_extract_first_siso_failure_not_log_tail(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / "build.log"
+            log.write_text(
+                "[1/9] running\n"
+                "FAILED: seed_material.obj CXX\n"
+                "err: exit=1\n"
+                "fileapi.h: error: unknown type name 'FILE_INFO_BY_HANDLE_CLASS'\n"
+                "[2/9] another completed target\n"
+                + "build status line\n" * 200,
+                encoding="utf-8",
+            )
+            lines = first_compiler_failure(log, limit=3)
+            self.assertEqual(len(lines), 3)
+            self.assertIn("FAILED: seed_material.obj", lines[0])
+            self.assertIn("FILE_INFO_BY_HANDLE_CLASS", lines[2])
+
+    def test_compilation_failure_extractor_handles_no_siso_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / "build.log"
+            log.write_text("GN failed without Ninja\n", encoding="utf-8")
+            self.assertEqual(first_compiler_failure(log), [])
 
     def test_refuse_unrecognized_release_target_list(self):
         with self.assertRaisesRegex(ValueError, "Ninja target list"):
