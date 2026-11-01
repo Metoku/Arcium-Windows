@@ -69,6 +69,9 @@ class GNAdapterTests(unittest.TestCase):
                 ),
             }
             exec(compile(code, "generated_builder.py", "exec"), namespace)
+            # The fixture declares both pinned vcvars functions for static
+            # rewriting; intercept the later GN call in this offline test.
+            namespace["_run_build_process"] = lambda *args: called.append(args)
             module = types.ModuleType("scripts.restore_chromium_fixtures")
             restore_mock = Mock()
             module.restore_chromium_test_fixtures = restore_mock
