@@ -38,7 +38,7 @@ def upstream_fixture() -> str:
         '            # patches.generate_patches_from_series (unit fixture)\n'
         '            pass\n'
         + OLD_VERSION_BLOCK +
-        + SDK_PIN_ANCHOR +
+        SDK_PIN_ANCHOR +
         '    # Run gn gen\n'
         '    if True:\n'
         '        (source_tree / "out" / "Default" / "build.ninja").write_text(\n'
