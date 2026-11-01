@@ -38,7 +38,7 @@ This changes only the temporary build workspace. It does not patch installed SDK
 ## Acceptance
 
 - [x] Verify on a real GitHub Windows runner that a complete Windows SDK can be selected (10.0.26100.0; run #41323654809).
-- [ ] Run the full pinned Windows source preparation and GN configuration, and verify `out/Default/build.ninja` is generated.
+- [x] Run the full pinned Windows source preparation and GN configuration, and verify `out/Default/build.ninja` is generated (run #41326670428).
 - [ ] Later: attempt native browser-only C++ compile, isolated-profile launch, UI testing, unique app identity, and installer signing.
 
-The project remains approximately **34% complete** until real GN generation succeeds.
+**GN completed successfully:** [run #41326670428](https://github.com/Metoku/Arcium-Windows/actions/runs/41326670428) used the installed Windows SDK 10.0.26100.0, applied all 521 Arcium + 30 Windows source patches, pinned Chromium's two internal SDK declarations, and generated **36,002 Ninja targets from 5,021 files**. The log confirms `ARCIUM_WINDOWS_GN_GENERATION_PASSED` and the adapter verified `out/Default/build.ninja`. No Ninja build, browser executable, or launch test was attempted. The weighted project estimate is now **42%**; next milestone is actual native compilation.
