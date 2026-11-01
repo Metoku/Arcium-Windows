@@ -35,6 +35,24 @@ ORIGINAL_RELEASE_TARGETS = (
 BROWSER_ONLY_TARGETS = "    ninja_commandline.append('chrome')"
 
 
+def first_compiler_failure(log_path: Path, limit: int = 24) -> list[str]:
+    """Extract the first Siso/Ninja FAILED block, not only the log's tail.
+
+    A C++ failure can be followed by thousands of unrelated Siso status
+    lines; the last 55 lines alone often hide the real compiler error.
+    """
+    result: list[str] = []
+    with log_path.open("r", encoding="utf-8", errors="replace") as stream:
+        for line in stream:
+            if not result:
+                if not line.startswith("FAILED:"):
+                    continue
+            result.append(line.rstrip("\r\n")[:3500])
+            if len(result) >= limit:
+                break
+    return result
+
+
 def make_browser_only_builder(upstream: str) -> str:
     """Convert exact pinned Windows build.py to an ephemeral browser-only builder."""
     if upstream.count(RESTORE_ANCHOR) != 1:
@@ -177,6 +195,12 @@ def run_experiment(
                 "utf-8", errors="replace"
             ).splitlines()[-55:]
         print("\n".join(tail[-30:]), flush=True)
+        if code != 0:
+            first_failure = first_compiler_failure(log_path)
+            if first_failure:
+                report["first_compiler_failure"] = first_failure
+                print("First actual compiler error:\n" +
+                      "\n".join(first_failure), flush=True)
         browser = platform / "build" / "src" / "out" / "Default" / "chrome.exe"
         if code == 0 and browser.is_file():
             report["status"] = "BROWSER_BINARY_CREATED_NOT_LAUNCHED"
