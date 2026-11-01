@@ -37,6 +37,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Inspect Windows runner resources and toolchain
+        shell: pwsh
+        run: ./scripts/windows_build_preflight.ps1
+      - name: Upload Windows runner preflight
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build-runner-preflight
+          path: work/windows-toolchain-preflight.json
+          if-no-files-found: warn
       - name: Run offline Windows bootstrap tests
         run: python -m unittest discover -s tests -v
       - name: Show exact pinned source revisions
