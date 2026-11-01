@@ -1,0 +1,30 @@
+name: Validate isolated Windows browser launch smoke helper
+
+on:
+  pull_request:
+    paths:
+      - scripts/windows_browser_smoke.py
+      - tests/test_windows_browser_smoke.py
+      - .github/workflows/windows-browser-smoke-tests.yml
+
+permissions:
+  contents: read
+
+jobs:
+  check-smoke-helper:
+    name: Offline temporary-profile launch helper tests
+    runs-on: windows-2025
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run isolated browser launch helper tests
+        run: python -m unittest discover -s tests -p test_windows_browser_smoke.py -v
+      - name: Compile helper without launching any executable
+        run: python -m py_compile scripts/windows_browser_smoke.py
+
+# No Chromium build, browser execution, installer, signing or updater in this job.
