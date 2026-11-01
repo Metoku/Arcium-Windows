@@ -1,4 +1,4 @@
-name: Test Arcium and Windows overlapping patches
+name: Test Arcium and Windows patch hunks
 
 on:
   pull_request:
