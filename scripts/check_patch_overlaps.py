@@ -118,24 +118,75 @@ def chromium_source_url(version: str, path: str) -> str:
             urllib.parse.quote(path, safe="/") + "?format=TEXT")
 
 
-def download_original(version: str, path: str, dest: Path,
-                      mirror_first: bool = False) -> str:
-    """Get release-tag bytes from either of Chromium's official git mirrors.
+def chromium_dependency_revisions(version: str) -> dict[str, str]:
+    """Read exact ANGLE/Dawn checkout SHAs from the pinned Chromium DEPS file."""
+    chromium_source_url(version, "chrome/BUILD.gn")  # Validate version.
+    url = ("https://raw.githubusercontent.com/chromium/chromium/" +
+           version + "/DEPS")
+    request = urllib.request.Request(
+        url, headers={"User-Agent": "Arcium-Windows-dependency-audit/1.0"}
+    )
+    with urllib.request.urlopen(request, timeout=45) as response:
+        payload = response.read(3 * 1024 * 1024 + 1)
+    if len(payload) > 3 * 1024 * 1024:
+        raise ValueError("Chromium DEPS unexpectedly large")
+    contents = payload.decode("utf-8")
+    revisions: dict[str, str] = {}
+    for key in ("angle_revision", "dawn_revision"):
+        match = re.search(
+            r"['\"]" + re.escape(key) + r"['\"]\s*:\s*['\"]([0-9a-f]{40})['\"]",
+            contents
+        )
+        if not match:
+            raise ValueError(f"Chromium DEPS did not specify {key}")
+        revisions[key] = match.group(1)
+    return revisions
 
-    Gitiles may return HTTP 429 after dozens of sequential file requests.
-    The GitHub chromium/chromium mirror carries the *same* Chromium tag.
-    Fallbacks are explicit and never switch to main/latest.
-    """
-    gitiles = chromium_source_url(version, path)  # Validates version and path.
+
+def download_original(version: str, path: str, dest: Path,
+                      mirror_first: bool = False,
+                      external_revisions: dict[str, str] | None = None) -> str:
+    """Get a pinned source file from Chromium or a DEPS-pinned external repo."""
+    gitiles = chromium_source_url(version, path)  # Validates path.
     github_raw = (
         "https://raw.githubusercontent.com/chromium/chromium/" + version +
         "/" + urllib.parse.quote(path, safe="/")
     )
-    sources = [("github", github_raw), ("gitiles", gitiles)] if mirror_first else [
-        ("gitiles", gitiles), ("github", github_raw)
-    ]
+    sources: list[tuple[str, str, bool]]
+    if path.startswith("third_party/angle/"):
+        if external_revisions is None or "angle_revision" not in external_revisions:
+            raise ValueError("Need Chromium DEPS ANGLE revision for external source")
+        revision = external_revisions["angle_revision"]
+        relative = path.removeprefix("third_party/angle/")
+        sources = [
+            ("angle-github", "https://raw.githubusercontent.com/google/angle/" +
+             revision + "/" + urllib.parse.quote(relative, safe="/"), False),
+            ("angle-gitiles", "https://chromium.googlesource.com/angle/angle/+/" +
+             revision + "/" + urllib.parse.quote(relative, safe="/") +
+             "?format=TEXT", True),
+        ]
+    elif path.startswith("third_party/dawn/"):
+        if external_revisions is None or "dawn_revision" not in external_revisions:
+            raise ValueError("Need Chromium DEPS Dawn revision for external source")
+        revision = external_revisions["dawn_revision"]
+        relative = path.removeprefix("third_party/dawn/")
+        sources = [
+            ("dawn-gitiles", "https://dawn.googlesource.com/dawn/+/" +
+             revision + "/" + urllib.parse.quote(relative, safe="/") +
+             "?format=TEXT", True),
+            ("dawn-github", "https://raw.githubusercontent.com/google/dawn/" +
+             revision + "/" + urllib.parse.quote(relative, safe="/"), False),
+        ]
+    else:
+        sources = (
+            [("chromium-github", github_raw, False),
+             ("chromium-gitiles", gitiles, True)] if mirror_first else
+            [("chromium-gitiles", gitiles, True),
+             ("chromium-github", github_raw, False)]
+        )
+
     errors: list[str] = []
-    for provider, url in sources:
+    for provider, url, is_base64 in sources:
         request = urllib.request.Request(
             url, headers={"User-Agent": "Arcium-Windows-patch-compatibility/1.0"}
         )
@@ -145,16 +196,16 @@ def download_original(version: str, path: str, dest: Path,
             if len(encoded) > 4 * MAX_SOURCE_BYTES:
                 raise ValueError(f"Chromium source unexpectedly large: {path}")
             raw = (base64.b64decode(encoded, validate=True)
-                   if provider == "gitiles" else encoded)
+                   if is_base64 else encoded)
             if len(raw) > MAX_SOURCE_BYTES:
-                raise ValueError(f"Decoded Chromium source exceeds size cap: {path}")
+                raise ValueError(f"Decoded source exceeds size cap: {path}")
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(raw)
-            print(f"  Verified {provider} tag {version}: {path}", flush=True)
+            print(f"  Verified {provider} at pinned revision: {path}", flush=True)
             return hashlib.sha256(raw).hexdigest()
         except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
             errors.append(f"{provider}: {exc}")
-            print(f"  Chromium mirror error: {errors[-1]}", flush=True)
+            print(f"  Source mirror error: {errors[-1]}", flush=True)
     raise RuntimeError(f"Could not retrieve {path} at {version}: {'; '.join(errors)}")
 
 
@@ -230,13 +281,22 @@ def check_overlaps(platform: Path, workspace: Path, report_file: Path,
         if workspace.exists() and any(workspace.iterdir()):
             raise FileExistsError(f"Refusing to overwrite workspace: {workspace}")
         workspace.mkdir(parents=True, exist_ok=True)
+        external_revisions = (
+            chromium_dependency_revisions(version)
+            if any(p.startswith(("third_party/angle/", "third_party/dawn/"))
+                   for p in targets - newly_created)
+            else {}
+        )
+        report["external_revisions"] = external_revisions
         for path in sorted(targets):
             if path in newly_created:
                 print(f"Patch stack creates new file: {path}", flush=True)
                 continue
             print(f"Fetching Chromium {version}: {path}", flush=True)
             report["original_sha256"][path] = download_original(
-                version, path, workspace / path, mirror_first=(scope == "windows")
+                version, path, workspace / path,
+                mirror_first=(scope == "windows"),
+                external_revisions=external_revisions
             )
 
         series = (
