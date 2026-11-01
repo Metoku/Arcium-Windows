@@ -1,13 +1,18 @@
 """Tests for extracting and applying actual patch hunks, without network."""
 
+import base64
+import hashlib
 from pathlib import Path
 import shutil
+import urllib.error
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 from scripts.check_patch_overlaps import (
-    chromium_source_url, normalize_patch_path, select_patch_sections,
+    chromium_source_url, discover_patch_paths, normalize_patch_path, select_patch_sections,
+    download_original, chromium_dependency_revisions,
+    winsparkle_platform_version,
     apply_sections
 )
 
@@ -54,6 +59,27 @@ class PatchOverlapChecks(unittest.TestCase):
         self.assertNotIn("+other\n", got)
         self.assertNotIn("Index: ", got)
 
+    def test_discover_created_and_modified_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_file = Path(tmp) / "test.patch"
+            test_file.write_text(
+                "--- /dev/null\n"
+                "+++ b/chrome/browser/new_file.cc\n"
+                "@@ -0,0 +1 @@\n"
+                "+test\n"
+                "--- a/chrome/browser/old_file.cc\n"
+                "+++ b/chrome/browser/old_file.cc\n"
+                "@@ -1 +1 @@\n"
+                "-old\n"
+                "+new\n",
+                encoding="utf-8"
+            )
+            touched, created = discover_patch_paths([test_file])
+            self.assertEqual(touched, {
+                "chrome/browser/new_file.cc", "chrome/browser/old_file.cc"
+            })
+            self.assertEqual(created, {"chrome/browser/new_file.cc"})
+
     def test_source_url_validation(self):
         self.assertIn(
             "refs/tags/156.0.8078.47/chrome/browser/ui/browser.cc",
@@ -63,6 +89,63 @@ class PatchOverlapChecks(unittest.TestCase):
             chromium_source_url("156.0.8078.47", "chrome/../../../etc/passwd")
         with self.assertRaises(ValueError):
             chromium_source_url("latest", "chrome/browser/ui/browser.cc")
+        self.assertIn(
+            "/media/cdm/win/media_foundation_cdm.cc",
+            chromium_source_url("156.0.8078.47",
+                                "media/cdm/win/media_foundation_cdm.cc")
+        )
+
+    def test_winsparkle_dependency_version_from_platform(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp)
+            (path / "downloads.ini").write_text(
+                "[winsparkle]\nversion = 0.9.3\n", encoding="utf-8"
+            )
+            self.assertEqual(winsparkle_platform_version(path), "0.9.3")
+            (path / "downloads.ini").write_text(
+                "[winsparkle]\nversion = ../../evil\n", encoding="utf-8"
+            )
+            with self.assertRaises(ValueError):
+                winsparkle_platform_version(path)
+
+    def test_external_dependency_revisions_follow_pinned_deps(self):
+        deps = (
+            "vars = {\n"
+            "  'angle_revision': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',\n"
+            "  'dawn_revision': 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',\n"
+            "}\n"
+        ).encode("utf-8")
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = deps
+        with patch(
+            "scripts.check_patch_overlaps.urllib.request.urlopen",
+            return_value=response
+        ):
+            revisions = chromium_dependency_revisions("156.0.8078.47")
+        self.assertEqual(revisions["angle_revision"], "a" * 40)
+        self.assertEqual(revisions["dawn_revision"], "b" * 40)
+
+    def test_download_uses_other_official_mirror_on_http_429(self):
+        data = b"verified original chromium source\\n"
+        encoded = base64.b64encode(data)
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = encoded
+        failed_request = urllib.error.HTTPError(
+            "https://example.com/rate-limited", 429, "Too Many Requests",
+            None, None
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "chrome/browser/ui/browser.cc"
+            with patch(
+                "scripts.check_patch_overlaps.urllib.request.urlopen",
+                side_effect=[failed_request, response]
+            ):
+                result = download_original(
+                    "156.0.8078.47", "chrome/browser/ui/browser.cc",
+                    target, mirror_first=True
+                )
+            self.assertEqual(target.read_bytes(), data)
+            self.assertEqual(result, hashlib.sha256(data).hexdigest())
 
     @unittest.skipUnless(shutil.which("patch"), "GNU patch not available")
     def test_apply_extracted_patch_real_file(self):

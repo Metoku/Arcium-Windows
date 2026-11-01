@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Apply the *overlapping-file portions* of pinned Arcium and Windows patch stacks.
+"""Apply selected portions of pinned Arcium and Windows Chromium patch stacks.
 
-Downloads only original files touched by BOTH patch stacks from the matching
-Chromium release tag, then applies their relevant hunks in real series order.
-This is a focused compatibility test, not full Chromium patch application,
+Downloads original files touched by both stacks or by Windows platform patches
+from a matching Chromium tag, then applies relevant hunks in real series order.
+This is focused compatibility testing, not complete patch application,
 C++ compilation, or proof of Windows runtime support.
 """
 
@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import configparser
 import hashlib
 import json
 import os
@@ -85,31 +86,150 @@ def select_patch_sections(diff: str, targets: set[str]) -> str:
     return "".join(sections)
 
 
+def discover_patch_paths(patch_files: list[Path]) -> tuple[set[str], set[str]]:
+    """Return patched paths and paths created by a /dev/null unified-diff hunk."""
+    touched: set[str] = set()
+    created: set[str] = set()
+    for patch_file in patch_files:
+        lines = patch_file.read_text(encoding="utf-8", errors="replace").splitlines()
+        for idx in range(len(lines) - 1):
+            if not (lines[idx].startswith("--- ") and
+                    lines[idx + 1].startswith("+++ ")):
+                continue
+            old_raw = lines[idx][4:].split(maxsplit=1)[0]
+            old_path = normalize_patch_path(old_raw)
+            new_path = normalize_patch_path(lines[idx + 1][4:])
+            target = new_path or old_path
+            if target is None:
+                continue
+            touched.add(target)
+            if old_raw == "/dev/null":
+                created.add(target)
+    return touched, created
+
+
 def chromium_source_url(version: str, path: str) -> str:
     if not re.fullmatch(r"\d+\.\d+\.\d+\.\d+", version):
         raise ValueError("Expected a pinned Chromium version")
     parsed = PurePosixPath(path)
-    if parsed.is_absolute() or ".." in parsed.parts or not path.startswith("chrome/"):
-        raise ValueError("Unsafe or unsupported Chromium source path")
+    if (parsed.is_absolute() or ".." in parsed.parts or len(parsed.parts) < 2
+            or "\\" in path or ":" in path or path != parsed.as_posix()):
+        raise ValueError("Unsafe Chromium source path")
     return (SOURCE_URL_BASE + "refs/tags/" + version + "/" +
             urllib.parse.quote(path, safe="/") + "?format=TEXT")
 
 
-def download_original(version: str, path: str, dest: Path) -> str:
+def chromium_dependency_revisions(version: str) -> dict[str, str]:
+    """Read exact ANGLE/Dawn checkout SHAs from the pinned Chromium DEPS file."""
+    chromium_source_url(version, "chrome/BUILD.gn")  # Validate version.
+    url = ("https://raw.githubusercontent.com/chromium/chromium/" +
+           version + "/DEPS")
     request = urllib.request.Request(
-        chromium_source_url(version, path),
-        headers={"User-Agent": "Arcium-Windows-patch-compatibility/1.0"}
+        url, headers={"User-Agent": "Arcium-Windows-dependency-audit/1.0"}
     )
     with urllib.request.urlopen(request, timeout=45) as response:
-        encoded = response.read(4 * MAX_SOURCE_BYTES + 1)
-    if len(encoded) > 4 * MAX_SOURCE_BYTES:
-        raise ValueError(f"Upstream source unexpectedly large: {path}")
-    raw = base64.b64decode(encoded, validate=False)
-    if len(raw) > MAX_SOURCE_BYTES:
-        raise ValueError(f"Decoded source exceeds size cap: {path}")
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(raw)
-    return hashlib.sha256(raw).hexdigest()
+        payload = response.read(3 * 1024 * 1024 + 1)
+    if len(payload) > 3 * 1024 * 1024:
+        raise ValueError("Chromium DEPS unexpectedly large")
+    contents = payload.decode("utf-8")
+    revisions: dict[str, str] = {}
+    for key in ("angle_revision", "dawn_revision"):
+        match = re.search(
+            r"['\"]" + re.escape(key) + r"['\"]\s*:\s*['\"]([0-9a-f]{40})['\"]",
+            contents
+        )
+        if not match:
+            raise ValueError(f"Chromium DEPS did not specify {key}")
+        revisions[key] = match.group(1)
+    return revisions
+
+
+def winsparkle_platform_version(platform: Path) -> str:
+    """Get WinSparkle version from the pinned Windows platform downloads.ini."""
+    parser = configparser.ConfigParser(interpolation=None)
+    if not parser.read(platform / "downloads.ini", encoding="utf-8"):
+        raise FileNotFoundError("Helium Windows downloads.ini not found")
+    version = parser.get("winsparkle", "version")
+    if not re.fullmatch(r"[0-9]+(?:[.][0-9]+){1,3}", version):
+        raise ValueError("Invalid pinned WinSparkle version")
+    return version
+
+
+def download_original(version: str, path: str, dest: Path,
+                      mirror_first: bool = False,
+                      external_revisions: dict[str, str] | None = None,
+                      winsparkle_version: str | None = None) -> str:
+    """Get a pinned source file from Chromium or a DEPS-pinned external repo."""
+    gitiles = chromium_source_url(version, path)  # Validates path.
+    github_raw = (
+        "https://raw.githubusercontent.com/chromium/chromium/" + version +
+        "/" + urllib.parse.quote(path, safe="/")
+    )
+    sources: list[tuple[str, str, bool]]
+    if path.startswith("third_party/angle/"):
+        if external_revisions is None or "angle_revision" not in external_revisions:
+            raise ValueError("Need Chromium DEPS ANGLE revision for external source")
+        revision = external_revisions["angle_revision"]
+        relative = path.removeprefix("third_party/angle/")
+        sources = [
+            ("angle-github", "https://raw.githubusercontent.com/google/angle/" +
+             revision + "/" + urllib.parse.quote(relative, safe="/"), False),
+            ("angle-gitiles", "https://chromium.googlesource.com/angle/angle/+/" +
+             revision + "/" + urllib.parse.quote(relative, safe="/") +
+             "?format=TEXT", True),
+        ]
+    elif path.startswith("third_party/dawn/"):
+        if external_revisions is None or "dawn_revision" not in external_revisions:
+            raise ValueError("Need Chromium DEPS Dawn revision for external source")
+        revision = external_revisions["dawn_revision"]
+        relative = path.removeprefix("third_party/dawn/")
+        sources = [
+            ("dawn-gitiles", "https://dawn.googlesource.com/dawn/+/" +
+             revision + "/" + urllib.parse.quote(relative, safe="/") +
+             "?format=TEXT", True),
+            ("dawn-github", "https://raw.githubusercontent.com/google/dawn/" +
+             revision + "/" + urllib.parse.quote(relative, safe="/"), False),
+        ]
+    elif path.startswith("third_party/winsparkle/"):
+        if not winsparkle_version:
+            raise ValueError("Need version of WinSparkle downloaded by the platform")
+        relative = path.removeprefix("third_party/winsparkle/")
+        sources = [
+            ("winsparkle-github",
+             "https://raw.githubusercontent.com/vslavik/winsparkle/v" +
+             winsparkle_version + "/" +
+             urllib.parse.quote(relative, safe="/"), False),
+        ]
+    else:
+        sources = (
+            [("chromium-github", github_raw, False),
+             ("chromium-gitiles", gitiles, True)] if mirror_first else
+            [("chromium-gitiles", gitiles, True),
+             ("chromium-github", github_raw, False)]
+        )
+
+    errors: list[str] = []
+    for provider, url, is_base64 in sources:
+        request = urllib.request.Request(
+            url, headers={"User-Agent": "Arcium-Windows-patch-compatibility/1.0"}
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=45) as response:
+                encoded = response.read(4 * MAX_SOURCE_BYTES + 1)
+            if len(encoded) > 4 * MAX_SOURCE_BYTES:
+                raise ValueError(f"Chromium source unexpectedly large: {path}")
+            raw = (base64.b64decode(encoded, validate=True)
+                   if is_base64 else encoded)
+            if len(raw) > MAX_SOURCE_BYTES:
+                raise ValueError(f"Decoded source exceeds size cap: {path}")
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(raw)
+            print(f"  Verified {provider} at pinned revision: {path}", flush=True)
+            return hashlib.sha256(raw).hexdigest()
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
+            errors.append(f"{provider}: {exc}")
+            print(f"  Source mirror error: {errors[-1]}", flush=True)
+    raise RuntimeError(f"Could not retrieve {path} at {version}: {'; '.join(errors)}")
 
 
 def apply_sections(worktree: Path, source: str, patch_name: str, filtered: str) -> dict:
@@ -133,28 +253,44 @@ def apply_sections(worktree: Path, source: str, patch_name: str, filtered: str) 
     }
 
 
-def check_overlaps(platform: Path, workspace: Path, report_file: Path) -> int:
+def check_overlaps(platform: Path, workspace: Path, report_file: Path,
+                   scope: str = "overlap") -> int:
     original = audit_staged(platform)
-    overlaps = set(original["overlapping_targets"])
     core = platform / "helium-chromium"
     version = chromium_version()
-    if not overlaps:
-        raise RuntimeError("Expected at least one overlapping patched path")
+    core_patches = read_series(core / "patches" / "series")
+    win_patches = read_series(platform / "patches" / "series")
+    if scope == "overlap":
+        targets = set(original["overlapping_targets"])
+    elif scope == "windows":
+        targets, _ = discover_patch_paths(win_patches)
+    else:
+        raise ValueError(f"Unsupported patch audit scope: {scope}")
+    # Some paths are introduced by the first patch that touches them;
+    # there is no original Chromium file to download for those additions.
+    _, newly_created = discover_patch_paths(core_patches + win_patches)
+    if not targets or len(targets) > 180:
+        raise ValueError(f"Unexpected source target count: {len(targets)}")
     if not shutil.which("patch"):
         raise EnvironmentError("GNU patch is required")
 
     report: dict = {
         "status": "STARTED",
-        "scope": "OVERLAPPING_FILES_ONLY",
+        "scope": "OVERLAPPING_FILES_ONLY" if scope == "overlap" else "WINDOWS_PATCH_TARGETS_ONLY",
         "warning": (
-            "Only common Chromium patch targets are tested. "
+            "Only selected Chromium patch targets are tested. "
             "Passing is NOT equivalent to full patch application or a browser build."
         ),
         "platform_revision": original["platform_commit"],
         "core_revision": original["arcium_commit"],
         "chromium_version": version,
-        "files": sorted(overlaps),
+        "files": sorted(targets),
+        "newly_created_paths": sorted(targets & newly_created),
         "original_sha256": {},
+        "source_mirrors": [
+            "https://chromium.googlesource.com/chromium/src",
+            "https://github.com/chromium/chromium",
+        ],
         "applied": [],
         "failure": None,
         "chromium_build_executed": False,
@@ -168,21 +304,39 @@ def check_overlaps(platform: Path, workspace: Path, report_file: Path) -> int:
         if workspace.exists() and any(workspace.iterdir()):
             raise FileExistsError(f"Refusing to overwrite workspace: {workspace}")
         workspace.mkdir(parents=True, exist_ok=True)
-        for path in sorted(overlaps):
+        external_revisions = (
+            chromium_dependency_revisions(version)
+            if any(p.startswith(("third_party/angle/", "third_party/dawn/"))
+                   for p in targets - newly_created)
+            else {}
+        )
+        report["external_revisions"] = external_revisions
+        spark_version = (
+            winsparkle_platform_version(platform)
+            if any(p.startswith("third_party/winsparkle/")
+                   for p in targets - newly_created)
+            else None
+        )
+        report["winsparkle_version"] = spark_version
+        for path in sorted(targets):
+            if path in newly_created:
+                print(f"Patch stack creates new file: {path}", flush=True)
+                continue
             print(f"Fetching Chromium {version}: {path}", flush=True)
             report["original_sha256"][path] = download_original(
-                version, path, workspace / path
+                version, path, workspace / path,
+                mirror_first=(scope == "windows"),
+                external_revisions=external_revisions,
+                winsparkle_version=spark_version
             )
 
         series = (
-            [("Arcium", core / "patches", p) for p in
-             read_series(core / "patches" / "series")] +
-            [("Windows", platform / "patches", p) for p in
-             read_series(platform / "patches" / "series")]
+            [("Arcium", core / "patches", p) for p in core_patches] +
+            [("Windows", platform / "patches", p) for p in win_patches]
         )
         for origin, root, patch_file in series:
             diff = patch_file.read_text(encoding="utf-8", errors="replace")
-            selected = select_patch_sections(diff, overlaps)
+            selected = select_patch_sections(diff, targets)
             if not selected:
                 continue
             name = patch_file.relative_to(root).as_posix()
@@ -195,10 +349,10 @@ def check_overlaps(platform: Path, workspace: Path, report_file: Path) -> int:
                 persist()
                 print(json.dumps(result, indent=2), file=sys.stderr)
                 return 1
-        report["status"] = "PASSED_OVERLAP_HUNKS_ONLY"
+        report["status"] = "PASSED_SELECTED_PATCH_HUNKS_ONLY"
         persist()
         print(f"All {len(report['applied'])} selected patch operations passed "
-              "on overlapping Chromium source files.")
+              "on selected Chromium source files.")
         return 0
     except Exception as exc:
         report["status"] = "ERROR"
@@ -215,11 +369,14 @@ def main() -> int:
                         default=Path("work/chromium-overlap"))
     parser.add_argument("--report", type=Path,
                         default=Path("work/patch-overlap-results.json"))
+    parser.add_argument("--scope", choices=("overlap", "windows"), default="overlap",
+                        help="Overlap files (default) or every Windows patch target")
     args = parser.parse_args()
     return check_overlaps(
         args.platform_dir.resolve(),
         args.workspace.resolve(),
-        args.report.resolve()
+        args.report.resolve(),
+        scope=args.scope,
     )
 
 
