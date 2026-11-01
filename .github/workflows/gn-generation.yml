@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - scripts/gn_smoke.py
+      - scripts/chromium_sdk_pin.py
+      - tests/test_chromium_sdk_pin.py
       - tests/test_gn_smoke.py
       - .github/workflows/gn-generation.yml
   workflow_dispatch:
@@ -31,6 +33,8 @@ jobs:
           python-version: "3.12"
       - name: Run GN adapter unit tests
         run: python -m unittest discover -s tests -p test_gn_smoke.py -v
+      - name: Test pinned Chromium internal SDK selection
+        run: python -m unittest discover -s tests -p test_chromium_sdk_pin.py -v
       - name: Stage pinned Windows platform and Arcium core
         run: python scripts/windows_port.py stage
       - name: Validate against pinned upstream Windows builder

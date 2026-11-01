@@ -22,6 +22,8 @@ if __package__ in (None, ""):
 
 from scripts.gn_smoke import RESTORE_ANCHOR, RESTORE_STEP
 from scripts.windows_port import ROOT, audit_staged
+from scripts.windows_sdk_compat import adapt_windows_vcvars, select_windows_sdk
+from scripts.chromium_sdk_pin import inject_chromium_sdk_pin
 from scripts.windows_version_compat import (
     adapt_builder_version_api, assert_arcium_version_api
 )
@@ -40,6 +42,8 @@ def make_browser_only_builder(upstream: str) -> str:
     if upstream.count(ORIGINAL_RELEASE_TARGETS) != 1:
         raise ValueError("Unknown Windows Ninja target list; no installer may run")
     builder = adapt_builder_version_api(upstream)
+    builder = adapt_windows_vcvars(builder)
+    builder = inject_chromium_sdk_pin(builder)
     builder = builder.replace(RESTORE_ANCHOR, RESTORE_STEP, 1)
     builder = builder.replace(ORIGINAL_RELEASE_TARGETS, BROWSER_ONLY_TARGETS, 1)
     if "ninja_commandline.extend(['chrome', 'chromedriver', 'setup', 'mini_installer'])" in builder:
@@ -121,6 +125,10 @@ def run_experiment(
             "PYTHONPATH", ""
         )
         environment["PYTHONUNBUFFERED"] = "1"
+        # Force a fully installed x64 SDK instead of incomplete runner defaults.
+        selected_sdk = select_windows_sdk()
+        report["windows_sdk_version"] = selected_sdk
+        environment["ARCIUM_WINDOWS_SDK"] = selected_sdk
         environment.pop("WINSPARKLE_ED_KEY", None)
         environment.pop("WINSPARKLE_AUTHENTICODE_ORG", None)
         started = time.monotonic()

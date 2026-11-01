@@ -8,16 +8,23 @@ from scripts.browser_only_build import (
 )
 from scripts.gn_smoke import RESTORE_ANCHOR, RESTORE_STEP
 from scripts.windows_version_compat import OLD_VERSION_BLOCK
+from scripts.windows_sdk_compat import ORIGINAL_VCVARS_CALL
+from scripts.chromium_sdk_pin import SDK_PIN_ANCHOR
 
 
 def pinned_fixture() -> str:
     return (
         "# Helium build script for Windows\n"
+        "def _run_build_process(*args):\n"
+        + ORIGINAL_VCVARS_CALL + "\n"
+        "def _run_build_process_timeout(*args, **kwargs):\n"
+        + ORIGINAL_VCVARS_CALL + "\n"
         "def main():\n"
         "    if True:\n"
         + RESTORE_ANCHOR +
         "            pass\n"
         + OLD_VERSION_BLOCK +
+        SDK_PIN_ANCHOR +
         "    ninja_commandline = []\n"
         + ORIGINAL_RELEASE_TARGETS + "\n"
     )
@@ -27,6 +34,8 @@ class BrowserOnlyBuilderTests(unittest.TestCase):
     def test_version_restore_and_browser_only_target(self):
         code = make_browser_only_builder(pinned_fixture())
         self.assertIn("helium_version.refresh_version(", code)
+        self.assertIn("ARCIUM_WINDOWS_SDK", code)
+        self.assertIn("pin_chromium_sdk_version(source_tree", code)
         self.assertIn("restore_missing_webui_patch_targets(", code)
         self.assertIn(BROWSER_ONLY_TARGETS, code)
         self.assertNotIn(ORIGINAL_RELEASE_TARGETS, code)

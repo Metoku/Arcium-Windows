@@ -41,8 +41,39 @@ if (Test-Path -LiteralPath $vsRoot) {
         $vsPath = ($result | Select-Object -First 1).Trim()
     }
 }
-$windowsSdkRoot = Join-Path ([Environment]::GetFolderPath('ProgramFilesX86')) 'Windows Kits/10/Include'
+$windowsKitRoot = Join-Path ([Environment]::GetFolderPath('ProgramFilesX86')) 'Windows Kits/10'
+$windowsSdkRoot = Join-Path $windowsKitRoot 'Include'
 $sdkFound = Test-Path -LiteralPath $windowsSdkRoot
+$completeSdkVersions = @()
+$detectedSdkVersions = @()
+if ($sdkFound) {
+    foreach ($sdkDir in (Get-ChildItem -LiteralPath $windowsSdkRoot -Directory)) {
+        $version = $sdkDir.Name
+        if ($version -notmatch "^10[.]0[.][0-9]+[.][0-9]+") { continue }
+        $detectedSdkVersions += $version
+        $required = @(
+            (Join-Path $sdkDir.FullName 'um'),
+            (Join-Path $sdkDir.FullName 'shared'),
+            (Join-Path $sdkDir.FullName 'ucrt'),
+            (Join-Path $windowsKitRoot ("Lib/$version/um/x64")),
+            (Join-Path $windowsKitRoot ("Lib/$version/ucrt/x64"))
+        )
+        $valid = $true
+        foreach ($folder in $required) {
+            if (-not (Test-Path -LiteralPath $folder -PathType Container)) {
+                $valid = $false
+                break
+            }
+        }
+        if ($valid) { $completeSdkVersions += $version }
+    }
+}
+$completeSdkVersions = @($completeSdkVersions | Sort-Object { [Version]$_ } -Descending)
+$selectedSdkVersion = if ($completeSdkVersions.Count -gt 0) {
+    $completeSdkVersions[0]
+} else {
+    $null
+}
 $sevenZip = Try-Command '7z'
 if (-not $sevenZip) {
     $candidate7z = Join-Path $env:ProgramFiles '7-Zip/7z.exe'
@@ -56,7 +87,7 @@ $devMode = Try-RegistryNumber -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVer
 # Minimum 100 GiB free and 16 GiB RAM are preflight heuristics, not
 # guarantees that a large Chromium build will complete on this machine.
 $resourcesSufficient = ($freeGiB -ge 100 -and $ramGiB -ge 16)
-$toolchainPresent = [bool]($vsPath -and $sdkFound -and $gitPath -and $pythonPath)
+$toolchainPresent = [bool]($vsPath -and $selectedSdkVersion -and $gitPath -and $pythonPath)
 $goodToAttempt = ($resourcesSufficient -and $toolchainPresent)
 
 $report = [ordered]@{
@@ -72,6 +103,9 @@ $report = [ordered]@{
     total_ram_gib = $ramGiB
     visual_studio_path = $vsPath
     windows_sdk_present = [bool]$sdkFound
+    windows_sdk_versions_detected = @($detectedSdkVersions)
+    windows_sdk_versions_complete = @($completeSdkVersions)
+    selected_windows_sdk_version = $selectedSdkVersion
     sevenzip_path = $sevenZip
     git_path = $gitPath
     python_path = $pythonPath
