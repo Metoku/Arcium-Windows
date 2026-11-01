@@ -1,0 +1,75 @@
+name: Windows GN generation (experimental)
+
+on:
+  pull_request:
+    paths:
+      - scripts/gn_smoke.py
+      - tests/test_gn_smoke.py
+      - .github/workflows/gn-generation.yml
+  workflow_dispatch:
+    inputs:
+      attempt_full_gn:
+        description: "Download full Chromium and run GN generation (expensive)"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate-adapter:
+    name: Check GN adapter without downloading Chromium
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run GN adapter unit tests
+        run: python -m unittest discover -s tests -p test_gn_smoke.py -v
+      - name: Stage pinned Windows platform and Arcium core
+        run: python scripts/windows_port.py stage
+      - name: Validate against pinned upstream Windows builder
+        run: python scripts/gn_smoke.py --validate
+
+  full-source-and-gn:
+    name: Full Chromium source, all patches, and GN configuration
+    needs: validate-adapter
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.attempt_full_gn }}
+    runs-on: windows-2025
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Read-only runner resource check
+        shell: pwsh
+        run: ./scripts/windows_build_preflight.ps1
+      - name: Checkout exact pinned Arcium core and Windows platform
+        run: python scripts/windows_port.py stage
+      - name: Install upstream Windows build helper dependencies
+        run: python -m pip install requests Pillow
+      - name: Attempt full source preparation through GN generation
+        run: python scripts/gn_smoke.py --execute --max-minutes 75
+      - name: Upload diagnostic reports, not browser binaries
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arcium-windows-gn-generation-report
+          path: |
+            work/gn-generation.json
+            work/gn-generation.log
+            work/windows-toolchain-preflight.json
+            work/windows-audit.json
+          if-no-files-found: warn
+          retention-days: 14
+
+# The workflow does not run Ninja, produce executables, sign or publish releases.
+# Expensive source/compile work must always be explicitly opted into.
