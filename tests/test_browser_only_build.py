@@ -24,7 +24,7 @@ def pinned_fixture() -> str:
         + RESTORE_ANCHOR +
         "            pass\n"
         + OLD_VERSION_BLOCK +
-        + SDK_PIN_ANCHOR +
+        SDK_PIN_ANCHOR +
         "    ninja_commandline = []\n"
         + ORIGINAL_RELEASE_TARGETS + "\n"
     )
