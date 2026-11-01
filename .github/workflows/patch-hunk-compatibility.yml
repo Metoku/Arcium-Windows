@@ -1,0 +1,43 @@
+name: Test Arcium and Windows overlapping patches
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  chromium-overlap-patches:
+    name: Apply overlapping Chromium patch hunks
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout Arcium Windows platform project
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run regression tests
+        run: python -m unittest discover -s tests -v
+      - name: Check GNU patch availability
+        run: patch --version
+      - name: Checkout exact shared core and Windows platform revisions
+        run: python scripts/windows_port.py stage
+      - name: Apply selected patches to original Chromium source files
+        run: python -m scripts.check_patch_overlaps
+      - name: Upload audit and patch results (even when checks fail)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: overlapping-patch-application-report
+          path: |
+            work/windows-audit.json
+            work/patch-overlap-results.json
+          if-no-files-found: warn
+
+# This workflow intentionally avoids downloading the complete Chromium tree.
+# It validates hunks on files modified by BOTH patch series only.
+# It cannot establish that the full patch stack compiles or runs on Windows.
