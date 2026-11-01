@@ -1,13 +1,17 @@
 """Tests for extracting and applying actual patch hunks, without network."""
 
+import base64
+import hashlib
 from pathlib import Path
 import shutil
+import urllib.error
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 from scripts.check_patch_overlaps import (
     chromium_source_url, discover_patch_paths, normalize_patch_path, select_patch_sections,
+    download_original,
     apply_sections
 )
 
@@ -89,6 +93,28 @@ class PatchOverlapChecks(unittest.TestCase):
             chromium_source_url("156.0.8078.47",
                                 "media/cdm/win/media_foundation_cdm.cc")
         )
+
+    def test_download_uses_other_official_mirror_on_http_429(self):
+        data = b"verified original chromium source\\n"
+        encoded = base64.b64encode(data)
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = encoded
+        failed_request = urllib.error.HTTPError(
+            "https://example.com/rate-limited", 429, "Too Many Requests",
+            None, None
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "chrome/browser/ui/browser.cc"
+            with patch(
+                "scripts.check_patch_overlaps.urllib.request.urlopen",
+                side_effect=[failed_request, response]
+            ):
+                result = download_original(
+                    "156.0.8078.47", "chrome/browser/ui/browser.cc",
+                    target, mirror_first=True
+                )
+            self.assertEqual(target.read_bytes(), data)
+            self.assertEqual(result, hashlib.sha256(data).hexdigest())
 
     @unittest.skipUnless(shutil.which("patch"), "GNU patch not available")
     def test_apply_extracted_patch_real_file(self):
