@@ -22,6 +22,9 @@ import subprocess
 import sys
 import time
 
+# Support both "python scripts/prepare_full_chromium.py" and "python -m ..." usage.
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts.windows_port import ROOT, audit_staged, read_series
 
 
