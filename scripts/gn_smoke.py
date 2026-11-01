@@ -23,6 +23,7 @@ if __package__ in (None, ""):
 from scripts.windows_port import ROOT, audit_staged
 from scripts.windows_version_compat import adapt_builder_version_api, assert_arcium_version_api
 from scripts.windows_sdk_compat import adapt_windows_vcvars, select_windows_sdk
+from scripts.chromium_sdk_pin import inject_chromium_sdk_pin
 
 
 GN_ANCHOR = (
@@ -73,6 +74,7 @@ def create_gn_only_builder(upstream: str) -> str:
     # Chromium test files omitted by the prepared tarball before patching.
     candidate = adapt_builder_version_api(upstream)
     candidate = adapt_windows_vcvars(candidate)
+    candidate = inject_chromium_sdk_pin(candidate)
     candidate = candidate.replace(RESTORE_ANCHOR, RESTORE_STEP, 1)
     candidate = candidate.replace(GN_ANCHOR, GN_EXIT + GN_ANCHOR, 1)
     compile(candidate, "arcium_gn_only.py", "exec")
