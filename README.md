@@ -12,6 +12,14 @@ Unofficial experimental Windows platform project for [Arcium](https://github.com
 
 CI can detect upstream changes and open reviewable update proposals. Until a Windows port compiles successfully, it must **not** claim to produce working binaries or automatically publish releases. Upstream revisions will be pinned and tested before adoption.
 
+## Implemented repository foundation
+
+- **Pinned upstream core:** [tracked SHA](upstream/arcium-core.sha).
+- **Upstream monitoring:** [scheduled workflow](.github/workflows/upstream-sync.yml) (every six hours, opens reviewable update PRs).
+- **Source validation:** [Linux and Windows checks](.github/workflows/validate.yml), including unit tests, upstream revision verification, and Windows checkout of the exact pinned core.
+- **Windows source bootstrap:** [PowerShell script](scripts/fetch_core.ps1), which fetches the pinned source but **does not compile Chromium**.
+- **Maintenance:** [Automation and GitHub settings](docs/automation.md) and [first Windows build milestone](https://github.com/Metoku/Arcium-Windows/issues/1).
+
 ## Roadmap
 
 1. Track upstream core revisions and validate repository metadata.
