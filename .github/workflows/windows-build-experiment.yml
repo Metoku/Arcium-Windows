@@ -53,6 +53,8 @@ jobs:
         run: python scripts/windows_port.py plan
       - name: Stage Helium Windows platform with Arcium shared core
         run: python scripts/windows_port.py stage
+      - name: Validate full-source preparation adapter (no downloads)
+        run: python scripts/prepare_full_chromium.py --validate
       - name: Upload static compatibility audit (NOT a build)
         if: always()
         uses: actions/upload-artifact@v4
