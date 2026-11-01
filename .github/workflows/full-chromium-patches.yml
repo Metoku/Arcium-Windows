@@ -1,0 +1,59 @@
+name: Full Windows Chromium source and patch preparation
+
+on:
+  pull_request:
+    paths:
+      - scripts/prepare_full_chromium.py
+      - tests/test_full_chromium_prepare.py
+      - .github/workflows/full-chromium-patches.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: full-chromium-patches-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prepare-full-source:
+    name: Prepare complete Chromium source and apply all patch series
+    runs-on: windows-2025
+    timeout-minutes: 75
+    steps:
+      - name: Checkout Windows integration repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run adapter regression tests
+        run: python -m unittest discover -s tests -v
+      - name: Check available Windows build resources
+        shell: pwsh
+        run: ./scripts/windows_build_preflight.ps1
+      - name: Stage exact Helium-Windows platform and Arcium core
+        run: python scripts/windows_port.py stage
+      - name: Verify prepare-only adapter without downloading Chromium
+        run: python scripts/prepare_full_chromium.py --validate
+      - name: Install upstream Windows builder dependencies
+        run: python -m pip install requests Pillow
+      - name: Prepare complete Windows Chromium tree and apply both full patch stacks
+        run: python scripts/prepare_full_chromium.py --execute --max-minutes 55
+      - name: Upload source-preparation report and diagnostics (never browser binaries)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-chromium-patch-preparation-report
+          path: |
+            work/full-source-prepare.json
+            work/full-source-prepare.log
+            work/windows-audit.json
+            work/windows-toolchain-preflight.json
+          if-no-files-found: warn
+          retention-days: 14
+
+# The job deliberately does not build, install, launch, sign, package or publish a browser.
+# It does NOT contain code paths for installer/updater distribution.
