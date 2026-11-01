@@ -57,6 +57,8 @@ jobs:
       - name: Install upstream Windows build helper dependencies
         run: python -m pip install requests Pillow
       - name: Attempt full source preparation through GN generation
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python scripts/gn_smoke.py --execute --max-minutes 75
       - name: Upload diagnostic reports, not browser binaries
         if: always()
