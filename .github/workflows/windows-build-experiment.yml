@@ -55,6 +55,8 @@ jobs:
         run: python scripts/windows_port.py stage
       - name: Validate full-source preparation adapter (no downloads)
         run: python scripts/prepare_full_chromium.py --validate
+      - name: Validate browser-only compilation adapter (no download or build)
+        run: python scripts/browser_only_build.py --validate
       - name: Upload static compatibility audit (NOT a build)
         if: always()
         uses: actions/upload-artifact@v4
@@ -75,21 +77,18 @@ jobs:
       - name: Install Python requirements for Helium Windows builder
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.compile_browser }}
         run: python -m pip install requests Pillow
-      - name: Attempt real Chromium compilation (NO publishing or installer)
+      - name: Attempt browser-only native Chromium build (NO installer or distribution)
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.compile_browser }}
-        working-directory: work/windows-platform
-        run: python build.py --tarball -j 4
-      - name: Verify compiled executable exists (NOT UI feature validation)
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.compile_browser }}
-        shell: pwsh
-        run: |
-          $output = Join-Path (Get-Location) 'work/windows-platform/build/src/out/Default'
-          $candidate = @('helium.exe', 'chrome.exe') |
-            ForEach-Object { Join-Path $output $_ } |
-            Where-Object { Test-Path $_ } |
-            Select-Object -First 1
-          if (-not $candidate) {
-            throw "Compilation command returned but no known browser executable was found in $output"
-          }
-          Write-Host "Found compiled browser binary: $candidate"
-          Write-Host "This is only an existence check; actual browser launch, UI, packaging, and updates remain unverified."
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/browser_only_build.py --execute --jobs 2 --max-minutes 250
+      - name: Upload diagnostic report and log (NO browser binaries)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-browser-only-build-report
+          path: |
+            work/browser-only-build.json
+            work/browser-only-build.log
+          if-no-files-found: warn
+          retention-days: 7
