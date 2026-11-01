@@ -11,7 +11,7 @@ from unittest.mock import patch, MagicMock
 
 from scripts.check_patch_overlaps import (
     chromium_source_url, discover_patch_paths, normalize_patch_path, select_patch_sections,
-    download_original,
+    download_original, chromium_dependency_revisions,
     apply_sections
 )
 
@@ -93,6 +93,23 @@ class PatchOverlapChecks(unittest.TestCase):
             chromium_source_url("156.0.8078.47",
                                 "media/cdm/win/media_foundation_cdm.cc")
         )
+
+    def test_external_dependency_revisions_follow_pinned_deps(self):
+        deps = (
+            "vars = {\n"
+            "  'angle_revision': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',\n"
+            "  'dawn_revision': 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',\n"
+            "}\n"
+        ).encode("utf-8")
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = deps
+        with patch(
+            "scripts.check_patch_overlaps.urllib.request.urlopen",
+            return_value=response
+        ):
+            revisions = chromium_dependency_revisions("156.0.8078.47")
+        self.assertEqual(revisions["angle_revision"], "a" * 40)
+        self.assertEqual(revisions["dawn_revision"], "b" * 40)
 
     def test_download_uses_other_official_mirror_on_http_429(self):
         data = b"verified original chromium source\\n"
