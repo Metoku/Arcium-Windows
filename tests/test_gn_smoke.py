@@ -4,6 +4,7 @@ import os
 import sys
 import types
 from unittest.mock import Mock, patch
+from types import SimpleNamespace
 from pathlib import Path
 import tempfile
 import unittest
@@ -11,6 +12,7 @@ import unittest
 from scripts.gn_smoke import (
     GN_ANCHOR, RESTORE_ANCHOR, BUILDER_IDENTIFIER, create_gn_only_builder
 )
+from scripts.windows_version_compat import OLD_VERSION_BLOCK
 
 
 def upstream_fixture() -> str:
@@ -23,9 +25,12 @@ def upstream_fixture() -> str:
         '    source_tree = _ROOT_DIR / "src"\n'
         '    args = SimpleNamespace(dev=False)\n'
         '    (source_tree / "out" / "Default").mkdir(parents=True, exist_ok=True)\n'
+        '    (source_tree / "chrome").mkdir(parents=True, exist_ok=True)\n'
+        '    (source_tree / "chrome" / "VERSION").write_text("MAJOR=156\\n", encoding="utf-8")\n'
         '    if True:\n'
         + RESTORE_ANCHOR +
         '            # patches.generate_patches_from_series (unit fixture)\n'
+        + OLD_VERSION_BLOCK +
         '    # Run gn gen\n'
         '    if True:\n'
         '        (source_tree / "out" / "Default" / "build.ninja").write_text(\n'
@@ -42,9 +47,20 @@ class GNAdapterTests(unittest.TestCase):
             root = Path(tmp)
             called = []
             code = create_gn_only_builder(upstream_fixture())
+            versions = []
             namespace = {
                 "_ROOT_DIR": root,
                 "_run_build_process": lambda *args: called.append(args),
+                "helium_version": SimpleNamespace(
+                    get_version_parts=lambda *args: {"HELIUM_MAJOR": "0"},
+                    refresh_version=lambda path, parts: (
+                        versions.append((path, parts)),
+                        path.write_text(
+                            path.read_text(encoding="utf-8") +
+                            "HELIUM_MAJOR=0\\n", encoding="utf-8"
+                        )
+                    )
+                ),
             }
             exec(compile(code, "generated_builder.py", "exec"), namespace)
             module = types.ModuleType("scripts.restore_chromium_fixtures")
@@ -62,6 +78,8 @@ class GNAdapterTests(unittest.TestCase):
             additional_mock.assert_called_once_with(
                 root / "src", root / "helium-chromium" / "patches"
             )
+            self.assertEqual(versions[0][1], {"HELIUM_MAJOR": "0"})
+            self.assertEqual(len(versions), 1)
             self.assertEqual(len(called), 1)
             self.assertTrue((root / "ARCIUM_GN_GENERATED.marker").is_file())
             self.assertEqual(
