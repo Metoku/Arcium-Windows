@@ -50,9 +50,18 @@ class GNAdapterTests(unittest.TestCase):
             module = types.ModuleType("scripts.restore_chromium_fixtures")
             restore_mock = Mock()
             module.restore_chromium_test_fixtures = restore_mock
-            with patch.dict(sys.modules, {"scripts.restore_chromium_fixtures": module}):
+            additional = types.ModuleType("scripts.restore_patch_webui_tests")
+            additional_mock = Mock()
+            additional.restore_missing_webui_patch_targets = additional_mock
+            with patch.dict(sys.modules, {
+                "scripts.restore_chromium_fixtures": module,
+                "scripts.restore_patch_webui_tests": additional,
+            }):
                 namespace["main"]()
             restore_mock.assert_called_once_with(root / "src")
+            additional_mock.assert_called_once_with(
+                root / "src", root / "helium-chromium" / "patches"
+            )
             self.assertEqual(len(called), 1)
             self.assertTrue((root / "ARCIUM_GN_GENERATED.marker").is_file())
             self.assertEqual(
