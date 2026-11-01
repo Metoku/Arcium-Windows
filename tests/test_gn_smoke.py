@@ -30,6 +30,7 @@ def upstream_fixture() -> str:
         '    if True:\n'
         + RESTORE_ANCHOR +
         '            # patches.generate_patches_from_series (unit fixture)\n'
+        '            pass\n'
         + OLD_VERSION_BLOCK +
         '    # Run gn gen\n'
         '    if True:\n'
