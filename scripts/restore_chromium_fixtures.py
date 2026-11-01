@@ -30,6 +30,8 @@ CHROMIUM_WEBUI_FIXTURES = {
         "46075b0f7d303984c98111b016cbfb0545773f2e",
     "chrome/test/data/webui/extensions/sidebar_test.ts":
         "d62d26b4192539125b213720d1777d08bf37a35d",
+    "chrome/test/data/webui/side_panel/customize_chrome/appearance_test.ts":
+        "8ab3e527aca72f005872ab1ddd6ff2dae6719c90",
     "chrome/test/data/webui/history/history_routing_test.ts":
         "5461ec4695023c2d1ac64655f8f1913ade5fe89f",
     "chrome/test/data/webui/new_tab_page/app_test.ts":
