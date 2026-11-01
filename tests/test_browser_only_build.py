@@ -3,10 +3,11 @@
 import unittest
 from pathlib import Path
 import tempfile
+from unittest.mock import patch
 
 from scripts.browser_only_build import (
     BROWSER_ONLY_TARGETS, ORIGINAL_RELEASE_TARGETS,
-    first_compiler_failure, make_browser_only_builder
+    first_compiler_failure, make_browser_only_builder, print_diagnostic
 )
 from scripts.gn_smoke import RESTORE_ANCHOR, RESTORE_STEP
 from scripts.windows_version_compat import OLD_VERSION_BLOCK
@@ -43,6 +44,16 @@ class BrowserOnlyBuilderTests(unittest.TestCase):
         self.assertNotIn(ORIGINAL_RELEASE_TARGETS, code)
         self.assertNotIn("helium_version.check_existing_version(", code)
         self.assertNotIn("helium_version.append_version(", code)
+
+    def test_windows_legacy_console_can_print_unicode_diagnostics(self):
+        # Raw errors remain intact in the diagnostic log and JSON. The
+        # console-facing copy must not contain cp1252-unencodable glyphs.
+        with patch("builtins.print") as printer:
+            print_diagnostic("build failure █ → ∆ 😀")
+        argument = printer.call_args.args[0]
+        argument.encode("cp1252", errors="strict")
+        self.assertIn(r"\\u2588", argument)
+        self.assertIn(r"\\U0001f600", argument)
 
     def test_extract_first_siso_failure_not_log_tail(self):
         with tempfile.TemporaryDirectory() as tmp:
