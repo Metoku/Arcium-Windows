@@ -30,6 +30,10 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Validate pinned revision format
         run: python scripts/validate_upstream.py
+      - name: Fetch exact Arcium source on Windows (not a browser build)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: ./scripts/fetch_core.ps1
       - name: Verify pinned upstream revision exists
         if: matrix.os == 'ubuntu-latest'
         env:
