@@ -7,7 +7,8 @@ from unittest.mock import patch
 
 from scripts.browser_only_build import (
     BROWSER_ONLY_TARGETS, ORIGINAL_RELEASE_TARGETS,
-    first_compiler_failure, make_browser_only_builder, print_diagnostic
+    first_compiler_failure, make_browser_only_builder, print_diagnostic,
+    REQUIRED_NATIVE_CHROMIUM_SDK, require_native_chromium_sdk
 )
 from scripts.gn_smoke import RESTORE_ANCHOR, RESTORE_STEP
 from scripts.windows_version_compat import OLD_VERSION_BLOCK
@@ -44,6 +45,14 @@ class BrowserOnlyBuilderTests(unittest.TestCase):
         self.assertNotIn(ORIGINAL_RELEASE_TARGETS, code)
         self.assertNotIn("helium_version.check_existing_version(", code)
         self.assertNotIn("helium_version.append_version(", code)
+
+    def test_native_compile_requires_reviewed_28000_sdk(self):
+        self.assertEqual(REQUIRED_NATIVE_CHROMIUM_SDK, "10.0.28000.0")
+        require_native_chromium_sdk("10.0.28000.0")
+        with self.assertRaisesRegex(EnvironmentError, "Provision it"):
+            require_native_chromium_sdk("10.0.26100.0")
+        with self.assertRaisesRegex(EnvironmentError, "28000"):
+            require_native_chromium_sdk("10.0.99999.0")
 
     def test_windows_legacy_console_can_print_unicode_diagnostics(self):
         # Raw errors remain intact in the diagnostic log and JSON. The
