@@ -42,6 +42,18 @@ INSERTION = (
     "            return\n"
 )
 VERSION_MARKER = "Helium build script for Windows"
+RESTORE_ANCHOR = (
+    "        if not args.dev:\n"
+    "            # Apply patches\n"
+)
+RESTORE_STEP = (
+    "        if not args.dev:\n"
+    "            # Restore exact Chromium WebUI test fixtures omitted by base tarballs.\n"
+    "            from scripts.restore_chromium_fixtures import restore_chromium_test_fixtures\n"
+    "            restore_chromium_test_fixtures(source_tree)\n"
+    "            # Apply patches\n"
+)
+
 
 
 def generate_prepare_only_script(upstream_text: str) -> str:
@@ -52,11 +64,14 @@ def generate_prepare_only_script(upstream_text: str) -> str:
         raise ValueError("Expected exactly one upstream patch-stage exit anchor")
     if upstream_text.count("patches.generate_patches_from_series") < 2:
         raise ValueError("Upstream no longer appears to use both patch series")
+    if upstream_text.count(RESTORE_ANCHOR) != 1:
+        raise ValueError("Expected exactly one upstream Chromium patch-start anchor")
     position = upstream_text.index(ANCHOR)
     prefix = upstream_text[:position]
     if not prefix.rstrip().endswith(")"):
         raise ValueError("Unexpected code immediately before patch-stage exit")
     generated = prefix + INSERTION + upstream_text[position:]
+    generated = generated.replace(RESTORE_ANCHOR, RESTORE_STEP, 1)
     compile(generated, "arcium_prepare_only.py", "exec")
     return generated
 
@@ -142,6 +157,9 @@ def prepare(platform: Path, report: Path, *, execute: bool,
         persist()
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
+        # The temporary Windows-platform builder imports our verified
+        # Chromium source fixture helper before applying Arcium patches.
+        env["PYTHONPATH"] = str(ROOT) + os.pathsep + env.get("PYTHONPATH", "")
         command = [sys.executable, str(temp_path), "--tarball"]
         print(
             "Preparing full pinned Chromium source and applying BOTH patch series. "
