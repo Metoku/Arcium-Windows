@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: full-windows-gn-diagnostic-${{ github.head_ref }}
+  cancel-in-progress: true
+
 jobs:
   full-gn:
     name: First complete Windows GN attempt (no Ninja)
@@ -25,6 +29,10 @@ jobs:
           python-version: '3.12'
       - name: Run offline GN adapter tests
         run: python -m unittest discover -s tests -p test_gn_smoke.py -v
+      - name: Validate SDK selection and pinned VC environment adapter
+        run: python -m unittest discover -s tests -p test_windows_sdk_compat.py -v
+      - name: Confirm a complete x64 SDK exists on this runner
+        run: python -c "from scripts.windows_sdk_compat import select_windows_sdk; print(select_windows_sdk())"
       - name: Read-only runner resource inspection
         shell: pwsh
         run: ./scripts/windows_build_preflight.ps1
