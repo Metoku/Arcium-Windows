@@ -13,6 +13,7 @@ from scripts.gn_smoke import (
     GN_ANCHOR, RESTORE_ANCHOR, BUILDER_IDENTIFIER, create_gn_only_builder
 )
 from scripts.windows_version_compat import OLD_VERSION_BLOCK
+from scripts.windows_sdk_compat import ORIGINAL_VCVARS_CALL
 
 
 def upstream_fixture() -> str:
@@ -21,6 +22,10 @@ def upstream_fixture() -> str:
         'import os\n'
         'from pathlib import Path\n'
         'from types import SimpleNamespace\n'
+        'def _run_build_process(*args):\n'
+        + ORIGINAL_VCVARS_CALL + '\n'
+        'def _run_build_process_timeout(*args, **kwargs):\n'
+        + ORIGINAL_VCVARS_CALL + '\n'
         'def main():\n'
         '    source_tree = _ROOT_DIR / "src"\n'
         '    args = SimpleNamespace(dev=False)\n'
@@ -64,6 +69,9 @@ class GNAdapterTests(unittest.TestCase):
                 ),
             }
             exec(compile(code, "generated_builder.py", "exec"), namespace)
+            # The fixture declares both pinned vcvars functions for static
+            # rewriting; intercept the later GN call in this offline test.
+            namespace["_run_build_process"] = lambda *args: called.append(args)
             module = types.ModuleType("scripts.restore_chromium_fixtures")
             restore_mock = Mock()
             module.restore_chromium_test_fixtures = restore_mock
