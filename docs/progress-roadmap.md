@@ -1,8 +1,8 @@
 # Windows port progress and acceptance criteria
 
-**Assessment date:** 2026-11-01
+**Assessment date:** 2026-11-01 (after full-source patch CI pass)
 
-**Estimated completion:** **20% toward a usable, distributable Windows browser**, based on weighted engineering milestones. This is a planning estimate, not measured code completion. The most expensive and uncertain work remains. Reassess once a real Windows executable has compiled and launched.
+**Estimated completion:** **34% toward a usable, distributable Windows browser**, based on weighted engineering milestones. This is a planning estimate, not measured code completion. The most expensive and uncertain work remains. Reassess once a real Windows executable has compiled and launched.
 
 ## Progress breakdown
 
@@ -11,18 +11,18 @@
 | Independent platform architecture and upstream tracking | 8% | **Complete** | Repository, pinned Arcium core, sync and validation workflows |
 | Pinned Helium-Windows platform, version matching and source checkout | 6% | **Complete** | [First source audit](first-windows-audit.md) and passing Windows staging CI |
 | Real patch-hunk compatibility tests | 6% | **Complete for targeted files** | [123 Windows patch targets and 69 applied operations](windows-platform-patch-results.md); not all shared patches |
-| Complete Chromium source preparation and both full patch series | 14% | **Unverified** | [Full-source preparation workflow](../.github/workflows/full-chromium-patches.yml) must succeed |
+| Complete Chromium source preparation and both full patch series | 14% | **Complete** | [Full-source run #41319549555](https://github.com/Metoku/Arcium-Windows/actions/runs/41319549555) passed with all 521 Arcium and 30 Windows patches |
 | Windows GN generation and compile configuration | 8% | **Not attempted** | Reproducible successful Windows GN generation |
 | Produce a launchable browser executable | 22% | **Not attempted** | Complete native Windows Chromium build with Arcium patches and isolated-profile smoke launch |
 | Implement and adapt Arc-style Windows UI | 18% | **Not attempted** | Spaces, Pins, Favorites, command bar, Peek, split view and Windows title bar functional |
 | Real browser runtime and regression testing | 10% | **Not attempted** | Automated Windows integration tests with isolated profiles and feature persistence |
 | Installer, identity, distribution, signed updater and release gates | 8% | **Not attempted** | Distinct app IDs, safe installation/uninstallation, signed builds, update validation, licensing review |
 
-**Total:** 100%. Completed baseline milestones: 8 + 6 + 6 = **20%**. Approximately **80% remains**.
+**Total:** 100%. Verified milestones: 8 + 6 + 6 + 14 = **34%**. Approximately **66% remains**.
 
 The nine milestones are **not equally difficult**, and this estimate can change significantly as Chromium compiler errors reveal additional platform work. A green source test cannot substitute for a working browser.
 
-## Current next gate: full Chromium patch application
+## Next gate: Windows GN generation
 
 Our exact baseline:
 
@@ -30,7 +30,7 @@ Our exact baseline:
 - [imputnet/helium-windows](https://github.com/imputnet/helium-windows) at `e4b527255e3e0546ac140b7cb52d285fadb2d7d0` (0.20.1.1)
 - Chromium 156.0.8078.47
 
-The [full source adapter](../scripts/prepare_full_chromium.py) creates an ephemeral source-preparation script from the reviewed upstream Windows build script. It preserves download, integrity checks, source extraction, pruning and **both complete patch applications**, but stops **before GN generation and C++ compilation**. This is intentional: patch errors must be handled before incurring a large compiler run.
+The [full source adapter](../scripts/prepare_full_chromium.py) successfully applied all **521 Arcium + 30 Windows patches** to the pinned Chromium source on a Windows hosted runner, as verified in [run #41319549555](https://github.com/Metoku/Arcium-Windows/actions/runs/41319549555). The adapter stops **before GN generation and C++ compilation**. The next acceptance gate is successful Windows GN generation using [the GN-only gate](windows-gn-gate.md), followed by C++ compilation.
 
 ### Run only on an appropriately provisioned Windows builder
 
