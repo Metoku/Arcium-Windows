@@ -3,9 +3,10 @@
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from scripts.prepare_full_chromium import (
-    ANCHOR, generate_prepare_only_script, VERSION_MARKER
+    ANCHOR, RESTORE_ANCHOR, generate_prepare_only_script, VERSION_MARKER
 )
 
 
@@ -14,6 +15,7 @@ def sample_upstream_builder() -> str:
     return (
         "# Helium build script for Windows\n"
         "from pathlib import Path\n"
+        "from types import SimpleNamespace\n"
         "class FakePatches:\n"
         "    def __init__(self): self.calls = []\n"
         "    def generate_patches_from_series(self, path, resolve=True):\n"
@@ -22,8 +24,10 @@ def sample_upstream_builder() -> str:
         "        self.calls.append(patches)\n"
         "patches = FakePatches()\n"
         "def main():\n"
+        "    args = SimpleNamespace(dev=False)\n"
+        "    source_tree = _ROOT_DIR / 'src'\n"
         "    if True:\n"
-        "        if True:\n"
+        + RESTORE_ANCHOR +
         "            patches.apply_patches(\n"
         "                patches.generate_patches_from_series('arcium', resolve=True),\n"
         "                None, patch_bin_path=None\n"
@@ -43,7 +47,11 @@ class FullPrepareSourceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             namespace = {"_ROOT_DIR": Path(tmp)}
             exec(compile(generated, "test_preparation.py", "exec"), namespace)
-            namespace["main"]()
+            with patch(
+                "scripts.restore_chromium_fixtures.restore_chromium_test_fixtures"
+            ) as restore:
+                namespace["main"]()
+                restore.assert_called_once_with(Path(tmp) / "src")
             self.assertEqual(
                 namespace["patches"].calls, [["arcium"], ["windows"]]
             )
@@ -63,6 +71,12 @@ class FullPrepareSourceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Unexpected upstream"):
             generate_prepare_only_script(
                 sample_upstream_builder().replace(VERSION_MARKER, "Other script")
+            )
+
+    def test_reject_missing_restore_anchor(self):
+        with self.assertRaisesRegex(ValueError, "patch-start anchor"):
+            generate_prepare_only_script(
+                sample_upstream_builder().replace(RESTORE_ANCHOR, "")
             )
 
     def test_reject_duplicate_anchor(self):
