@@ -1,0 +1,81 @@
+name: One-time full native Windows Chromium chrome build with SDK 28000
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/full-chrome-sdk-28000.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: arcium-chrome-sdk-28000-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-browser:
+    name: Compile chrome.exe with Chromium 156 required SDK (no installer)
+    if: ${{ github.head_ref == 'experiment/native-chrome-sdk-28000-full-20261102' }}
+    runs-on: windows-2025
+    timeout-minutes: 330
+    steps:
+      - name: Checkout exact pinned Arcium Windows integration
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate SDK, browser targets and isolated launch guards
+        run: |
+          python -m unittest discover -s tests -p test_chromium_sdk_pin.py -v
+          python -m unittest discover -s tests -p test_windows_sdk_compat.py -v
+          python -m unittest discover -s tests -p test_browser_only_build.py -v
+          python -m unittest discover -s tests -p test_windows_browser_smoke.py -v
+      - name: Inspect runner toolchain resources before SDK provisioning
+        shell: pwsh
+        run: ./scripts/windows_build_preflight.ps1
+      - name: Install only official Microsoft-signed Chromium-required SDK 28000
+        shell: pwsh
+        run: ./scripts/provision_chromium_sdk.ps1 -Install
+      - name: Validate full SDK installation and Chromium BR headers
+        shell: pwsh
+        run: |
+          ./scripts/provision_chromium_sdk.ps1
+          $sdkHeader = 'C:\Program Files (x86)\Windows Kits\10\Include\10.0.28000.0\shared\sdkddkver.h'
+          if (!(Test-Path -LiteralPath $sdkHeader -PathType Leaf)) { throw 'SDK 28000 header absent' }
+          if (!(Select-String -LiteralPath $sdkHeader -Pattern '^\s*#\s*define\s+NTDDI_WIN11_BR\b' -Quiet)) {
+            throw 'Chromium 156 required NTDDI_WIN11_BR is absent'
+          }
+          Write-Host 'ARCIUM_NATIVE_SDK_28000_READY'
+      - name: Stage exact pinned Helium Windows and Arcium core
+        run: python scripts/windows_port.py stage
+      - name: Validate browser-only builder against pinned sources
+        run: python scripts/browser_only_build.py --validate
+      - name: Install official source preparation dependencies
+        run: python -m pip install requests Pillow
+      - name: Compile native chrome C++ target only (no installer or updater)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/browser_only_build.py --execute --jobs 3 --max-minutes 310
+      - name: Test chrome.exe with disposable headless about blank profile
+        run: python scripts/windows_browser_smoke.py --timeout 60
+      - name: Upload text logs and JSON diagnostics, never browser binaries
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arcium-native-chrome-sdk-28000-results
+          path: |
+            work/browser-only-build.json
+            work/browser-only-build.log
+            work/browser-launch-smoke.json
+            work/windows-audit.json
+            work/windows-toolchain-preflight.json
+          if-no-files-found: warn
+          retention-days: 7
+
+# One-time diagnostic PR: NEVER merge workflow into main.
+# Only the chrome target is compiled, with 3 jobs and bounded runtime.
+# No setup/mini_installer, updater, signing, installation, profile sharing,
+# or browser binaries are uploaded to GitHub.
