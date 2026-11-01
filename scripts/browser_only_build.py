@@ -35,6 +35,26 @@ ORIGINAL_RELEASE_TARGETS = (
 BROWSER_ONLY_TARGETS = "    ninja_commandline.append('chrome')"
 
 
+REQUIRED_NATIVE_CHROMIUM_SDK = "10.0.28000.0"
+
+
+def require_native_chromium_sdk(selected: str) -> None:
+    """Prevent an expensive C++ build with a GN-only SDK compatibility path.
+
+    Pinned Chromium 156 explicitly #errors when the 28000 Windows SDK's
+    NTDDI_WIN11_BR declaration is absent (base/win/windows_version.cc).
+    SDK 26100 can configure GN but cannot compile this native source.
+    """
+    if selected != REQUIRED_NATIVE_CHROMIUM_SDK:
+        raise EnvironmentError(
+            f"Chromium 156 native build requires SDK {REQUIRED_NATIVE_CHROMIUM_SDK}, "
+            f"not {selected}. Provision it on an authorized disposable Windows "
+            "build runner using scripts/provision_chromium_sdk.ps1 -Install "
+            "before attempting browser-only compilation."
+        )
+
+
+
 def print_diagnostic(text: str) -> None:
     """Write compiler diagnostics safely even on Windows cp1252 consoles.
 
@@ -147,6 +167,11 @@ def run_experiment(
         report["initial_free_disk_gib"] = round(free, 2)
         if free < 105:
             raise RuntimeError("Need >=105 GiB free for initial native Chromium build attempt")
+        # Fail before creating an experimental builder or downloading a
+        # full Chromium archive if only SDK 26100 is installed. GN alone can
+        # pass on that older SDK; native Chromium 156 compilation cannot.
+        selected_sdk = select_windows_sdk()
+        require_native_chromium_sdk(selected_sdk)
         temp_script.write_text(script, encoding="utf-8")
         environment = os.environ.copy()
         environment["PYTHONPATH"] = str(ROOT) + os.pathsep + environment.get(
@@ -154,7 +179,6 @@ def run_experiment(
         )
         environment["PYTHONUNBUFFERED"] = "1"
         # Force a fully installed x64 SDK instead of incomplete runner defaults.
-        selected_sdk = select_windows_sdk()
         report["windows_sdk_version"] = selected_sdk
         environment["ARCIUM_WINDOWS_SDK"] = selected_sdk
         environment.pop("WINSPARKLE_ED_KEY", None)
