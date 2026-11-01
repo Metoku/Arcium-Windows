@@ -51,6 +51,9 @@ RESTORE_STEP = (
     "            # Restore exact Chromium WebUI test fixtures omitted by base tarballs.\n"
     "            from scripts.restore_chromium_fixtures import restore_chromium_test_fixtures\n"
     "            restore_chromium_test_fixtures(source_tree)\n"
+    "            from scripts.restore_patch_webui_tests import restore_missing_webui_patch_targets\n"
+    "            restore_missing_webui_patch_targets(\n"
+    "                source_tree, _ROOT_DIR / 'helium-chromium' / 'patches')\n"
     "            # Apply patches\n"
 )
 
