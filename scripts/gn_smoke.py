@@ -9,7 +9,6 @@ recorded; it never launches, packages, signs, or publishes a browser.
 from __future__ import annotations
 
 import argparse
-from collections import deque
 import json
 import os
 from pathlib import Path
@@ -18,6 +17,9 @@ import subprocess
 import sys
 import time
 
+# Support both module and direct-script invocation on Windows CI.
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts.windows_port import ROOT, audit_staged
 
 
@@ -44,7 +46,7 @@ def create_gn_only_builder(upstream: str) -> str:
         raise ValueError("Unexpected Windows builder identity")
     if upstream.count(GN_ANCHOR) != 1:
         raise ValueError("Expected one GN/Ninja gate in pinned builder")
-    if "buildtools\\\\win\\\\gn.exe" not in upstream:
+    if "gn.exe" not in upstream or "'gen'" not in upstream:
         raise ValueError("Upstream GN invocation not found")
     if "patches.generate_patches_from_series" not in upstream:
         raise ValueError("Upstream patch stage missing")
