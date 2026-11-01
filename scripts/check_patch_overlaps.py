@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Apply the *overlapping-file portions* of pinned Arcium and Windows patch stacks.
+"""Apply selected portions of pinned Arcium and Windows Chromium patch stacks.
 
-Downloads only original files touched by BOTH patch stacks from the matching
-Chromium release tag, then applies their relevant hunks in real series order.
-This is a focused compatibility test, not full Chromium patch application,
+Downloads original files touched by both stacks or by Windows platform patches
+from a matching Chromium tag, then applies relevant hunks in real series order.
+This is focused compatibility testing, not complete patch application,
 C++ compilation, or proof of Windows runtime support.
 """
 
@@ -181,7 +181,7 @@ def check_overlaps(platform: Path, workspace: Path, report_file: Path,
         "status": "STARTED",
         "scope": "OVERLAPPING_FILES_ONLY" if scope == "overlap" else "WINDOWS_PATCH_TARGETS_ONLY",
         "warning": (
-            "Only common Chromium patch targets are tested. "
+            "Only selected Chromium patch targets are tested. "
             "Passing is NOT equivalent to full patch application or a browser build."
         ),
         "platform_revision": original["platform_commit"],
