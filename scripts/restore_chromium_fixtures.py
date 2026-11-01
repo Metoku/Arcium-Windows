@@ -30,6 +30,38 @@ CHROMIUM_WEBUI_FIXTURES = {
         "46075b0f7d303984c98111b016cbfb0545773f2e",
     "chrome/test/data/webui/extensions/sidebar_test.ts":
         "d62d26b4192539125b213720d1777d08bf37a35d",
+    "chrome/test/data/webui/history/history_routing_test.ts":
+        "5461ec4695023c2d1ac64655f8f1913ade5fe89f",
+    "chrome/test/data/webui/new_tab_page/app_test.ts":
+        "0ceac229900a53346d43cc5fdf86996f8f6aff3d",
+    "chrome/test/data/webui/new_tab_page/new_tab_page_browsertest.cc":
+        "9907372be673bd4909b0921d466db5f25411e0f0",
+    "chrome/test/data/webui/settings/about_page_test.ts":
+        "72633b9e55541dd7868d033efdf20dbf5143f939",
+    "chrome/test/data/webui/settings/import_data_dialog_test.ts":
+        "b0d52e62e2945e8229c3f22b201b6d3323cff678",
+    "chrome/test/data/webui/settings/people_page_manage_profile_test.ts":
+        "799ecf2ea8067c01c811bf3b4e6beae8fc346620",
+    "chrome/test/data/webui/settings/people_page_sync_controls_test.ts":
+        "795d7f214599866e0baaf79058cd73a97d61e520",
+    "chrome/test/data/webui/settings/people_page_sync_page_interactive_test.ts":
+        "12944709e5c67baf2d6ac27d01dea7d43dc4ba7f",
+    "chrome/test/data/webui/settings/people_page_sync_page_test.ts":
+        "1a61b1aafd9e376839cb4b074756860d2f31ff93",
+    "chrome/test/data/webui/settings/system_page_test.ts":
+        "9b9991a31ff7daa9f398fec8119161b4eefdc31b",
+    "chrome/test/data/webui/settings/test_search_engines_browser_proxy.ts":
+        "613b3dd37b9de7f0d6fed622bd4c6617505cb8ff",
+    "chrome/test/data/webui/settings/appearance_page_test.ts":
+        "68332a3cf5a524632a0753d283338e76584ced9b",
+    "chrome/test/data/webui/settings/clear_browsing_data_dialog_test.ts":
+        "4951ee32bf5ef39a35cae9da0de48d5a50945e1f",
+    "chrome/test/data/webui/settings/do_not_track_toggle_test.ts":
+        "d669dc92c17c4077d6bd95bad240e0f2555838f7",
+    "chrome/test/data/webui/settings/payments_page_test.ts":
+        "b4ed60422125e49c2b758338471cd1af3c458359",
+    "chrome/test/data/webui/settings/personalization_options_test.ts":
+        "fe07b258893f8fdccd1eb46a9cd9137131979183",
 }
 FIXTURE_CHROMIUM_VERSION = "156.0.8078.47"
 MAX_FIXTURE_BYTES = 128 * 1024
