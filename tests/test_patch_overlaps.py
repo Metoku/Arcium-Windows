@@ -12,6 +12,7 @@ from unittest.mock import patch, MagicMock
 from scripts.check_patch_overlaps import (
     chromium_source_url, discover_patch_paths, normalize_patch_path, select_patch_sections,
     download_original, chromium_dependency_revisions,
+    winsparkle_platform_version,
     apply_sections
 )
 
@@ -93,6 +94,19 @@ class PatchOverlapChecks(unittest.TestCase):
             chromium_source_url("156.0.8078.47",
                                 "media/cdm/win/media_foundation_cdm.cc")
         )
+
+    def test_winsparkle_dependency_version_from_platform(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp)
+            (path / "downloads.ini").write_text(
+                "[winsparkle]\nversion = 0.9.3\n", encoding="utf-8"
+            )
+            self.assertEqual(winsparkle_platform_version(path), "0.9.3")
+            (path / "downloads.ini").write_text(
+                "[winsparkle]\nversion = ../../evil\n", encoding="utf-8"
+            )
+            with self.assertRaises(ValueError):
+                winsparkle_platform_version(path)
 
     def test_external_dependency_revisions_follow_pinned_deps(self):
         deps = (
