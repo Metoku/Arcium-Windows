@@ -64,7 +64,7 @@ CHROMIUM_WEBUI_FIXTURES = {
         "fe07b258893f8fdccd1eb46a9cd9137131979183",
 }
 FIXTURE_CHROMIUM_VERSION = "156.0.8078.47"
-MAX_FIXTURE_BYTES = 128 * 1024
+MAX_FIXTURE_BYTES = 1024 * 1024  # 1 MiB; covers the 223 KB Chromium NTP test
 
 
 def git_blob_sha1(content: bytes) -> str:
