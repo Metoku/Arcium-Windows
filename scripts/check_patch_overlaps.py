@@ -118,21 +118,44 @@ def chromium_source_url(version: str, path: str) -> str:
             urllib.parse.quote(path, safe="/") + "?format=TEXT")
 
 
-def download_original(version: str, path: str, dest: Path) -> str:
-    request = urllib.request.Request(
-        chromium_source_url(version, path),
-        headers={"User-Agent": "Arcium-Windows-patch-compatibility/1.0"}
+def download_original(version: str, path: str, dest: Path,
+                      mirror_first: bool = False) -> str:
+    """Get release-tag bytes from either of Chromium's official git mirrors.
+
+    Gitiles may return HTTP 429 after dozens of sequential file requests.
+    The GitHub chromium/chromium mirror carries the *same* Chromium tag.
+    Fallbacks are explicit and never switch to main/latest.
+    """
+    gitiles = chromium_source_url(version, path)  # Validates version and path.
+    github_raw = (
+        "https://raw.githubusercontent.com/chromium/chromium/" + version +
+        "/" + urllib.parse.quote(path, safe="/")
     )
-    with urllib.request.urlopen(request, timeout=45) as response:
-        encoded = response.read(4 * MAX_SOURCE_BYTES + 1)
-    if len(encoded) > 4 * MAX_SOURCE_BYTES:
-        raise ValueError(f"Upstream source unexpectedly large: {path}")
-    raw = base64.b64decode(encoded, validate=False)
-    if len(raw) > MAX_SOURCE_BYTES:
-        raise ValueError(f"Decoded source exceeds size cap: {path}")
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(raw)
-    return hashlib.sha256(raw).hexdigest()
+    sources = [("github", github_raw), ("gitiles", gitiles)] if mirror_first else [
+        ("gitiles", gitiles), ("github", github_raw)
+    ]
+    errors: list[str] = []
+    for provider, url in sources:
+        request = urllib.request.Request(
+            url, headers={"User-Agent": "Arcium-Windows-patch-compatibility/1.0"}
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=45) as response:
+                encoded = response.read(4 * MAX_SOURCE_BYTES + 1)
+            if len(encoded) > 4 * MAX_SOURCE_BYTES:
+                raise ValueError(f"Chromium source unexpectedly large: {path}")
+            raw = (base64.b64decode(encoded, validate=True)
+                   if provider == "gitiles" else encoded)
+            if len(raw) > MAX_SOURCE_BYTES:
+                raise ValueError(f"Decoded Chromium source exceeds size cap: {path}")
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(raw)
+            print(f"  Verified {provider} tag {version}: {path}", flush=True)
+            return hashlib.sha256(raw).hexdigest()
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
+            errors.append(f"{provider}: {exc}")
+            print(f"  Chromium mirror error: {errors[-1]}", flush=True)
+    raise RuntimeError(f"Could not retrieve {path} at {version}: {'; '.join(errors)}")
 
 
 def apply_sections(worktree: Path, source: str, patch_name: str, filtered: str) -> dict:
@@ -190,6 +213,10 @@ def check_overlaps(platform: Path, workspace: Path, report_file: Path,
         "files": sorted(targets),
         "newly_created_paths": sorted(targets & newly_created),
         "original_sha256": {},
+        "source_mirrors": [
+            "https://chromium.googlesource.com/chromium/src",
+            "https://github.com/chromium/chromium",
+        ],
         "applied": [],
         "failure": None,
         "chromium_build_executed": False,
@@ -209,7 +236,7 @@ def check_overlaps(platform: Path, workspace: Path, report_file: Path,
                 continue
             print(f"Fetching Chromium {version}: {path}", flush=True)
             report["original_sha256"][path] = download_original(
-                version, path, workspace / path
+                version, path, workspace / path, mirror_first=(scope == "windows")
             )
 
         series = (
