@@ -1,6 +1,7 @@
 name: Windows source staging and experimental build
 
 on:
+  pull_request:
   workflow_dispatch:
     inputs:
       compile_browser:
@@ -27,7 +28,7 @@ concurrency:
 jobs:
   stage-and-optional-compile:
     name: "Pinned Windows port candidate"
-    runs-on: ${{ inputs.runner }}
+    runs-on: ${{ inputs.runner || 'windows-2025' }}
     timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
@@ -50,7 +51,7 @@ jobs:
           path: work/windows-audit.json
           if-no-files-found: warn
       - name: Ensure appropriate resources before Chromium compilation
-        if: ${{ inputs.compile_browser }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.compile_browser }}
         shell: pwsh
         run: |
           $drive = Get-PSDrive -Name ((Get-Location).Drive.Name)
@@ -60,14 +61,14 @@ jobs:
             throw "Need at least 100 GiB free for this experimental Chromium build. Configure a large Windows self-hosted runner."
           }
       - name: Install Python requirements for Helium Windows builder
-        if: ${{ inputs.compile_browser }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.compile_browser }}
         run: python -m pip install requests Pillow
       - name: Attempt real Chromium compilation (NO publishing or installer)
-        if: ${{ inputs.compile_browser }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.compile_browser }}
         working-directory: work/windows-platform
         run: python build.py --tarball -j 4
       - name: Verify compiled executable exists (NOT UI feature validation)
-        if: ${{ inputs.compile_browser }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.compile_browser }}
         shell: pwsh
         run: |
           $output = Join-Path (Get-Location) 'work/windows-platform/build/src/out/Default'
