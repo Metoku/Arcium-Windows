@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from scripts.check_patch_overlaps import (
-    chromium_source_url, normalize_patch_path, select_patch_sections,
+    chromium_source_url, discover_patch_paths, normalize_patch_path, select_patch_sections,
     apply_sections
 )
 
@@ -54,6 +54,27 @@ class PatchOverlapChecks(unittest.TestCase):
         self.assertNotIn("+other\n", got)
         self.assertNotIn("Index: ", got)
 
+    def test_discover_created_and_modified_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_file = Path(tmp) / "test.patch"
+            test_file.write_text(
+                "--- /dev/null\n"
+                "+++ b/chrome/browser/new_file.cc\n"
+                "@@ -0,0 +1 @@\n"
+                "+test\n"
+                "--- a/chrome/browser/old_file.cc\n"
+                "+++ b/chrome/browser/old_file.cc\n"
+                "@@ -1 +1 @@\n"
+                "-old\n"
+                "+new\n",
+                encoding="utf-8"
+            )
+            touched, created = discover_patch_paths([test_file])
+            self.assertEqual(touched, {
+                "chrome/browser/new_file.cc", "chrome/browser/old_file.cc"
+            })
+            self.assertEqual(created, {"chrome/browser/new_file.cc"})
+
     def test_source_url_validation(self):
         self.assertIn(
             "refs/tags/156.0.8078.47/chrome/browser/ui/browser.cc",
@@ -63,6 +84,11 @@ class PatchOverlapChecks(unittest.TestCase):
             chromium_source_url("156.0.8078.47", "chrome/../../../etc/passwd")
         with self.assertRaises(ValueError):
             chromium_source_url("latest", "chrome/browser/ui/browser.cc")
+        self.assertIn(
+            "/media/cdm/win/media_foundation_cdm.cc",
+            chromium_source_url("156.0.8078.47",
+                                "media/cdm/win/media_foundation_cdm.cc")
+        )
 
     @unittest.skipUnless(shutil.which("patch"), "GNU patch not available")
     def test_apply_extracted_patch_real_file(self):
