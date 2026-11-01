@@ -70,11 +70,15 @@ def select_patch_sections(diff: str, targets: set[str]) -> str:
 
         start = i
         i += 2
-        while i + 1 < len(lines):
-            if lines[i].startswith("--- ") and lines[i + 1].startswith("+++ "):
+        while i < len(lines):
+            # A new file's Index/diff header belongs to the *next*
+            # section. Leaving it in the previous patch confuses GNU patch.
+            if lines[i].startswith(("Index: ", "diff --git ")):
                 break
-            i += 1
-        if i == len(lines) - 1:
+            if i + 1 < len(lines) and (
+                lines[i].startswith("--- ") and lines[i + 1].startswith("+++ ")
+            ):
+                break
             i += 1
         if target in targets:
             sections.extend(lines[start:i])
