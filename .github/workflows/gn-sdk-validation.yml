@@ -1,4 +1,4 @@
-name: One-time full Windows GN test with complete SDK
+name: One-time full Windows GN test with validated complete SDK
 
 on:
   pull_request:
