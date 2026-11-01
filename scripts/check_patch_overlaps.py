@@ -150,7 +150,7 @@ def winsparkle_platform_version(platform: Path) -> str:
     if not parser.read(platform / "downloads.ini", encoding="utf-8"):
         raise FileNotFoundError("Helium Windows downloads.ini not found")
     version = parser.get("winsparkle", "version")
-    if not re.fullmatch(r"\\d+(?:\\.\\d+){1,3}", version):
+    if not re.fullmatch(r"[0-9]+(?:[.][0-9]+){1,3}", version):
         raise ValueError("Invalid pinned WinSparkle version")
     return version
 
