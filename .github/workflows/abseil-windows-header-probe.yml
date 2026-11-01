@@ -1,0 +1,85 @@
+name: One-time Windows Abseil header compile probe
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/abseil-windows-header-probe.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: arcium-abseil-header-probe-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  header-probe:
+    name: Compile only previous failing Abseil object (not Chrome)
+    if: ${{ github.head_ref == 'experiment/abseil-win-header-probe-20261102' }}
+    runs-on: windows-2025
+    timeout-minutes: 90
+    steps:
+      - name: Checkout integration fixes
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate Chromium SDK and GN adapters (no downloads)
+        run: |
+          python -m unittest discover -s tests -p test_chromium_sdk_pin.py -v
+          python -m unittest discover -s tests -p test_windows_sdk_compat.py -v
+          python -m unittest discover -s tests -p test_gn_smoke.py -v
+      - name: Check complete Windows SDK API target is defined
+        shell: pwsh
+        run: |
+          $sdk = "C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\shared\sdkddkver.h"
+          if (!(Test-Path $sdk)) { throw "Missing 26100 Windows SDK version header" }
+          if (!(Select-String -Path $sdk -Pattern '^\s*#\s*define\s+NTDDI_WIN11_GE\b' -Quiet)) {
+            throw "Installed SDK does not define NTDDI_WIN11_GE"
+          }
+          Write-Host 'Confirmed selected Windows SDK declares NTDDI_WIN11_GE'
+      - name: Inspect Windows runner resources
+        shell: pwsh
+        run: ./scripts/windows_build_preflight.ps1
+      - name: Stage exact pinned platform and source patches
+        run: python scripts/windows_port.py stage
+      - name: Check GN-only builder adapter
+        run: python scripts/gn_smoke.py --validate
+      - name: Install pinned preparation dependencies
+        run: python -m pip install requests Pillow
+      - name: Apply all patches and generate GN (no C++ yet)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/gn_smoke.py --execute --max-minutes 75
+      - name: Compile ONLY Abseil seed_material object from previous failure
+        shell: pwsh
+        run: |
+          $source = Join-Path $env:GITHUB_WORKSPACE 'work\windows-platform\build\src'
+          Set-Location $source
+          $env:DEPOT_TOOLS_WIN_TOOLCHAIN = '0'
+          $env:SISO_PATH = Join-Path $source 'third_party\siso\cipd\siso.exe'
+          $target = 'obj/third_party/abseil-cpp/absl/random/internal/seed_material/seed_material.obj'
+          Write-Host "Building single target: $target"
+          & python third_party/depot_tools/autoninja.py -C out/Default -j 2 $target 2>&1 |
+            Tee-Object -FilePath (Join-Path $env:GITHUB_WORKSPACE 'work\abseil-header-probe.log')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Host 'ARCIUM_WINDOWS_ABSEIL_HEADER_PROBE_PASSED'
+      - name: Upload diagnostics only, never browser binaries
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arcium-abseil-windows-header-probe
+          path: |
+            work/gn-generation.json
+            work/gn-generation.log
+            work/abseil-header-probe.log
+            work/windows-toolchain-preflight.json
+            work/windows-audit.json
+          if-no-files-found: warn
+          retention-days: 7
+
+# This disposable diagnostic workflow must NOT be merged into main.
+# Compiles one object only, not chrome.exe, installer, updater or signed binaries.
