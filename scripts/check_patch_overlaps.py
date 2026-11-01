@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import configparser
 import hashlib
 import json
 import os
@@ -143,9 +144,21 @@ def chromium_dependency_revisions(version: str) -> dict[str, str]:
     return revisions
 
 
+def winsparkle_platform_version(platform: Path) -> str:
+    """Get WinSparkle version from the pinned Windows platform downloads.ini."""
+    parser = configparser.ConfigParser(interpolation=None)
+    if not parser.read(platform / "downloads.ini", encoding="utf-8"):
+        raise FileNotFoundError("Helium Windows downloads.ini not found")
+    version = parser.get("winsparkle", "version")
+    if not re.fullmatch(r"\\d+(?:\\.\\d+){1,3}", version):
+        raise ValueError("Invalid pinned WinSparkle version")
+    return version
+
+
 def download_original(version: str, path: str, dest: Path,
                       mirror_first: bool = False,
-                      external_revisions: dict[str, str] | None = None) -> str:
+                      external_revisions: dict[str, str] | None = None,
+                      winsparkle_version: str | None = None) -> str:
     """Get a pinned source file from Chromium or a DEPS-pinned external repo."""
     gitiles = chromium_source_url(version, path)  # Validates path.
     github_raw = (
@@ -176,6 +189,16 @@ def download_original(version: str, path: str, dest: Path,
              "?format=TEXT", True),
             ("dawn-github", "https://raw.githubusercontent.com/google/dawn/" +
              revision + "/" + urllib.parse.quote(relative, safe="/"), False),
+        ]
+    elif path.startswith("third_party/winsparkle/"):
+        if not winsparkle_version:
+            raise ValueError("Need version of WinSparkle downloaded by the platform")
+        relative = path.removeprefix("third_party/winsparkle/")
+        sources = [
+            ("winsparkle-github",
+             "https://raw.githubusercontent.com/vslavik/winsparkle/v" +
+             winsparkle_version + "/" +
+             urllib.parse.quote(relative, safe="/"), False),
         ]
     else:
         sources = (
@@ -288,6 +311,13 @@ def check_overlaps(platform: Path, workspace: Path, report_file: Path,
             else {}
         )
         report["external_revisions"] = external_revisions
+        spark_version = (
+            winsparkle_platform_version(platform)
+            if any(p.startswith("third_party/winsparkle/")
+                   for p in targets - newly_created)
+            else None
+        )
+        report["winsparkle_version"] = spark_version
         for path in sorted(targets):
             if path in newly_created:
                 print(f"Patch stack creates new file: {path}", flush=True)
@@ -296,7 +326,8 @@ def check_overlaps(platform: Path, workspace: Path, report_file: Path,
             report["original_sha256"][path] = download_original(
                 version, path, workspace / path,
                 mirror_first=(scope == "windows"),
-                external_revisions=external_revisions
+                external_revisions=external_revisions,
+                winsparkle_version=spark_version
             )
 
         series = (
