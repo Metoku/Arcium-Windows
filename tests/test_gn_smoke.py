@@ -14,6 +14,7 @@ from scripts.gn_smoke import (
 )
 from scripts.windows_version_compat import OLD_VERSION_BLOCK
 from scripts.windows_sdk_compat import ORIGINAL_VCVARS_CALL
+from scripts.chromium_sdk_pin import SDK_PIN_ANCHOR
 
 
 def upstream_fixture() -> str:
@@ -37,6 +38,7 @@ def upstream_fixture() -> str:
         '            # patches.generate_patches_from_series (unit fixture)\n'
         '            pass\n'
         + OLD_VERSION_BLOCK +
+        + SDK_PIN_ANCHOR +
         '    # Run gn gen\n'
         '    if True:\n'
         '        (source_tree / "out" / "Default" / "build.ninja").write_text(\n'
@@ -78,11 +80,16 @@ class GNAdapterTests(unittest.TestCase):
             additional = types.ModuleType("scripts.restore_patch_webui_tests")
             additional_mock = Mock()
             additional.restore_missing_webui_patch_targets = additional_mock
+            sdk_module = types.ModuleType("scripts.chromium_sdk_pin")
+            sdk_mock = Mock()
+            sdk_module.pin_chromium_sdk_version = sdk_mock
             with patch.dict(sys.modules, {
                 "scripts.restore_chromium_fixtures": module,
                 "scripts.restore_patch_webui_tests": additional,
-            }):
+                "scripts.chromium_sdk_pin": sdk_module,
+            }), patch.dict(os.environ, {"ARCIUM_WINDOWS_SDK": "10.0.26100.0"}):
                 namespace["main"]()
+            sdk_mock.assert_called_once_with(root / "src", "10.0.26100.0")
             restore_mock.assert_called_once_with(root / "src")
             additional_mock.assert_called_once_with(
                 root / "src", root / "helium-chromium" / "patches"
@@ -94,6 +101,12 @@ class GNAdapterTests(unittest.TestCase):
             self.assertEqual(
                 (root / "ARCIUM_GN_GENERATED.marker").read_text(encoding="utf-8"),
                 "PINNED_WINDOWS_GN_GENERATED\n",
+            )
+
+    def test_reject_missing_source_sdk_injection_anchor(self):
+        with self.assertRaisesRegex(ValueError, "pre-GN source entry"):
+            create_gn_only_builder(
+                upstream_fixture().replace(SDK_PIN_ANCHOR, "")
             )
 
     def test_reject_missing_gn_anchor(self):
