@@ -35,6 +35,16 @@ ORIGINAL_RELEASE_TARGETS = (
 BROWSER_ONLY_TARGETS = "    ninja_commandline.append('chrome')"
 
 
+def print_diagnostic(text: str) -> None:
+    """Write compiler diagnostics safely even on Windows cp1252 consoles.
+
+    Siso's log may contain Unicode glyphs outside the current Windows console
+    encoding. Preserve the raw UTF-8 log and JSON; escape only console output.
+    """
+    print(text.encode("ascii", errors="backslashreplace").decode("ascii"),
+          flush=True)
+
+
 def first_compiler_failure(log_path: Path, limit: int = 24) -> list[str]:
     """Extract the first Siso/Ninja FAILED block, not only the log's tail.
 
@@ -194,13 +204,13 @@ def run_experiment(
             tail = log.read().decode(
                 "utf-8", errors="replace"
             ).splitlines()[-55:]
-        print("\n".join(tail[-30:]), flush=True)
+        print_diagnostic("\n".join(tail[-30:]))
         if code != 0:
             first_failure = first_compiler_failure(log_path)
             if first_failure:
                 report["first_compiler_failure"] = first_failure
-                print("First actual compiler error:\n" +
-                      "\n".join(first_failure), flush=True)
+                print_diagnostic("First actual compiler error:\n" +
+                                 "\n".join(first_failure))
         browser = platform / "build" / "src" / "out" / "Default" / "chrome.exe"
         if code == 0 and browser.is_file():
             report["status"] = "BROWSER_BINARY_CREATED_NOT_LAUNCHED"
