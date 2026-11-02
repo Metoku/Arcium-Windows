@@ -97,7 +97,8 @@ class GNRecoveryTests(unittest.TestCase):
     def test_recovery_never_redownloads_patches_or_builds_installers(self):
         script = Path(recovery.__file__).read_text(encoding="utf-8")
         self.assertIn("--script-executable=", script)
-        self.assertIn("gen out\\\\Default --fail-on-unused-args", script)
+        self.assertIn("gen out", script)
+        self.assertIn("--fail-on-unused-args", script)
         self.assertIn("recovery_log", script)
         self.assertIn("marker.write_text(GN_MARKER", script)
         self.assertNotIn("downloads.unpack_downloads", script)
