@@ -1,6 +1,6 @@
 # Arcium-Windows: faster Windows builds — complete setup
 
-This guide is for the repository **Metoku/Arcium-Windows**. The automated source checks still run as normal. The expensive full Chromium build is a **manual workflow**, not a build launched by every commit.
+This guide is for **Metoku/Arcium-Windows**. **GitHub currently reports its owner `Metoku` as a personal User account and the repository as public.** This matters: GitHub-hosted larger runners cannot be attached directly to a personal repository, and GitHub warns against attaching a self-hosted runner to a public repository. You must choose a suitable safe route below *before* running the native compile. Automated source checks still run as normal; the expensive full Chromium build is a **manual workflow**.
 
 ## 1. What failed, and what the improvements can/cannot do
 
@@ -11,11 +11,11 @@ This guide is for the repository **Metoku/Arcium-Windows**. The automated source
 
 ## 2. Before you do anything: choose ONE of these two ways to get a runner
 
-**Option A — Paid GitHub-hosted larger runner:** Only available to organizations on **GitHub Team or Enterprise Cloud**. A *personal* GitHub account/repository cannot directly add one, even if your individual account has a paid plan. If `Metoku` is a personal account, the repository would need to belong to an eligible organization first. **Do not transfer the repository without deciding to do so**; transferring can change access and settings. See [GitHub larger-runner eligibility](https://docs.github.com/en/actions/how-tos/manage-runners/larger-runners/manage-larger-runners).
+**Option A — Paid GitHub-hosted larger runner:** Only available to organizations on **GitHub Team or Enterprise Cloud**. A *personal* GitHub account/repository cannot directly add one, even if your individual account has a paid plan. **Metoku is currently a personal account.** To use this option for Arcium-Windows, you would first need an eligible organization and to **transfer the repository to that organization**, with an explicit decision to accept the changed ownership, access and potential billing. Do not transfer it merely to follow this guide. See [GitHub larger-runner eligibility](https://docs.github.com/en/actions/how-tos/manage-runners/larger-runners/manage-larger-runners).
 
-**Option B — Self-hosted runner:** A separate dedicated Windows desktop/server or rented Windows VM connected to the repository. This works with repository-level registration on personal accounts, subject to permission/policy. For a practical speedup, use a **dedicated Windows x64 VM with at least 16 logical CPU threads, 64 GiB physical RAM and 150 GiB free SSD on the workspace drive** (more disk is preferable, ideally 300–600 GiB). Your existing 32 GiB machine does not meet this workflow's RAM preflight. See [GitHub's self-hosted runner setup](https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/add-runners).
+**Option B — Self-hosted runner:** A separate dedicated Windows desktop/server or rented Windows VM connected to the repository. Repository-level registration is supported on personal accounts, but **do not attach a self-hosted runner directly to this currently public repository**. Use a **separate private build repository containing an independently maintained copy of the source and workflow** (not a public fork) or change this repository's visibility only after considering the consequences. Always isolate the Windows VM and run trusted workflows only. A private copy requires using *its* settings and workflow; the public repository's variables do not transfer automatically. For a practical speedup, use a **dedicated Windows x64 VM with at least 16 logical CPU threads, 64 GiB physical RAM and 150 GiB free SSD on the workspace drive** (more disk is preferable, ideally 300–600 GiB). A machine with **32 GiB RAM** does not meet this workflow's RAM preflight. See [GitHub's self-hosted runner setup](https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/add-runners).
 
-> **Safety:** For a public repository, GitHub cautions against self-hosted runners because untrusted pull requests could execute code on that machine. Prefer a dedicated disposable Windows VM, not a workstation that contains personal files, credentials, or an ordinary Chrome/Helium profile. Do not give the runner privileged access to private data.
+> **Safety:** The current Arcium-Windows repository is **public**. GitHub cautions against public-repository self-hosted runners because untrusted pull requests could execute code on the machine. **Do not register a personal desktop or cloud VM directly to the public repository.** Use a separate private build copy with restricted access plus a dedicated disposable Windows VM; do not store personal files, credentials or existing Chrome/Helium profiles on the runner. See [GitHub's self-hosted runner security warning](https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/add-runners).
 
 **The workflow refuses to compile** if the selected runner has **fewer than 16 logical CPUs, fewer than 56 GiB RAM, or fewer than 145 GiB free on the drive containing `GITHUB_WORKSPACE`**. The slightly lower numerical checks account for OS/reporting differences; choose hardware meeting the recommended 16/64/150 minimum. The default `windows-2025` runner will fail this check quickly.
 
@@ -38,11 +38,11 @@ Reference: [Create/manage larger runners](https://docs.github.com/en/actions/how
 
 ## 3B. Option B — Register a dedicated Windows self-hosted runner
 
-**This is the more direct route if the repository is under your personal GitHub account** and you have access to a suitable Windows server/VM.
+**For the currently public personal repository, this route first requires a separate private build repository or another isolation approach.** The steps below are intended to be followed in **that private build repository**; do not register the runner against the public original.
 
 1. Set up a **dedicated Windows x64** machine/VM with at least **16 logical CPUs, 64 GiB RAM, and 150 GiB free SSD on the workspace drive**. Do not assume a 32-GiB Windows PC will pass.
 2. Install **Visual Studio 2022/2026 or compatible Build Tools with the "Desktop development with C++" workload**, including the x64 MSVC toolchain. Also install **Git for Windows**, Python where needed, and **7-Zip**. The workflow installs the official signed Windows SDK 10.0.28000.0 itself, but **does not install Visual Studio**. The pipeline checks the required C++ toolchain before source downloads.
-3. In GitHub, open **Metoku/Arcium-Windows → Settings → Actions → Runners → New self-hosted runner**.
+3. In GitHub, open the **private build repository → Settings → Actions → Runners → New self-hosted runner**. Do **not** open the public Arcium-Windows repository's runner-registration page.
 4. Select **Windows** and **x64**. GitHub will display PowerShell commands to download/extract the runner and a `config.cmd` command with a short-lived registration token.
 5. Open **PowerShell as Administrator** on the **dedicated Windows build machine**, not on the GitHub website. Execute the *exact commands GitHub displays*, in order. **Never publish or paste the registration token in a chat or issue.** If it expires, generate a new one from GitHub.
 6. When `config.cmd` asks for additional runner labels, enter a **unique custom label** such as `arcium-win-x64-16core`. If that prompt was skipped, add the label from the runner's GitHub settings. This is an identifier, not a command; choose a label that no other runner uses.
@@ -54,9 +54,9 @@ Reference: [Register a self-hosted runner](https://docs.github.com/en/actions/ho
 
 ## 4. Tell Arcium-Windows which runner to use (BOTH options)
 
-These are **repository variables**, not repository secrets:
+These are **repository variables**, not repository secrets. Perform the next steps in the repository **that actually owns the build workflow and has permission to run the selected runner**: Arcium-Windows after an organization transfer under Option A, or your separate private build repository under Option B.
 
-1. Open [Metoku/Arcium-Windows](https://github.com/Metoku/Arcium-Windows).
+1. Open the **chosen build repository** on GitHub. The current original project is [Metoku/Arcium-Windows](https://github.com/Metoku/Arcium-Windows), but for Option A its owner would change after a transfer; for Option B use your **private** build copy.
 2. Click **Settings** at the top of the repository.
 3. In the left sidebar under **Security**, open **Secrets and variables → Actions**.
 4. Select the **Variables** tab (not Secrets).
@@ -77,7 +77,7 @@ Reference: [Create a repository variable](https://docs.github.com/en/actions/how
 
 ## 5. Run the new workflow — only after section 4
 
-1. Open **Metoku/Arcium-Windows → Actions**.
+1. Open the **same repository where you set `ARCIUM_NATIVE_WINDOWS_RUNNER` → Actions**.
 2. In the left workflow list, click **Native Windows Chrome-only build (cached, high-capacity)**. It is **not** the previous one-time experiment `full-chrome-sdk-28000.yml`.
 3. Click **Run workflow** on the right, select **main**, then click the green **Run workflow** button.
 4. Open the new workflow run, then the **Compile chrome with SDK 28000 and reusable sccache** job.
