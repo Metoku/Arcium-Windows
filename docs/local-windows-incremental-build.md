@@ -177,6 +177,20 @@ Ninja/Siso uses previously built outputs in `work\windows-platform\build\src\out
 
 Do not run `git clean -xfd` in the staged Chromium tree, delete `out\Default`, or re-run patch preparation to resume.
 
+### Python 3 command missing during an otherwise successful local build
+
+If Siso reports `protoc-gen-ts_proto: Plugin failed with status code 9009` and mentions the Microsoft Store, GN already succeeded; **do not rerun GN or source preparation**. The generated Chromium batch file `tools/protoc_wrapper/protoc-gen-ts_proto.bat` invokes `python3`, whereas the build's other scripts invoke your installed `python.exe` directly.
+
+The local resume helper now creates a project-local, temporary `python3.cmd` that forwards to the same installed Python interpreter. It prepends that directory to the build session's PATH, verifies `python3 --version`, and removes the temporary shim on normal completion or failure. It does not alter system PATH or the compiled Chromium source. To use the fix:
+
+```powershell
+cd D:\src\Arcium-Windows
+git pull --ff-only origin main
+.\scripts\local_windows_resume.ps1 -Mode resume -Jobs 5
+```
+
+Existing `out\Default` objects should remain reusable. If another step fails, preserve the build tree and share its first full `FAILED:` block.
+
 ## 7. Verify locally if chrome.exe finishes
 
 Only after the compilation prints `ARCIUM_LOCAL_CHROME_COMPILED` and the `chrome.exe` exists:
@@ -192,6 +206,7 @@ This launches the new executable **headlessly with a disposable profile**, opens
 | Symptom | Action |
 | --- | --- |
 | `Python` is not found | Fix Python PATH and Windows App Execution Aliases; restart terminal |
+| `protoc-gen-ts_proto.bat` fails with `Python was not found` / exit 9009 | Chromium 156's TypeScript protobuf plugin calls `python3`, while Python.org may install only `python.exe`. Update the checked-out Arcium-Windows helper via `git pull --ff-only origin main` and rerun `local_windows_resume.ps1 -Mode resume -Jobs 5`. It adds a temporary `python3.cmd` on PATH using the current installed Python, without modifying Chromium or deleting completed outputs. The next console log should show the local shim as the first `where python3` result and print its Python version. |
 | `7-Zip` unavailable | Install 7-Zip normally and confirm `C:\Program Files\7-Zip\7z.exe` works |
 | SDK check says 28000 missing | Install the matching SDK from Microsoft's **Windows SDK downloads** page. Don't spoof SDK/version headers |
 | Source download fails | Inspect `work\gn-generation.log`; its download cache uses resume-capable curl when present. Don't manually mix mismatched tarballs |
