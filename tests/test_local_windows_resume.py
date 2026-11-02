@@ -44,7 +44,8 @@ class LocalIncrementalBuildTests(unittest.TestCase):
         self.assertIn("python3.cmd", source)
         self.assertIn("('set \"PATH=' + $shimDir + ';%PATH%\"')", source)
         self.assertIn("'where python3'", source)
-        self.assertIn("'python3 --version'", source)
+        self.assertIn("'call python3 --version'", source)
+        self.assertNotIn("        'python3 --version',", source)
         self.assertIn("('\\\"' + $python + '\\\" %*')".replace('\\\"', '\"'), source)
         self.assertIn("Remove-Item -LiteralPath $shimDir -Recurse -Force", source)
         self.assertLess(
