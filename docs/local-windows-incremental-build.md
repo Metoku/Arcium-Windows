@@ -177,6 +177,20 @@ Ninja/Siso uses previously built outputs in `work\windows-platform\build\src\out
 
 Do not run `git clean -xfd` in the staged Chromium tree, delete `out\Default`, or re-run patch preparation to resume.
 
+### V8 metagen fails because `gn desc` uses the Windows Store Python alias
+
+If the compile gets past the protobuf plugin but fails `//v8:metagen_instance_types_h` with `gn desc` and `Python was not found`, it is **still Python resolution**, not a V8 C++ compiler failure. The earlier temporary `python3.cmd` works for Windows command scripts but is **not recognized by GN's Windows interpreter search**, which explicitly checks `python3.exe` and `python3.bat`.
+
+Update and retry the incremental helper:
+
+```powershell
+cd D:\src\Arcium-Windows
+git pull --ff-only origin main
+.\scripts\local_windows_resume.ps1 -Mode resume -Jobs 5
+```
+
+The updated helper creates a disposable `python3.bat` wrapper pointing to the same installed Python executable. It now **checks `gn.exe desc` for the V8 target before launching Siso**. Look for `ARCIUM_LOCAL_GN_DESC_PASSED`; if it doesn't appear, share that preflight error and **do not** regenerate Chromium or delete build output. On success, the helper launches the same incremental `chrome` target and reuses prior build results.
+
 ### Missing compiled chrome.exe immediately after the Python 3 version preflight
 
 If the local resume script prints the temporary `python3.cmd` path and `Python 3.14.x`, but **never prints `siso ninja`** and instead reports a missing `chrome.exe`, the original preflight launched the temporary batch file without CMD's required `call` keyword. The build was not started; the completed output was not deleted.
