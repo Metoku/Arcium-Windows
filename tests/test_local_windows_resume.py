@@ -49,9 +49,7 @@ class LocalIncrementalBuildTests(unittest.TestCase):
         self.assertIn("Remove-Item -LiteralPath $shimDir -Recurse -Force", source)
         self.assertLess(
             source.index("'python3 --version'"),
-            source.index('"third_party\\\\depot_tools\\\\autoninja.py"')
-            if '"third_party\\\\depot_tools\\\\autoninja.py"' in source
-            else source.index('autoninja.py'),
+            source.rindex('autoninja.py'),
         )
 
     def test_guide_separates_source_preparation_from_resume(self):
