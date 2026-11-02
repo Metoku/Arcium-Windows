@@ -109,7 +109,7 @@ try {
         ('set "PATH=' + $shimDir + ';%PATH%"'),
         'where python3',
         'if errorlevel 1 exit /b %errorlevel%',
-        'python3 --version',
+        'call python3 --version',
         'if errorlevel 1 exit /b %errorlevel%',
         ('cd /d "' + $source + '"'),
         'if errorlevel 1 exit /b %errorlevel%',
