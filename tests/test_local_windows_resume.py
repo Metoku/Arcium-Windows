@@ -23,7 +23,7 @@ class LocalIncrementalBuildTests(unittest.TestCase):
         self.assertIn("autoninja.py", source)
         self.assertIn(" -C out\\Default chrome", source)
         self.assertNotIn("windows_port.py' stage", source)
-        self.assertNotIn("gn_smoke.py", source)
+        self.assertNotIn("& $python 'scripts\\gn_smoke.py'", source)
         self.assertNotIn("mini_installer", source)
         self.assertNotIn("Remove-Item -LiteralPath $source", source)
         self.assertNotIn("out\\Default\\setup.exe", source)
