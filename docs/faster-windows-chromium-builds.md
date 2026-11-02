@@ -36,6 +36,28 @@ If **New GitHub-hosted runner** is unavailable, do not substitute the small `win
 
 Reference: [Create/manage larger runners](https://docs.github.com/en/actions/how-tos/manage-runners/larger-runners/manage-larger-runners) · [Find a runner label](https://docs.github.com/en/actions/how-tos/manage-runners/larger-runners/use-larger-runners).
 
+## 3B-0. If taking Option B, create a **private build copy** first
+
+Since the original project is public, do not directly register a self-hosted runner to it.
+
+1. In GitHub, click the **+** menu in the top-right and select **New repository**.
+2. Choose your account as the owner, give the new repo a distinct name such as `Arcium-Windows-Build-Private`, select **Private**, and **do not** initialize it with a README, license, or .gitignore. Click **Create repository**. This new repo is a **separate copy**, not a fork.
+3. On a trusted computer with Git installed, open **Git Bash** and run the commands below, replacing `Arcium-Windows-Build-Private` if you chose another name. The new repository must exist before running the push:
+
+```bash
+git clone --bare https://github.com/Metoku/Arcium-Windows.git
+cd Arcium-Windows.git
+git push --mirror https://github.com/Metoku/Arcium-Windows-Build-Private.git
+```
+
+4. Complete GitHub authentication locally if prompted. In GitHub, verify the new repository has a **Private** badge, that `main` contains `.github/workflows/native-windows-chrome-cached.yml`, and that the code is up-to-date.
+5. If using Git LFS, consult [GitHub's duplication guide](https://docs.github.com/en/repositories/creating-and-managing-repositories/duplicating-a-repository) for the additional LFS transfer commands; normal Git mirroring alone does not move LFS objects.
+6. Continue with **section 3B** below, using the **private copy** for runner registration, for the repository variable in section 4, and for running the workflow in section 5. Future public-repo commits **do not automatically appear** in this private copy; sync deliberately when ready.
+
+The separate private copy avoids exposing a self-hosted runner to public-repository workflow triggers, but only run trusted code and do not weaken the runner or repository's access controls. This does **not** require making your public project private.
+
+Reference: [GitHub — Duplicating a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/duplicating-a-repository).
+
 ## 3B. Option B — Register a dedicated Windows self-hosted runner
 
 **For the currently public personal repository, this route first requires a separate private build repository or another isolation approach.** The steps below are intended to be followed in **that private build repository**; do not register the runner against the public original.
