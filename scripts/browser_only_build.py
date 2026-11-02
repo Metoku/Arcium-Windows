@@ -67,6 +67,18 @@ def require_compilation_cache() -> None:
         )
 
 
+def stop_build_tree(process: subprocess.Popen) -> None:
+    """Stop the Windows builder and its Siso/clang children on timeout."""
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+            check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+    if process.poll() is None:
+        process.kill()
+    process.wait(timeout=30)
+
+
 REQUIRED_NATIVE_CHROMIUM_SDK = "10.0.28000.0"
 
 
@@ -252,8 +264,7 @@ def run_experiment(
                         f"{remaining:.1f} GiB free{progress_label}", flush=True
                     )
                     if elapsed > max_minutes:
-                        proc.kill()
-                        proc.wait(timeout=30)
+                        stop_build_tree(proc)
                         report["status"] = "TIMEOUT"
                         report["elapsed_minutes"] = round(elapsed, 2)
                         report["remaining_disk_gib"] = round(remaining, 2)
