@@ -41,7 +41,11 @@ class LocalIncrementalBuildTests(unittest.TestCase):
         source = SCRIPT.read_text(encoding="utf-8")
         # Chromium 156 invokes python3 from tools/protoc_wrapper/protoc-gen-ts_proto.bat.
         # Use the same python.exe as the build adapter instead of WindowsApps.
-        self.assertIn("python3.cmd", source)
+        self.assertIn("python3.bat", source)
+        self.assertIn("GN's Windows interpreter resolution checks python3.exe and python3.bat", source)
+        self.assertIn("ARCIUM_LOCAL_GN_DESC_PASSED", source)
+        self.assertIn("v8:v8_base_without_compiler", source)
+        self.assertIn("desc -q out", source)
         self.assertIn("('set \"PATH=' + $shimDir + ';%PATH%\"')", source)
         self.assertIn("'where python3'", source)
         self.assertIn("'call python3 --version'", source)
