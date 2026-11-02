@@ -12,6 +12,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -33,6 +34,49 @@ ORIGINAL_RELEASE_TARGETS = (
     "    ninja_commandline.extend(['chrome', 'chromedriver', 'setup', 'mini_installer'])"
 )
 BROWSER_ONLY_TARGETS = "    ninja_commandline.append('chrome')"
+
+
+# The pinned upstream builder automatically inserts `cc_wrapper = "sccache"`
+# when the sccache executable is on PATH. Require that wrapper when a runner
+# opts into cross-run caching to avoid paying for an uncached cold compile.
+NINJA_PROGRESS = re.compile(rb"\[(\d+)/(\d+)\]")
+
+
+def latest_build_progress(log_path: Path) -> tuple[int, int] | None:
+    """Read only the log tail; Siso can generate many MB of status output."""
+    if not log_path.is_file():
+        return None
+    with log_path.open("rb") as stream:
+        try:
+            stream.seek(-131072, os.SEEK_END)
+        except OSError:
+            stream.seek(0)
+        matches = NINJA_PROGRESS.findall(stream.read())
+    if not matches:
+        return None
+    completed, total = matches[-1]
+    return int(completed), int(total)
+
+
+def require_compilation_cache() -> None:
+    """Fail early if this build expects a persistent compiler cache."""
+    if not shutil.which("sccache"):
+        raise EnvironmentError(
+            "Missing sccache executable on PATH: install sccache before "
+            "running a cache-required native Windows browser build."
+        )
+
+
+def stop_build_tree(process: subprocess.Popen) -> None:
+    """Stop the Windows builder and its Siso/clang children on timeout."""
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+            check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+    if process.poll() is None:
+        process.kill()
+    process.wait(timeout=30)
 
 
 REQUIRED_NATIVE_CHROMIUM_SDK = "10.0.28000.0"
@@ -102,7 +146,7 @@ def make_browser_only_builder(upstream: str) -> str:
 
 def run_experiment(
     platform: Path, report_path: Path, *,
-    execute: bool, jobs: int, max_minutes: int
+    execute: bool, jobs: int, max_minutes: int, require_cache: bool = False
 ) -> int:
     report_path.parent.mkdir(parents=True, exist_ok=True)
     log_path = report_path.with_suffix(".log")
@@ -126,8 +170,8 @@ def run_experiment(
         report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
 
     try:
-        if not 1 <= jobs <= 4:
-            raise ValueError("Parallel jobs must be 1–4 on initial Windows machines")
+        if not 1 <= jobs <= 32:
+            raise ValueError("Parallel jobs must be between 1 and 32")
         if not 5 <= max_minutes <= 310:
             raise ValueError("max_minutes must be between 5 and 310")
         audit = audit_staged(platform)
@@ -172,6 +216,10 @@ def run_experiment(
         # pass on that older SDK; native Chromium 156 compilation cannot.
         selected_sdk = select_windows_sdk()
         require_native_chromium_sdk(selected_sdk)
+        if require_cache:
+            require_compilation_cache()
+        report["compiler_cache_required"] = require_cache
+        report["compiler_cache_available"] = bool(shutil.which("sccache"))
         temp_script.write_text(script, encoding="utf-8")
         environment = os.environ.copy()
         environment["PYTHONPATH"] = str(ROOT) + os.pathsep + environment.get(
@@ -202,15 +250,28 @@ def run_experiment(
                 except subprocess.TimeoutExpired:
                     elapsed = (time.monotonic() - started) / 60
                     remaining = shutil.disk_usage(platform).free / (1024 ** 3)
+                    progress = latest_build_progress(log_path)
+                    if progress:
+                        report["last_completed_build_steps"] = progress[0]
+                        report["last_reported_build_steps"] = progress[1]
+                        progress_label = (
+                            f"; Ninja/Siso {progress[0]:,}/{progress[1]:,} steps"
+                        )
+                    else:
+                        progress_label = "; preparing Chromium/GN"
                     print(
                         f"Native Chromium experiment: {elapsed:.1f} min elapsed; "
-                        f"{remaining:.1f} GiB free", flush=True
+                        f"{remaining:.1f} GiB free{progress_label}", flush=True
                     )
                     if elapsed > max_minutes:
-                        proc.kill()
-                        proc.wait(timeout=30)
+                        stop_build_tree(proc)
                         report["status"] = "TIMEOUT"
                         report["elapsed_minutes"] = round(elapsed, 2)
+                        report["remaining_disk_gib"] = round(remaining, 2)
+                        report["timeout_reason"] = (
+                            "Reached configured native compilation time limit; "
+                            "no compiler error necessarily occurred."
+                        )
                         save()
                         return 124
         report["exit_code"] = code
@@ -270,10 +331,15 @@ def main() -> int:
     group.add_argument("--execute", action="store_true")
     parser.add_argument("--jobs", type=int, default=2)
     parser.add_argument("--max-minutes", type=int, default=250)
+    parser.add_argument(
+        "--require-cache", action="store_true",
+        help="Require sccache on PATH before downloading/building Chromium"
+    )
     args = parser.parse_args()
     return run_experiment(
         args.platform_dir.resolve(), args.report.resolve(),
-        execute=args.execute, jobs=args.jobs, max_minutes=args.max_minutes
+        execute=args.execute, jobs=args.jobs, max_minutes=args.max_minutes,
+        require_cache=args.require_cache,
     )
 
 
