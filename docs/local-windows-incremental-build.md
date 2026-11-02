@@ -111,6 +111,43 @@ Once you have a successful GN preparation, **never rerun `gn_smoke.py --execute`
 
 If it times out **before completing** this one-time preparation, do not assume it left a usable source tree. Share `work\gn-generation.log` and `work\gn-generation.json` for diagnosis; incomplete patch application requires careful recovery.
 
+## Recovery if GN fails because Windows launches Microsoft Store Python
+
+If source preparation reached GN but displays:
+
+- `Python was not found; run without arguments to install from the Microsoft Store`
+- `WindowsApps/python3.exe`
+- `ERROR at //build/toolchain/concurrent_links.gni`
+
+**Do not delete `work/windows-platform/build/src`, re-clone, or rerun `gn_smoke.py --execute`**. Your source and patches were already prepared; the initial adapter won't allow a second full preparation over this tree.
+
+1. In Windows **Settings**, search for **Manage app execution aliases**. Disable the **App Installer** aliases for both `python.exe` and `python3.exe` so Windows doesn't intercept Chromium's Python calls. Close and reopen PowerShell.
+2. From the cloned project directory, verify that the Python command resolves to your installed Python and is not in `WindowsApps`:
+
+```powershell
+cd D:\src\Arcium-Windows
+python -c "import sys; print(sys.executable)"
+where.exe python
+where.exe python3
+```
+
+   A missing `python3` can be handled by the recovery helper below, which passes the real `sys.executable` to GN using `--script-executable`. **Do not copy or rename the WindowsApps aliases.**
+3. First validate the previously failed GN state, preserving the current tree:
+
+```powershell
+python scripts\recover_gn_python_alias.py
+```
+
+4. If it prints `GN recovery prerequisites passed`, run **only** the failed GN generation step:
+
+```powershell
+python scripts\recover_gn_python_alias.py --execute
+```
+
+The helper requires the original failed `work/gn-generation.json` and `work/gn-generation.log`, validates the pinned builder and source state, selects verified Windows SDK 28000, invokes GN in an actual Visual Studio C++ environment with the working Python executable, and marks success **only** if `gn.exe gen` returns successfully and `out/Default/build.ninja` is created. It does not re-download source, reapply patches, or run a compilation.
+
+If recovery succeeds, continue at **Step 6** below. If another GN error appears, inspect `work/gn-recovery.log` and fix that specific issue before retrying. This special recovery method is **only for this confirmed Python Store-alias failure**, not arbitrary incomplete patching.
+
 ## 6. Start the *incremental* compilation (and resume later)
 
 The repository provides this local resume helper:
