@@ -97,7 +97,9 @@ try {
     # python.org Windows installs may only provide "python.exe". Route both
     # commands to the same verified interpreter without modifying Chromium.
     $shimDir = Join-Path $repo ('work\local-python-shim-' + [guid]::NewGuid().ToString('N'))
-    $shimCmd = Join-Path $shimDir 'python3.cmd'
+    # GN's Windows interpreter resolution checks python3.exe and python3.bat,
+    # but NOT python3.cmd. Use .bat for GN desc and protoc plugins alike.
+    $shimCmd = Join-Path $shimDir 'python3.bat'
     $commands = @(
         '@echo off',
         ('call "' + $vcvarsall + '" amd64 ' + $expectedSdk + ' >nul'),
@@ -113,6 +115,13 @@ try {
         'if errorlevel 1 exit /b %errorlevel%',
         ('cd /d "' + $source + '"'),
         'if errorlevel 1 exit /b %errorlevel%',
+        'rem Check the same GN desc dependency V8 metagen invokes, before Siso compilation.',
+        '"buildtools\\win\\gn.exe" desc -q out\\Default "//v8:v8_base_without_compiler(//build/toolchain/win:win_clang_x64)" --format=json >nul',
+        'if errorlevel 1 (',
+        '  echo GN desc Python interpreter preflight failed. Check Windows app execution aliases and Python PATH.',
+        '  exit /b 1',
+        ')',
+        'echo ARCIUM_LOCAL_GN_DESC_PASSED',
         ('"' + $python + '" "third_party\depot_tools\autoninja.py" -j ' + $Jobs + ' -C out\Default chrome'),
         'exit /b %errorlevel%'
     )
