@@ -10,7 +10,7 @@ concurrency:
 jobs:
   chrome-only:
     name: Compile chrome with SDK 28000 and reusable sccache
-    runs-on: \${{ vars.ARCIUM_NATIVE_WINDOWS_RUNNER || 'windows-2025' }}
+    runs-on: ${{ vars.ARCIUM_NATIVE_WINDOWS_RUNNER || 'windows-2025' }}
     timeout-minutes: 340
     env:
       SCCACHE_GHA_ENABLED: "on"
@@ -41,6 +41,18 @@ jobs:
           $jobs = [Math]::Min(32, [Math]::Min($logical, [int][Math]::Floor($ramGiB / 3.5)))
           "ARCIUM_NATIVE_JOBS=$jobs" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           Write-Host "Safe parallel compile jobs: $jobs"
+      - name: Confirm Visual Studio desktop C++ build tools exist
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ([Environment]::GetFolderPath('ProgramFilesX86')) 'Microsoft Visual Studio/Installer/vswhere.exe'
+          if (!(Test-Path -LiteralPath $vswhere)) {
+            throw "Visual Studio Build Tools are missing. Install a supported Visual Studio with the Desktop development with C++ workload before running this workflow."
+          }
+          $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if ($LASTEXITCODE -ne 0 -or !$vs) {
+            throw "Missing MSVC x64 toolchain. Install the Visual Studio Desktop development with C++ workload on this Windows runner."
+          }
+          Write-Host "Detected Visual Studio C++ toolchain: $vs"
       - name: Test browser-only, SDK and isolated smoke guardrails
         shell: pwsh
         run: |
@@ -87,7 +99,7 @@ jobs:
       - name: Compile native chrome with sccache and hardware-aware parallelism
         shell: pwsh
         env:
-          GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           python scripts/browser_only_build.py --execute --require-cache --jobs $env:ARCIUM_NATIVE_JOBS --max-minutes 310
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
