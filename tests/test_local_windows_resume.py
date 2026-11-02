@@ -49,7 +49,7 @@ class LocalIncrementalBuildTests(unittest.TestCase):
         self.assertIn("('\\\"' + $python + '\\\" %*')".replace('\\\"', '\"'), source)
         self.assertIn("Remove-Item -LiteralPath $shimDir -Recurse -Force", source)
         self.assertLess(
-            source.index("'python3 --version'"),
+            source.index("'call python3 --version'"),
             source.rindex('autoninja.py'),
         )
 
