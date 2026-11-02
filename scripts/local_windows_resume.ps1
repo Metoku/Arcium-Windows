@@ -40,6 +40,9 @@ Require-File $autoninja 'pinned Chromium autoninja.py'
 Require-File $siso 'pinned Siso scheduler'
 
 $python = (Get-Command python -ErrorAction Stop).Source
+if ($python -match '(?i)WindowsApps') {
+    throw 'Python resolves to the Windows Store alias; install/use a real python.exe before compiling.'
+}
 Push-Location $repo
 try {
     # Audit pinned platform/core commits and patch inventory without modifying
@@ -90,6 +93,11 @@ try {
     if (Test-Path -LiteralPath $tempCmd) {
         throw "Temporary resume command already exists: $tempCmd"
     }
+    # Chromium 156's protoc-gen-ts_proto.bat invokes "python3", while official
+    # python.org Windows installs may only provide "python.exe". Route both
+    # commands to the same verified interpreter without modifying Chromium.
+    $shimDir = Join-Path $repo ('work\local-python-shim-' + [guid]::NewGuid().ToString('N'))
+    $shimCmd = Join-Path $shimDir 'python3.cmd'
     $commands = @(
         '@echo off',
         ('call "' + $vcvarsall + '" amd64 ' + $expectedSdk + ' >nul'),
@@ -98,6 +106,11 @@ try {
         ('set "ARCIUM_WINDOWS_SDK=' + $expectedSdk + '"'),
         ('set "SISO_PATH=' + $siso + '"'),
         'set "NINJA_SUMMARIZE_BUILD=1"',
+        ('set "PATH=' + $shimDir + ';%PATH%"'),
+        'where python3',
+        'if errorlevel 1 exit /b %errorlevel%',
+        'python3 --version',
+        'if errorlevel 1 exit /b %errorlevel%',
         ('cd /d "' + $source + '"'),
         'if errorlevel 1 exit /b %errorlevel%',
         ('"' + $python + '" "third_party\depot_tools\autoninja.py" -j ' + $Jobs + ' -C out\Default chrome'),
@@ -105,18 +118,22 @@ try {
     )
     # cmd.exe is code-page-sensitive. Keep this temporary file ASCII and
     # guide users to short ASCII installation paths such as C:\src\Arcium-Windows.
-    foreach ($entry in @($repo, $python, $source, $vcvarsall, $siso)) {
+    foreach ($entry in @($repo, $python, $source, $vcvarsall, $siso, $shimDir)) {
         if ($entry -match '[^\x20-\x7e]') {
             throw 'Place build tools under ASCII-only paths, e.g. C:\src\Arcium-Windows.'
         }
     }
-    [System.IO.File]::WriteAllLines($tempCmd, [string[]]$commands, [System.Text.Encoding]::ASCII)
     try {
+        New-Item -ItemType Directory -Path $shimDir -ErrorAction Stop | Out-Null
+        $shimLines = @('@echo off', ('"' + $python + '" %*'), 'exit /b %errorlevel%')
+        [System.IO.File]::WriteAllLines($shimCmd, [string[]]$shimLines, [System.Text.Encoding]::ASCII)
+        [System.IO.File]::WriteAllLines($tempCmd, [string[]]$commands, [System.Text.Encoding]::ASCII)
         & $env:ComSpec '/d' '/c' $tempCmd
         $buildExit = $LASTEXITCODE
     }
     finally {
         Remove-Item -LiteralPath $tempCmd -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $shimDir -Recurse -Force -ErrorAction SilentlyContinue
     }
     if ($buildExit -ne 0) {
         throw "Native Chrome build returned $buildExit. Existing output was NOT deleted. Fix the compiler error or rerun to continue."
