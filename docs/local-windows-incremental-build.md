@@ -177,6 +177,20 @@ Ninja/Siso uses previously built outputs in `work\windows-platform\build\src\out
 
 Do not run `git clean -xfd` in the staged Chromium tree, delete `out\Default`, or re-run patch preparation to resume.
 
+### Missing compiled chrome.exe immediately after the Python 3 version preflight
+
+If the local resume script prints the temporary `python3.cmd` path and `Python 3.14.x`, but **never prints `siso ninja`** and instead reports a missing `chrome.exe`, the original preflight launched the temporary batch file without CMD's required `call` keyword. The build was not started; the completed output was not deleted.
+
+Update the helper and retry:
+
+```powershell
+cd D:\src\Arcium-Windows
+git pull --ff-only origin main
+.\scripts\local_windows_resume.ps1 -Mode resume -Jobs 5
+```
+
+The corrected preflight uses `call python3 --version`, so control returns to the parent batch and proceeds to Siso. Do not rerun source preparation or GN.
+
 ### Python 3 command missing during an otherwise successful local build
 
 If Siso reports `protoc-gen-ts_proto: Plugin failed with status code 9009` and mentions the Microsoft Store, GN already succeeded; **do not rerun GN or source preparation**. The generated Chromium batch file `tools/protoc_wrapper/protoc-gen-ts_proto.bat` invokes `python3`, whereas the build's other scripts invoke your installed `python.exe` directly.
