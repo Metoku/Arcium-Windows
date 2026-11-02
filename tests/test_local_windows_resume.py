@@ -37,6 +37,23 @@ class LocalIncrementalBuildTests(unittest.TestCase):
         self.assertIn("VC\\Auxiliary\\Build\\vcvarsall.bat", source)
         self.assertIn("ValidateSet('check', 'resume')", source)
 
+    def test_python3_protobuf_plugin_has_local_shim_and_no_global_mutation(self):
+        source = SCRIPT.read_text(encoding="utf-8")
+        # Chromium 156 invokes python3 from tools/protoc_wrapper/protoc-gen-ts_proto.bat.
+        # Use the same python.exe as the build adapter instead of WindowsApps.
+        self.assertIn("python3.cmd", source)
+        self.assertIn("('set \"PATH=' + $shimDir + ';%PATH%\"')", source)
+        self.assertIn("'where python3'", source)
+        self.assertIn("'python3 --version'", source)
+        self.assertIn("('\\\"' + $python + '\\\" %*')".replace('\\\"', '\"'), source)
+        self.assertIn("Remove-Item -LiteralPath $shimDir -Recurse -Force", source)
+        self.assertLess(
+            source.index("'python3 --version'"),
+            source.index('"third_party\\\\depot_tools\\\\autoninja.py"')
+            if '"third_party\\\\depot_tools\\\\autoninja.py"' in source
+            else source.index('autoninja.py'),
+        )
+
     def test_guide_separates_source_preparation_from_resume(self):
         guide = GUIDE.read_text(encoding="utf-8")
         self.assertIn("windows_port.py stage", guide)
