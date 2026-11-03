@@ -48,7 +48,8 @@ def git_apply(source: Path, patch: Path, *, reverse: bool, check: bool) -> subpr
     # Do not inherit an outer repository's working-directory prefix (work/src
     # is normally inside Arcium-Windows), which can silently skip every hunk.
     # Absolute targets are permitted only after validating the fixed catalog.
-    command = ["git", "apply", "--unsafe-paths", "--whitespace=nowarn",
+    command = ["git", "-c", "core.autocrlf=false", "-c", "core.eol=lf",
+               "apply", "--unsafe-paths", "--whitespace=nowarn",
                f"--directory={source.as_posix()}"]
     if reverse:
         command.append("--reverse")
@@ -190,7 +191,8 @@ def integrate(source: Path, *, apply: bool = False, revert: bool = False,
                                "changes made:\n" + verified.stderr)
         changes = {
             target: preserve_line_endings(originals[target],
-                                          (staged_source / target).read_bytes())
+                                          (staged_source / target).read_bytes()
+                                          .replace(b"\r\n", b"\n"))
             for target in targets
         }
         commit_source_changes(source, originals,

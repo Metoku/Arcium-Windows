@@ -116,7 +116,7 @@ class WorkflowPatchIntegrationTests(unittest.TestCase):
         original_write = workflow.atomic_write
 
         def failing_write(path, data):
-            if path == self.second:
+            if path.resolve() == self.second.resolve():
                 raise OSError("injected write failure")
             return original_write(path, data)
 
@@ -124,6 +124,20 @@ class WorkflowPatchIntegrationTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "previously written files were restored"):
                 integrate(self.source, apply=True, patch=self.patch)
         self.assertEqual([self.first.read_bytes(), self.second.read_bytes()], originals)
+        self.assert_user_data_unchanged()
+
+    def test_git_autocrlf_does_not_convert_normalized_staging_output(self):
+        self.first.write_bytes(b"first original\n")
+        self.second.write_bytes(b"second original\r\n")
+        environment = {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "core.autocrlf",
+                       "GIT_CONFIG_VALUE_0": "true"}
+        with mock.patch.dict(os.environ, environment):
+            integrate(self.source, apply=True, patch=self.patch)
+            self.assertEqual(self.first.read_bytes(), b"first changed\n")
+            self.assertEqual(self.second.read_bytes(), b"second changed\r\n")
+            integrate(self.source, revert=True, patch=self.patch)
+        self.assertEqual(self.first.read_bytes(), b"first original\n")
+        self.assertEqual(self.second.read_bytes(), b"second original\r\n")
         self.assert_user_data_unchanged()
 
     def test_edit_during_staging_prevents_source_commit(self):
