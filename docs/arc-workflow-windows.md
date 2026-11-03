@@ -29,6 +29,12 @@ checking out the branch alone does not change an already-built executable.
 
 The helper accepts `--source-dir` for a different prepared Chromium tree.
 Repeated application is a no-op. A source mismatch fails before any write.
+LF/CRLF differences between a Windows Git checkout and Chromium's source are
+handled in temporary copies. Unchanged source lines retain their exact bytes;
+inserted lines use each target file's dominant newline style. The helper never
+normalizes the real source tree. Code/context differences still fail. Source
+edits made during staging stop the write, and a write failure triggers rollback
+of files already updated by the helper.
 To remove the source integration, run the following, then resume the build:
 
 ```powershell

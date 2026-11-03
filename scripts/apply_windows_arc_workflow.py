@@ -8,9 +8,11 @@ cleans build output, launches a browser, or edits a browser profile.
 from __future__ import annotations
 
 import argparse
+import difflib
 import os
 from pathlib import Path, PurePosixPath
 import re
+import stat
 import subprocess
 import tempfile
 
@@ -58,14 +60,89 @@ def git_apply(source: Path, patch: Path, *, reverse: bool, check: bool) -> subpr
         env.pop(name, None)
     with tempfile.TemporaryDirectory(prefix="arcium-patch-") as temporary:
         return subprocess.run(command, cwd=temporary, env=env, text=True,
+                              encoding="utf-8", errors="replace",
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+
+def preserve_line_endings(original: bytes, changed_lf: bytes) -> bytes:
+    """Keep unchanged lines byte-identical; insert with this file's EOL style."""
+    original_lf = original.replace(b"\r\n", b"\n")
+    if original_lf == changed_lf:
+        return original
+    crlf_count = original.count(b"\r\n")
+    bare_lf_count = original.count(b"\n") - crlf_count
+    if crlf_count == 0:
+        return changed_lf
+    if bare_lf_count == 0:
+        return changed_lf.replace(b"\n", b"\r\n")
+    newline = b"\r\n" if crlf_count > bare_lf_count else b"\n"
+    normalized_lines = original_lf.splitlines(keepends=True)
+    original_lines = original.splitlines(keepends=True)
+    changed_lines = changed_lf.splitlines(keepends=True)
+    result: list[bytes] = []
+    matcher = difflib.SequenceMatcher(
+        None, normalized_lines, changed_lines, autojunk=False)
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            result.extend(original_lines[i1:i2])
+        elif tag in ("insert", "replace"):
+            result.extend(line[:-1] + newline if line.endswith(b"\n") else line
+                          for line in changed_lines[j1:j2])
+    return b"".join(result)
+
+
+def atomic_write(path: Path, data: bytes) -> None:
+    """Replace a source file without leaving a partially written destination."""
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+                dir=path.parent, prefix=".arcium-workflow-", delete=False) as stream:
+            temporary_path = Path(stream.name)
+            stream.write(data)
+        os.chmod(temporary_path, stat.S_IMODE(path.stat().st_mode))
+        os.replace(temporary_path, path)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+
+
+def commit_source_changes(source: Path, originals: dict[str, bytes],
+                          changes: dict[str, bytes]) -> None:
+    # Check every source before writing any. A concurrent edit during staging
+    # must not cause the remaining original snapshot to overwrite that edit.
+    for target, content in originals.items():
+        if (source / target).read_bytes() != content:
+            raise RuntimeError(f"Source changed during patch validation: {target}. "
+                               "No changes made; retry after finishing source edits.")
+    written: list[str] = []
+    try:
+        for target, content in changes.items():
+            if (source / target).read_bytes() != originals[target]:
+                raise RuntimeError(f"Source changed during patch application: {target}")
+            atomic_write(source / target, content)
+            written.append(target)
+    except (OSError, RuntimeError) as error:
+        rollback_errors: list[str] = []
+        for target in reversed(written):
+            try:
+                if (source / target).read_bytes() != changes[target]:
+                    raise RuntimeError("a concurrent edit must be preserved")
+                atomic_write(source / target, originals[target])
+            except (OSError, RuntimeError) as rollback_error:
+                rollback_errors.append(f"{target}: {rollback_error}")
+        if rollback_errors:
+            raise RuntimeError("Could not finish restoring source files after "
+                               f"{error}:\n" + "\n".join(rollback_errors)) from error
+        raise RuntimeError("Source update failed; previously written files were "
+                           f"restored. {error}") from error
 
 
 def integrate(source: Path, *, apply: bool = False, revert: bool = False,
               patch: Path = PATCH) -> str:
     source = source.resolve(strict=True)
     patch = patch.resolve(strict=True)
-    targets = patch_targets(patch.read_text(encoding="utf-8"))
+    patch_bytes = patch.read_bytes().replace(b"\r\n", b"\n")
+    targets = patch_targets(patch_bytes.decode("utf-8"))
     if not (source / "BUILD.gn").is_file():
         raise ValueError("Expected a prepared Chromium source root containing BUILD.gn")
     # Reject symlink escapes before allowing git to write absolute paths.
@@ -73,29 +150,52 @@ def integrate(source: Path, *, apply: bool = False, revert: bool = False,
         resolved = (source / target).resolve(strict=True)
         if not resolved.is_relative_to(source) or not resolved.is_file():
             raise ValueError(f"Patch target escapes the source root: {target}")
-    forward = git_apply(source, patch, reverse=False, check=True)
-    backward = git_apply(source, patch, reverse=True, check=True)
-    if forward.returncode == 0 and backward.returncode != 0:
-        status = "READY"
-    elif backward.returncode == 0 and forward.returncode != 0:
-        status = "APPLIED"
-    else:
-        raise RuntimeError(
-            "The workflow patch does not match this source tree. No changes made.\n"
-            + forward.stderr + backward.stderr)
-    if not apply and not revert:
-        return status
     if apply and revert:
         raise ValueError("Choose apply or revert")
-    desired = "READY" if revert else "APPLIED"
-    if status == desired:
-        return status
-    result = git_apply(source, patch, reverse=revert, check=False)
-    if result.returncode:
-        raise RuntimeError("Patch application failed:\n" + result.stderr)
-    verified = git_apply(source, patch, reverse=not revert, check=True)
-    if verified.returncode:
-        raise RuntimeError("Patch verification failed:\n" + verified.stderr)
+    originals = {target: (source / target).read_bytes() for target in targets}
+    # Git auto-CRLF can convert the catalog while Chromium has mixed LF/CRLF
+    # files. Compare and patch LF snapshots, never normalize the real tree.
+    with tempfile.TemporaryDirectory(prefix="arcium-workflow-stage-") as temporary:
+        staging = Path(temporary)
+        staged_source = staging / "src"
+        for target, content in originals.items():
+            staged_file = staged_source / target
+            staged_file.parent.mkdir(parents=True, exist_ok=True)
+            staged_file.write_bytes(content.replace(b"\r\n", b"\n"))
+        staged_patch = staging / "workflow.patch"
+        staged_patch.write_bytes(patch_bytes)
+        forward = git_apply(staged_source, staged_patch, reverse=False, check=True)
+        backward = git_apply(staged_source, staged_patch, reverse=True, check=True)
+        if forward.returncode == 0 and backward.returncode != 0:
+            status = "READY"
+        elif backward.returncode == 0 and forward.returncode != 0:
+            status = "APPLIED"
+        else:
+            raise RuntimeError(
+                "The workflow patch does not match this source tree. No changes made.\n"
+                "Checked LF-normalized temporary copies of: " + str(source) + "\n"
+                + forward.stderr + backward.stderr)
+        if not apply and not revert:
+            return status
+        desired = "READY" if revert else "APPLIED"
+        if status == desired:
+            return status
+        result = git_apply(staged_source, staged_patch, reverse=revert, check=False)
+        if result.returncode:
+            raise RuntimeError("Patch application failed in staging; no source "
+                               "changes made:\n" + result.stderr)
+        verified = git_apply(staged_source, staged_patch, reverse=not revert, check=True)
+        if verified.returncode:
+            raise RuntimeError("Patch verification failed in staging; no source "
+                               "changes made:\n" + verified.stderr)
+        changes = {
+            target: preserve_line_endings(originals[target],
+                                          (staged_source / target).read_bytes())
+            for target in targets
+        }
+        commit_source_changes(source, originals,
+                              {p: data for p, data in changes.items()
+                               if data != originals[p]})
     return desired
 
 

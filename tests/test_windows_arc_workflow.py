@@ -6,7 +6,9 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
+from scripts import apply_windows_arc_workflow as workflow
 from scripts.apply_windows_arc_workflow import PATCH, integrate, patch_targets
 
 
@@ -71,6 +73,75 @@ class WorkflowPatchIntegrationTests(unittest.TestCase):
         self.assertEqual(self.second.read_text(), "a local user edit\n")
         self.assert_user_data_unchanged()
 
+    def test_all_patch_and_source_lf_crlf_combinations(self):
+        patch_lf = self.patch.read_bytes().replace(b"\r\n", b"\n")
+        for source_eol in (b"\n", b"\r\n"):
+            for patch_eol in (b"\n", b"\r\n"):
+                with self.subTest(source_eol=source_eol, patch_eol=patch_eol):
+                    self.first.write_bytes(b"first original" + source_eol)
+                    self.second.write_bytes(b"second original" + source_eol)
+                    self.patch.write_bytes(patch_lf.replace(b"\n", patch_eol))
+                    self.assertEqual(integrate(self.source, patch=self.patch), "READY")
+                    self.assertEqual(integrate(self.source, apply=True, patch=self.patch), "APPLIED")
+                    self.assertEqual(self.first.read_bytes(), b"first changed" + source_eol)
+                    self.assertEqual(self.second.read_bytes(), b"second changed" + source_eol)
+                    before = self.first.stat().st_mtime_ns
+                    self.assertEqual(integrate(self.source, apply=True, patch=self.patch), "APPLIED")
+                    self.assertEqual(self.first.stat().st_mtime_ns, before)
+                    self.assertEqual(integrate(self.source, revert=True, patch=self.patch), "READY")
+                    self.assertEqual(self.first.read_bytes(), b"first original" + source_eol)
+                    self.assertEqual(self.second.read_bytes(), b"second original" + source_eol)
+                    self.assert_user_data_unchanged()
+
+    def test_mixed_target_endings_are_read_only_during_check_and_preserved_on_apply(self):
+        self.first.write_bytes(b"first original\r\n")
+        self.second.write_bytes(b"second original\n")
+        self.patch.write_bytes(self.patch.read_bytes().replace(b"\r\n", b"\n")
+                               .replace(b"\n", b"\r\n"))
+        before = [self.first.stat().st_mtime_ns, self.second.stat().st_mtime_ns]
+        self.assertEqual(integrate(self.source, patch=self.patch), "READY")
+        self.assertEqual(self.first.read_bytes(), b"first original\r\n")
+        self.assertEqual(self.second.read_bytes(), b"second original\n")
+        self.assertEqual([self.first.stat().st_mtime_ns, self.second.stat().st_mtime_ns], before)
+        integrate(self.source, apply=True, patch=self.patch)
+        self.assertEqual(self.first.read_bytes(), b"first changed\r\n")
+        self.assertEqual(self.second.read_bytes(), b"second changed\n")
+        integrate(self.source, revert=True, patch=self.patch)
+        self.assertEqual(self.first.read_bytes(), b"first original\r\n")
+        self.assertEqual(self.second.read_bytes(), b"second original\n")
+        self.assert_user_data_unchanged()
+
+    def test_io_failure_restores_already_written_source(self):
+        originals = [self.first.read_bytes(), self.second.read_bytes()]
+        original_write = workflow.atomic_write
+
+        def failing_write(path, data):
+            if path == self.second:
+                raise OSError("injected write failure")
+            return original_write(path, data)
+
+        with mock.patch.object(workflow, "atomic_write", side_effect=failing_write):
+            with self.assertRaisesRegex(RuntimeError, "previously written files were restored"):
+                integrate(self.source, apply=True, patch=self.patch)
+        self.assertEqual([self.first.read_bytes(), self.second.read_bytes()], originals)
+        self.assert_user_data_unchanged()
+
+    def test_edit_during_staging_prevents_source_commit(self):
+        original_git_apply = workflow.git_apply
+
+        def concurrent_edit(*args, **kwargs):
+            result = original_git_apply(*args, **kwargs)
+            if not kwargs["check"]:
+                self.second.write_bytes(b"a concurrent source edit\n")
+            return result
+
+        with mock.patch.object(workflow, "git_apply", side_effect=concurrent_edit):
+            with self.assertRaisesRegex(RuntimeError, "Source changed during patch validation"):
+                integrate(self.source, apply=True, patch=self.patch)
+        self.assertEqual(self.first.read_text(), "first original\n")
+        self.assertEqual(self.second.read_bytes(), b"a concurrent source edit\n")
+        self.assert_user_data_unchanged()
+
     def test_inherited_git_work_tree_does_not_redirect_edits(self):
         original = os.environ.get("GIT_WORK_TREE")
         os.environ["GIT_WORK_TREE"] = str(self.parent)
@@ -95,6 +166,16 @@ class WorkflowPatchIntegrationTests(unittest.TestCase):
 
 
 class WorkflowCatalogTests(unittest.TestCase):
+    def test_mixed_line_file_retains_unchanged_bytes(self):
+        original = b"header LF\nline CRLF\r\nold value\r\nfooter LF\n"
+        changed = b"header LF\nline CRLF\nnew value\nfooter LF\n"
+        result = workflow.preserve_line_endings(original, changed)
+        self.assertTrue(result.startswith(b"header LF\nline CRLF\r\n"))
+        self.assertTrue(result.endswith(b"footer LF\n"))
+        self.assertEqual(result.replace(b"\r\n", b"\n"), changed)
+        self.assertEqual(workflow.preserve_line_endings(original,
+                         original.replace(b"\r\n", b"\n")), original)
+
     def test_catalog_edits_only_existing_chromium_ui_files(self):
         targets = patch_targets(PATCH.read_text())
         self.assertGreater(len(targets), 4)
