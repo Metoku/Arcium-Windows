@@ -17,7 +17,10 @@ import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
 
-from scripts.apply_windows_arc_workflow import PATCH, ROOT, git_apply, integrate, patch_targets
+from scripts.apply_windows_arc_workflow import (
+    APPEARANCE_CSS_SOURCE, LEGACY_APPEARANCE_CSS, PATCH, ROOT,
+    appearance_css_addition, git_apply, integrate, patch_targets,
+)
 from scripts.check_patch_overlaps import discover_patch_paths, download_original, select_patch_sections
 from scripts.windows_port import audit_staged, chromium_version, git, read_pin, read_series
 
@@ -73,6 +76,12 @@ def check(core: Path, platform: Path | None = None,
         sentinel_time = sentinel.stat().st_mtime_ns
         checks = []
         webui_report = None
+        legacy_css_upgrade_checked = False
+        lint_config = temporary / "stylelint.config_base.mjs"
+        if typescript is not None:
+            download_original(chromium_version(),
+                "ui/webui/resources/tools/stylelint.config_base.mjs", lint_config,
+                mirror_first=True)
         for style in ("LF", "CRLF", "mixed", "missing-final-newline"):
             for index, (target, data) in enumerate(sorted(originals.items())):
                 normalized = data.replace(b"\r\n", b"\n")
@@ -91,6 +100,26 @@ def check(core: Path, platform: Path | None = None,
                         raise RuntimeError("Read-only applicability check touched source timestamps")
                     if integrate(source, apply=True, patch=catalog) != "APPLIED":
                         raise RuntimeError(f"Could not apply {catalog.name}")
+                if not legacy_css_upgrade_checked:
+                    css = source / APPEARANCE_CSS_SOURCE
+                    corrected_css = css.read_bytes()
+                    fixed_block = appearance_css_addition(APPEARANCE_PATCH.read_bytes())
+                    if corrected_css.count(fixed_block) != 1:
+                        raise RuntimeError("Expected exactly one corrected appearance CSS block")
+                    css.write_bytes(corrected_css.replace(fixed_block, LEGACY_APPEARANCE_CSS, 1))
+                    upgrade_times = {target: (source / target).stat().st_mtime_ns for target in targets}
+                    if integrate(source, patch=APPEARANCE_PATCH) != "UPDATE_AVAILABLE":
+                        raise RuntimeError("Legacy appearance CSS was not recognized")
+                    if upgrade_times != {target: (source / target).stat().st_mtime_ns for target in targets}:
+                        raise RuntimeError("CSS upgrade check rewrote source")
+                    integrate(source, patch=APPEARANCE_PATCH, apply=True)
+                    if css.read_bytes() != corrected_css:
+                        raise RuntimeError("Legacy CSS did not upgrade to the corrected block")
+                    if any((source / target).stat().st_mtime_ns != stamp
+                           for target, stamp in upgrade_times.items()
+                           if target != APPEARANCE_CSS_SOURCE):
+                        raise RuntimeError("CSS upgrade changed unrelated source")
+                    legacy_css_upgrade_checked = True
                 ET.parse(source / "chrome/app/settings_strings.grdp")
                 if typescript is not None and webui_report is None:
                     result = subprocess.run(
@@ -101,6 +130,15 @@ def check(core: Path, platform: Path | None = None,
                         raise RuntimeError("Appearance WebUI checks failed:\n" +
                                            result.stdout + result.stderr)
                     webui_report = json.loads(result.stdout)
+                    css_result = subprocess.run(
+                        ["node", str(ROOT / "scripts/check_windows_appearance_css.cjs"),
+                         "--source-dir", str(source), "--config", str(lint_config),
+                         "--node-modules", str(typescript.resolve().parent)],
+                        text=True, encoding="utf-8", capture_output=True)
+                    if css_result.returncode:
+                        raise RuntimeError("Chromium appearance CSS lint failed:\n" +
+                                           css_result.stdout + css_result.stderr)
+                    webui_report["css_lint"] = json.loads(css_result.stdout)
                 applied_times = {target: (source / target).stat().st_mtime_ns for target in targets}
                 applied_hashes = {target: hashlib.sha256((source / target).read_bytes()).hexdigest()
                                   for target in targets}
@@ -125,7 +163,8 @@ def check(core: Path, platform: Path | None = None,
                 "windows_platform_replayed": platform is not None,
                 "targets": sorted(targets), "original_sha256": original_hashes,
                 "upstream_patch_sections": len(replayed), "checks": checks,
-                "build_output_preserved": True, "browser_compiled": False,
+                "build_output_preserved": True, "legacy_css_upgrade_verified": legacy_css_upgrade_checked,
+                "browser_compiled": False,
                 "browser_launch_verified": False, "appearance_webui": webui_report}
 
 

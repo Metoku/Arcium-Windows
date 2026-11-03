@@ -5,7 +5,10 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from scripts.apply_windows_arc_workflow import integrate_bundle
+from scripts.apply_windows_arc_workflow import (
+    APPEARANCE_CSS_SOURCE, LEGACY_APPEARANCE_CSS, ROOT,
+    appearance_css_addition, integrate, integrate_bundle,
+)
 
 
 class BundleTests(unittest.TestCase):
@@ -142,6 +145,89 @@ class BundleTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             integrate_bundle(self.source, apply=True, revert=True,
                              catalogs=self.catalogs)
+
+
+class AppearanceCSSUpgradeTests(unittest.TestCase):
+    def setUp(self):
+        import difflib
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.source = self.root / "src"
+        self.source.mkdir()
+        (self.source / "BUILD.gn").write_text("# fixture\n")
+        self.css = self.source / APPEARANCE_CSS_SOURCE
+        self.css.parent.mkdir(parents=True)
+        self.css.write_bytes(b"/* existing CSS */\n")
+        self.native = self.source / "chrome/native.cc"
+        self.native.write_bytes(b"native before\n")
+        self.output = self.source / "out/Default/retained.obj"
+        self.output.parent.mkdir(parents=True)
+        self.output.write_bytes(b"existing compiled object")
+        catalog = ROOT / "patches/windows/arc-appearance-windows.patch"
+        self.fixed = appearance_css_addition(catalog.read_bytes())
+        self.patch = self.root / "arc-appearance-windows.patch"
+        sections = []
+        for name, before, after in (
+                (APPEARANCE_CSS_SOURCE, b"/* existing CSS */\n",
+                 b"/* existing CSS */\n" + self.fixed),
+                ("chrome/native.cc", b"native before\n", b"native after\n")):
+            sections.extend(difflib.unified_diff(before.decode().splitlines(True),
+                after.decode().splitlines(True), fromfile="a/" + name, tofile="b/" + name))
+        self.patch.write_text("".join(sections))
+        integrate(self.source, patch=self.patch, apply=True)
+        self.css.write_bytes(self.css.read_bytes().replace(self.fixed, LEGACY_APPEARANCE_CSS, 1))
+
+    def snapshot(self):
+        return {p: (p.read_bytes(), p.stat().st_mtime_ns)
+                for p in self.source.rglob("*") if p.is_file()}
+
+    def test_known_old_css_upgrades_only_css_and_is_idempotent(self):
+        before = self.snapshot()
+        self.assertEqual(integrate(self.source, patch=self.patch), "UPDATE_AVAILABLE")
+        self.assertEqual(before, self.snapshot())
+        self.assertEqual(integrate(self.source, patch=self.patch, apply=True), "APPLIED")
+        self.assertIn(self.fixed, self.css.read_bytes())
+        for path in before:
+            if path != self.css:
+                self.assertEqual((path.read_bytes(), path.stat().st_mtime_ns), before[path])
+        after = self.snapshot()
+        self.assertEqual(integrate(self.source, patch=self.patch, apply=True), "APPLIED")
+        self.assertEqual(after, self.snapshot())
+
+    def test_upgrade_preserves_crlf_mixed_and_absent_eof_format(self):
+        for style in ("CRLF", "mixed", "no-eof"):
+            with self.subTest(style=style):
+                old = b"/* existing CSS */\n" + LEGACY_APPEARANCE_CSS
+                if style == "CRLF": old = old.replace(b"\n", b"\r\n")
+                if style == "mixed": old = old.replace(b"/* existing CSS */\n", b"/* existing CSS */\r\n")
+                if style == "no-eof": old = old.removesuffix(b"\n")
+                self.css.write_bytes(old)
+                self.assertEqual(integrate(self.source, patch=self.patch, apply=True), "APPLIED")
+                result = self.css.read_bytes()
+                self.assertEqual(result.endswith(b"\n"), style != "no-eof")
+                if style == "CRLF": self.assertNotIn(b"\n", result.replace(b"\r\n", b""))
+                if style == "mixed": self.assertTrue(result.startswith(b"/* existing CSS */\r\n"))
+
+    def test_unknown_css_edit_is_rejected_without_writing_source(self):
+        self.css.write_bytes(self.css.read_bytes().replace(b"padding: 0 20px", b"padding: 0 21px"))
+        before = self.snapshot()
+        with self.assertRaisesRegex(RuntimeError, "No changes made"):
+            integrate(self.source, patch=self.patch, apply=True)
+        self.assertEqual(before, self.snapshot())
+
+    def test_incomplete_native_catalog_is_rejected_even_with_known_css(self):
+        self.native.write_bytes(b"native before\n")
+        before = self.snapshot()
+        with self.assertRaisesRegex(RuntimeError, "complete appearance catalog"):
+            integrate(self.source, patch=self.patch, apply=True)
+        self.assertEqual(before, self.snapshot())
+
+    def test_legacy_version_can_be_reverted_after_full_verification(self):
+        self.assertEqual(integrate(self.source, patch=self.patch, revert=True), "READY")
+        self.assertEqual(self.css.read_bytes(), b"/* existing CSS */\n")
+        self.assertEqual(self.native.read_bytes(), b"native before\n")
+        self.assertEqual(self.output.read_bytes(), b"existing compiled object")
 
 
 if __name__ == "__main__":

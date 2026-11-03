@@ -22,6 +22,25 @@ PATCH = ROOT / "patches" / "windows" / "arc-workflow-settings.patch"
 SHORTCUT_SOURCE = "chrome/browser/resources/settings/system_page/browser_shortcuts_page.ts"
 LEGACY_RESTORE_CHECK = b"    return !busy && !!preset?.canModify && !!preset.hasPrevious;"
 RESTORE_CHECK = b"    return !busy && !!preset?.canModify && preset.hasPrevious;"
+APPEARANCE_CSS_SOURCE = "chrome/browser/resources/settings/appearance_page/appearance_layout_page.css"
+# Exact CSS emitted by the first appearance catalog; never rewrite unknown CSS.
+LEGACY_APPEARANCE_CSS = b""".workspace-description { padding: 0 20px; color: var(--cr-secondary-text-color); }
+fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.workspace-row { display: flex; align-items: center; justify-content: space-between;
+  gap: 20px; min-height: 48px; padding: 8px 20px; border-top: var(--cr-separator-line); }
+.workspace-row > span { flex: 1; }
+.workspace-row select { max-width: 55%; }
+.workspace-row input[type=number] { width: 80px; }
+.workspace-row input[type=range] { width: 160px; max-width: 45%; }
+.workspace-glow { padding: 12px 20px; border-top: var(--cr-separator-line); }
+.workspace-glow summary { cursor: pointer; }
+button, select, input[type=number] { color: var(--cr-primary-text-color);
+  background: var(--cr-card-background-color); border: 1px solid var(--cr-separator-color);
+  border-radius: 6px; padding: 8px; font: inherit; }
+button { cursor: pointer; }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--cr-focus-outline-color); }
+"""
+
 
 
 def patch_targets(text: str) -> list[str]:
@@ -45,6 +64,20 @@ def patch_targets(text: str) -> list[str]:
         ):
             raise ValueError(f"Unsafe patch target: {path}")
     return new_paths
+
+
+def appearance_css_addition(patch_bytes: bytes) -> bytes:
+    marker = ("--- a/" + APPEARANCE_CSS_SOURCE + "\n+++ b/" +
+              APPEARANCE_CSS_SOURCE + "\n").encode()
+    _, found, section = patch_bytes.partition(marker)
+    if not found:
+        raise ValueError("Appearance catalog has no CSS section")
+    section = re.split(rb"(?m)^--- a/", section, maxsplit=1)[0]
+    addition = b"".join(line[1:] for line in section.splitlines(keepends=True)
+                        if line.startswith(b"+")).lstrip(b"\n")
+    if not addition.startswith(b".workspace-description {\n"):
+        raise ValueError("Appearance catalog does not contain the corrected CSS block")
+    return addition
 
 
 def git_apply(source: Path, patch: Path, *, reverse: bool, check: bool) -> subprocess.CompletedProcess[str]:
@@ -197,6 +230,26 @@ def integrate(source: Path, *, apply: bool = False, revert: bool = False,
                 if corrected.returncode == 0:
                     backward = corrected
                     needs_upgrade = True
+        if (backward.returncode
+                and patch.name == "arc-appearance-windows.patch"
+                and APPEARANCE_CSS_SOURCE in targets):
+            css_file = staged_source / APPEARANCE_CSS_SOURCE
+            css_bytes = css_file.read_bytes()
+            if css_bytes.count(LEGACY_APPEARANCE_CSS) == 1:
+                css_file.write_bytes(css_bytes.replace(
+                    LEGACY_APPEARANCE_CSS, appearance_css_addition(patch_bytes), 1))
+                corrected = git_apply(staged_source, staged_patch,
+                                      reverse=True, check=True)
+                # The complete native/UI catalog must be present. Merely finding
+                # the old CSS never authorizes edits to an otherwise unknown tree.
+                if corrected.returncode == 0:
+                    backward = corrected
+                    needs_upgrade = True
+                else:
+                    raise RuntimeError(
+                        "Legacy appearance CSS was found, but the complete appearance "
+                        "catalog could not be verified. No changes made.\n" +
+                        corrected.stderr.replace(staged_source.as_posix() + "/", ""))
         if forward.returncode == 0 and backward.returncode != 0:
             status = "READY"
         elif backward.returncode == 0 and forward.returncode != 0:

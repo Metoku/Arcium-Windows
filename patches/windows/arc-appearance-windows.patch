@@ -69,26 +69,79 @@
  </grit-part>
 --- a/chrome/browser/resources/settings/appearance_page/appearance_layout_page.css
 +++ b/chrome/browser/resources/settings/appearance_page/appearance_layout_page.css
-@@ -121,3 +121,19 @@
+@@ -121,3 +121,72 @@
  .indented-toggles settings-toggle-button {
    padding-inline-start: 0;
  }
 +
-+.workspace-description { padding: 0 20px; color: var(--cr-secondary-text-color); }
-+fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
-+.workspace-row { display: flex; align-items: center; justify-content: space-between;
-+  gap: 20px; min-height: 48px; padding: 8px 20px; border-top: var(--cr-separator-line); }
-+.workspace-row > span { flex: 1; }
-+.workspace-row select { max-width: 55%; }
-+.workspace-row input[type=number] { width: 80px; }
-+.workspace-row input[type=range] { width: 160px; max-width: 45%; }
-+.workspace-glow { padding: 12px 20px; border-top: var(--cr-separator-line); }
-+.workspace-glow summary { cursor: pointer; }
-+button, select, input[type=number] { color: var(--cr-primary-text-color);
-+  background: var(--cr-card-background-color); border: 1px solid var(--cr-separator-color);
-+  border-radius: 6px; padding: 8px; font: inherit; }
-+button { cursor: pointer; }
-+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--cr-focus-outline-color); }
++.workspace-description {
++  color: var(--cr-secondary-text-color);
++  padding: 0 20px;
++}
++
++fieldset {
++  border: 0;
++  margin: 0;
++  min-width: 0;
++  padding: 0;
++}
++
++.workspace-row {
++  align-items: center;
++  border-top: var(--cr-separator-line);
++  display: flex;
++  gap: 20px;
++  justify-content: space-between;
++  min-height: 48px;
++  padding: 8px 20px;
++}
++
++.workspace-row > span {
++  flex: 1;
++}
++
++.workspace-row select {
++  max-width: 55%;
++}
++
++.workspace-row input[type=number] {
++  width: 80px;
++}
++
++.workspace-row input[type=range] {
++  max-width: 45%;
++  width: 160px;
++}
++
++.workspace-glow {
++  border-top: var(--cr-separator-line);
++  padding: 12px 20px;
++}
++
++.workspace-glow summary {
++  cursor: pointer;
++}
++
++button,
++select,
++input[type=number] {
++  background: var(--cr-card-background-color);
++  border: 1px solid var(--cr-separator-color);
++  border-radius: 6px;
++  color: var(--cr-primary-text-color);
++  font: inherit;
++  padding: 8px;
++}
++
++button {
++  cursor: pointer;
++}
++
++button:focus-visible,
++select:focus-visible,
++input:focus-visible {
++  outline: 2px solid var(--cr-focus-outline-color);
++}
 --- a/chrome/browser/resources/settings/appearance_page/appearance_layout_page.html.ts
 +++ b/chrome/browser/resources/settings/appearance_page/appearance_layout_page.html.ts
 @@ -2,6 +2,8 @@

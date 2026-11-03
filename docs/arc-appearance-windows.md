@@ -25,6 +25,13 @@ browser profiles are retained; a later mismatch cannot leave earlier catalogs
 partly applied. Already applied catalogs are retained. The known old shortcut
 lint error can be upgraded by the existing helper.
 
+If the first appearance patch is already installed, the helper recognizes its
+exact compact CSS block and reports `UPDATE_AVAILABLE`. Applying again upgrades
+only the stylesheet after verifying the complete corrected appearance catalog
+can be reversed. Unknown CSS edits or an incomplete native/UI catalog are
+rejected without source writes. There is no need to revert the integrations,
+edit generated CSS, or discard build output to fix this formatting issue.
+
 `--feature appearance` selects only this integration. `--feature all --revert`
 reverts all four optional source integrations; it does not undo user appearance
 choices or delete imported records. Rebuild after either application or reversion.
@@ -126,6 +133,13 @@ The pinned-source replay checks all 24 catalog orders with LF, CRLF, mixed
 endings and missing final newlines (96 combinations), idempotence, read-only
 checks, exact reversion, resource XML and retained build output. The optional TypeScript checker exercises actual patched event
 handlers, panel dismissal and template controls with typed WebUI adapters.
+Appearance CSS also runs through Stylelint 17.0.0 and the unmodified rules from
+Chromium 156.0.8078.47's `stylelint.config_base.mjs`, with its pinned stylistic
+plugin. The earlier compact stylesheet reproduces the 29 native build errors;
+the corrected stylesheet passes with zero warnings. CI uses the pinned
+TypeScript 6.0.2 compiler for the isolated typed adapters and exercises the
+already-installed CSS upgrade against reconstructed source.
+
 Chromium's complete transitive TypeScript/Mojo/C++ build remains a separate gate.
 
 Before marking this port accepted, use a disposable browser profile to verify:

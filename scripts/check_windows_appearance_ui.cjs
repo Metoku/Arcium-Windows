@@ -107,6 +107,11 @@ function checkIsolatedTypes() {
       }
       declare module 'chrome://resources/js/cr.js' {export function sendWithPromise<T>(name:string,...args:unknown[]):Promise<T>;}
       declare module '*i18n_setup.js' {export const loadTimeData:{getString(key:string):string;getBoolean(key:string):boolean};}
+      declare module '*controls/controlled_radio_button.js' {}
+      declare module '*controls/settings_dropdown_menu.js' {}
+      declare module '*controls/settings_radio_group.js' {}
+      declare module '*controls/settings_toggle_button.js' {}
+      declare module '*settings_page/settings_section.js' {}
       declare module '*.css.js' {export function getCss():unknown;}
     `);
     const program = ts.createProgram(['appearance_layout_page.ts', 'appearance_layout_page.html.ts', 'stubs.d.ts']
