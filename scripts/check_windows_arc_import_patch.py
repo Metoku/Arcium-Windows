@@ -13,6 +13,7 @@ import json
 from itertools import permutations
 from pathlib import Path
 import re
+import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
 
@@ -23,6 +24,7 @@ from scripts.windows_port import audit_staged, chromium_version, git, read_pin, 
 
 IMPORT_PATCH = ROOT / "patches/windows/arc-import-windows.patch"
 PASSWORD_PATCH = ROOT / "patches/windows/arc-password-import-windows.patch"
+APPEARANCE_PATCH = ROOT / "patches/windows/arc-appearance-windows.patch"
 
 
 def normalize_headers(diff: str) -> str:
@@ -30,7 +32,8 @@ def normalize_headers(diff: str) -> str:
     return re.sub(r"^\+\+\+ (?:src|b)/", "+++ b/", diff, flags=re.MULTILINE)
 
 
-def check(core: Path, platform: Path | None = None) -> dict:
+def check(core: Path, platform: Path | None = None,
+          typescript: Path | None = None) -> dict:
     expected = read_pin("arcium-core.sha")
     if git("-C", core, "rev-parse", "HEAD") != expected:
         raise ValueError("The Arc import fixture requires the pinned Arcium core revision")
@@ -38,7 +41,7 @@ def check(core: Path, platform: Path | None = None) -> dict:
     if platform is not None:
         audit_staged(platform)
         patches += read_series(platform / "patches/series")
-    catalogs = (PATCH, IMPORT_PATCH, PASSWORD_PATCH)
+    catalogs = (PATCH, IMPORT_PATCH, PASSWORD_PATCH, APPEARANCE_PATCH)
     targets = set().union(*(patch_targets(p.read_text(encoding="utf-8")) for p in catalogs))
     _, created = discover_patch_paths(patches)
     original_hashes = {}
@@ -69,6 +72,7 @@ def check(core: Path, platform: Path | None = None) -> dict:
         sentinel.write_bytes(b"existing compiled output")
         sentinel_time = sentinel.stat().st_mtime_ns
         checks = []
+        webui_report = None
         for style in ("LF", "CRLF", "mixed"):
             for index, (target, data) in enumerate(sorted(originals.items())):
                 normalized = data.replace(b"\r\n", b"\n")
@@ -86,6 +90,15 @@ def check(core: Path, platform: Path | None = None) -> dict:
                     if integrate(source, apply=True, patch=catalog) != "APPLIED":
                         raise RuntimeError(f"Could not apply {catalog.name}")
                 ET.parse(source / "chrome/app/settings_strings.grdp")
+                if typescript is not None and webui_report is None:
+                    result = subprocess.run(
+                        ["node", str(ROOT / "scripts/check_windows_appearance_ui.cjs"),
+                         "--source-dir", str(source), "--typescript", str(typescript.resolve())],
+                        text=True, encoding="utf-8", capture_output=True)
+                    if result.returncode:
+                        raise RuntimeError("Appearance WebUI checks failed:\n" +
+                                           result.stdout + result.stderr)
+                    webui_report = json.loads(result.stdout)
                 applied_times = {target: (source / target).stat().st_mtime_ns for target in targets}
                 applied_hashes = {target: hashlib.sha256((source / target).read_bytes()).hexdigest()
                                   for target in targets}
@@ -111,17 +124,20 @@ def check(core: Path, platform: Path | None = None) -> dict:
                 "targets": sorted(targets), "original_sha256": original_hashes,
                 "upstream_patch_sections": len(replayed), "checks": checks,
                 "build_output_preserved": True, "browser_compiled": False,
-                "browser_launch_verified": False}
+                "browser_launch_verified": False, "appearance_webui": webui_report}
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--core-dir", type=Path, required=True)
     parser.add_argument("--platform-dir", type=Path)
+    parser.add_argument("--typescript", type=Path,
+                        help="TypeScript module for optional isolated appearance WebUI checks")
     parser.add_argument("--report", type=Path, default=ROOT / "work/windows-arc-import-replay.json")
     args = parser.parse_args()
     report = check(args.core_dir.resolve(),
-                   args.platform_dir.resolve() if args.platform_dir else None)
+                   args.platform_dir.resolve() if args.platform_dir else None,
+                   args.typescript)
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(f"ARCIUM_WINDOWS_ARC_IMPORT_PATCH_REPLAY_PASSED: {len(report['targets'])} targets; "

@@ -10,6 +10,12 @@ Unofficial experimental Windows platform project for [Arcium](https://github.com
 
 ## Automation
 
+For synchronized Space colors, Windows Mica/Acrylic, rounded-frame and sidebar
+controls, see [Windows workspace appearance](docs/arc-appearance-windows.md).
+`--feature all --apply` validates and applies all four optional integrations as
+one source transaction before an incremental build. Native compilation and
+visible acceptance are still required for the appearance port.
+
 For the optional Windows workflow controls and reversible shortcut preset, see
 [Arc workflow on Windows](docs/arc-workflow-windows.md). The integration applies
 to an already prepared tree and requires an incremental browser build.

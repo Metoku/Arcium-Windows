@@ -222,11 +222,53 @@ def integrate(source: Path, *, apply: bool = False, revert: bool = False,
     return desired
 
 
+def integrate_bundle(source: Path, *, apply: bool = False, revert: bool = False,
+                     catalogs: tuple[Path, ...] | None = None) -> str:
+    """Validate and commit the complete bundle as one source transaction."""
+    if apply and revert:
+        raise ValueError("Choose apply or revert")
+    if catalogs is None:
+        catalogs = (PATCH, ROOT / "patches/windows/arc-import-windows.patch",
+                    ROOT / "patches/windows/arc-password-import-windows.patch",
+                    ROOT / "patches/windows/arc-appearance-windows.patch")
+    source = source.resolve(strict=True)
+    if not (source / "BUILD.gn").is_file():
+        raise ValueError("Expected a prepared Chromium source root containing BUILD.gn")
+    targets = sorted(set().union(*(patch_targets(p.read_text(encoding="utf-8"))
+                                  for p in catalogs)))
+    for target in targets:
+        path = (source / target).resolve(strict=True)
+        if not path.is_relative_to(source) or not path.is_file():
+            raise ValueError(f"Patch target escapes the source root: {target}")
+    originals = {p: (source / p).read_bytes() for p in targets}
+    with tempfile.TemporaryDirectory(prefix="arcium-bundle-stage-") as temporary:
+        staging = Path(temporary)
+        (staging / "BUILD.gn").write_text("# Partial optional-patch fixture\n")
+        for target, content in originals.items():
+            path = staging / target
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+        initial = []
+        for catalog in reversed(catalogs) if revert else catalogs:
+            initial.append(integrate(staging, patch=catalog))
+            # Even --check rehearses the whole operation in temporary copies,
+            # so a failure in the last catalog cannot partially update source.
+            integrate(staging, apply=not revert, revert=revert, patch=catalog)
+        if not apply and not revert:
+            if all(status == "APPLIED" for status in initial):
+                return "APPLIED"
+            return "UPDATE_AVAILABLE" if "UPDATE_AVAILABLE" in initial else "READY"
+        changes = {p: (staging / p).read_bytes() for p in targets
+                   if (staging / p).read_bytes() != originals[p]}
+        commit_source_changes(source, originals, changes)
+    return "READY" if revert else "APPLIED"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-dir", type=Path,
                         default=ROOT / "work/windows-platform/build/src")
-    parser.add_argument("--feature", choices=("workflow", "arc-import", "passwords"),
+    parser.add_argument("--feature", choices=("workflow", "arc-import", "passwords", "appearance", "all"),
                         default="workflow", help="Optional Windows integration to apply")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--check", action="store_true", help="Read-only applicability check (default)")
@@ -238,14 +280,18 @@ def main() -> int:
             "workflow": PATCH,
             "arc-import": ROOT / "patches/windows/arc-import-windows.patch",
             "passwords": ROOT / "patches/windows/arc-password-import-windows.patch",
+            "appearance": ROOT / "patches/windows/arc-appearance-windows.patch",
         }
-        selected_patch = catalogs[args.feature]
-        status = integrate(args.source_dir, apply=args.apply, revert=args.revert,
-                           patch=selected_patch)
+        if args.feature == "all":
+            status = integrate_bundle(args.source_dir, apply=args.apply, revert=args.revert)
+        else:
+            status = integrate(args.source_dir, apply=args.apply, revert=args.revert,
+                               patch=catalogs[args.feature])
     except (OSError, ValueError, RuntimeError) as error:
         parser.exit(1, f"{error}\n")
     marker = {"workflow": "ARC_WORKFLOW", "arc-import": "ARC_IMPORT",
-              "passwords": "ARC_PASSWORDS"}[args.feature]
+              "passwords": "ARC_PASSWORDS", "appearance": "ARC_APPEARANCE",
+              "all": "ALL"}[args.feature]
     print(f"ARCIUM_WINDOWS_{marker}_{status}")
     if args.apply or args.revert:
         print("Resume the existing build to compile the changed UI. Build outputs were retained.")

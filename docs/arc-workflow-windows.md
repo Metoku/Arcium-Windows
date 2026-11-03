@@ -112,7 +112,7 @@ or feature availability. A binding does not enable a disabled browser feature.
 | Saved passwords | The optional [Windows password integration](arc-password-import-windows.md) uses an Arc CSV export and Chromium's native importer in the selected Arcium profile. |
 | Cookies and extensions | Separate migration work. Retained sign-ins are not established by sidebar or password import. |
 | Window controls | First check `chrome://flags/#hide-window-buttons` and Frameless mode. Missing controls with both disabled need a Windows frame/layout investigation. |
-| Glass, Space colors and full appearance editor | The Mac native renderer/settings layer needs a Windows implementation. This patch supplies existing workflow controls, not Mac glass parity. |
+| Glass, Space colors and appearance editor | The separate [Windows appearance integration](arc-appearance-windows.md) connects the shared Space palette, Windows DWM backdrop and geometry controls. Native compilation and visual acceptance are pending. |
 | Xelium workspaces | Its README marks them experimental/unreleased. Preserve Arcium Spaces as the existing data model. |
 
 Before migration, preserve an Arc export/backup using Arc's own UI. Do not assume
