@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Apply the Windows Arc workflow patch to an already prepared Chromium tree.
+"""Apply an optional Windows Arc integration to a prepared Chromium tree.
 
 The default is a read-only check. This never downloads source, changes GN flags,
 cleans build output, launches a browser, or edits a browser profile.
@@ -226,21 +226,26 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-dir", type=Path,
                         default=ROOT / "work/windows-platform/build/src")
-    parser.add_argument("--feature", choices=("workflow", "arc-import"),
+    parser.add_argument("--feature", choices=("workflow", "arc-import", "passwords"),
                         default="workflow", help="Optional Windows integration to apply")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--check", action="store_true", help="Read-only applicability check (default)")
-    mode.add_argument("--apply", action="store_true", help="Apply only the Windows workflow patch")
-    mode.add_argument("--revert", action="store_true", help="Undo only the Windows workflow patch")
+    mode.add_argument("--apply", action="store_true", help="Apply the selected integration patch")
+    mode.add_argument("--revert", action="store_true", help="Undo the selected integration patch")
     args = parser.parse_args()
     try:
-        selected_patch = (PATCH if args.feature == "workflow" else
-                          ROOT / "patches/windows/arc-import-windows.patch")
+        catalogs = {
+            "workflow": PATCH,
+            "arc-import": ROOT / "patches/windows/arc-import-windows.patch",
+            "passwords": ROOT / "patches/windows/arc-password-import-windows.patch",
+        }
+        selected_patch = catalogs[args.feature]
         status = integrate(args.source_dir, apply=args.apply, revert=args.revert,
                            patch=selected_patch)
     except (OSError, ValueError, RuntimeError) as error:
         parser.exit(1, f"{error}\n")
-    marker = "ARC_WORKFLOW" if args.feature == "workflow" else "ARC_IMPORT"
+    marker = {"workflow": "ARC_WORKFLOW", "arc-import": "ARC_IMPORT",
+              "passwords": "ARC_PASSWORDS"}[args.feature]
     print(f"ARCIUM_WINDOWS_{marker}_{status}")
     if args.apply or args.revert:
         print("Resume the existing build to compile the changed UI. Build outputs were retained.")

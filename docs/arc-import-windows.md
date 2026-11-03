@@ -66,7 +66,8 @@ and enable **Import sidebar as Pins** to import into the current Arcium profile.
 | Split views | Their saved pages appear in order; the split layout is flattened |
 | Cached favicons | Use the shared importer when source icons are available |
 | History | Optional through the shared picker; starts off |
-| Passwords, cookies, extensions and sign-ins | Not migrated by this sidebar flow |
+| Saved passwords | Use the separate optional [Windows password CSV import](arc-password-import-windows.md) in the matching destination profile |
+| Cookies, extensions and sign-ins | Not migrated by this sidebar flow |
 | Today tabs, Little Arc windows, Easels and Boosts | Not converted into saved Pins by this integration |
 
 Refreshing selected imported Spaces uses Arcium's existing reconciliation:

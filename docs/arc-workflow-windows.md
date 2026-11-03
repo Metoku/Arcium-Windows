@@ -109,7 +109,8 @@ or feature availability. A binding does not enable a disabled browser feature.
 | Command bar | User screenshots show it opening on Windows. Verify search, open-tab switching and persistent-item results independently. |
 | Settings and preset in this patch | Source replay and helper tests can run here; Windows compilation and visible UI acceptance are still required. |
 | Arc sidebar import | The separate [Windows Arc import integration](arc-import-windows.md) connects Windows discovery and supported sidebar formats to the shared picker. Native compilation and real-data acceptance are pending; machine-tagged profiles are not guessed. |
-| Passwords, cookies and extensions | Separate migration work. Do not promise retained sign-ins from a sidebar import or copy whole Arc profile directories into Arcium. |
+| Saved passwords | The optional [Windows password integration](arc-password-import-windows.md) uses an Arc CSV export and Chromium's native importer in the selected Arcium profile. |
+| Cookies and extensions | Separate migration work. Retained sign-ins are not established by sidebar or password import. |
 | Window controls | First check `chrome://flags/#hide-window-buttons` and Frameless mode. Missing controls with both disabled need a Windows frame/layout investigation. |
 | Glass, Space colors and full appearance editor | The Mac native renderer/settings layer needs a Windows implementation. This patch supplies existing workflow controls, not Mac glass parity. |
 | Xelium workspaces | Its README marks them experimental/unreleased. Preserve Arcium Spaces as the existing data model. |

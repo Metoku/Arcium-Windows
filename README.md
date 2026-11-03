@@ -20,6 +20,11 @@ saved-Pins importer with corrected Windows discovery and additional sidebar
 format support. Windows browser compilation and real-data acceptance remain
 required before calling migration complete.
 
+The optional [Windows saved-password integration](docs/arc-password-import-windows.md)
+restores local password-manager support and imports an Arc CSV export through
+Chromium's native UI. It is separate from saved-sidebar migration and needs
+Windows runtime acceptance after rebuilding.
+
 CI can detect upstream changes and open reviewable update proposals. Until a Windows port compiles successfully, it must **not** claim to produce working binaries or automatically publish releases. Upstream revisions will be pinned and tested before adoption.
 
 ## Implemented repository foundation

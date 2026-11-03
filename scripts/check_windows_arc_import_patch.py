@@ -1,4 +1,4 @@
-"""Replay both optional Windows patches against the exact pinned source files.
+"""Replay optional Windows Arc patches against the exact pinned source files.
 
 Only a temporary, partial source fixture is created. This does not compile
 Chromium, create a browser profile, or touch an existing build workspace.
@@ -10,9 +10,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+from itertools import permutations
 from pathlib import Path
 import re
 import tempfile
+import xml.etree.ElementTree as ET
 
 from scripts.apply_windows_arc_workflow import PATCH, ROOT, git_apply, integrate, patch_targets
 from scripts.check_patch_overlaps import discover_patch_paths, download_original, select_patch_sections
@@ -20,6 +22,7 @@ from scripts.windows_port import audit_staged, chromium_version, git, read_pin, 
 
 
 IMPORT_PATCH = ROOT / "patches/windows/arc-import-windows.patch"
+PASSWORD_PATCH = ROOT / "patches/windows/arc-password-import-windows.patch"
 
 
 def normalize_headers(diff: str) -> str:
@@ -35,7 +38,7 @@ def check(core: Path, platform: Path | None = None) -> dict:
     if platform is not None:
         audit_staged(platform)
         patches += read_series(platform / "patches/series")
-    catalogs = (PATCH, IMPORT_PATCH)
+    catalogs = (PATCH, IMPORT_PATCH, PASSWORD_PATCH)
     targets = set().union(*(patch_targets(p.read_text(encoding="utf-8")) for p in catalogs))
     _, created = discover_patch_paths(patches)
     original_hashes = {}
@@ -73,7 +76,7 @@ def check(core: Path, platform: Path | None = None) -> dict:
                     normalized = normalized.replace(b"\n", b"\r\n")
                 (source / target).write_bytes(normalized)
             baseline = {target: (source / target).read_bytes() for target in targets}
-            for order in (catalogs, tuple(reversed(catalogs))):
+            for order in permutations(catalogs):
                 for catalog in order:
                     before = {target: (source / target).stat().st_mtime_ns for target in targets}
                     if integrate(source, patch=catalog) != "READY":
@@ -82,6 +85,7 @@ def check(core: Path, platform: Path | None = None) -> dict:
                         raise RuntimeError("Read-only applicability check touched source timestamps")
                     if integrate(source, apply=True, patch=catalog) != "APPLIED":
                         raise RuntimeError(f"Could not apply {catalog.name}")
+                ET.parse(source / "chrome/app/settings_strings.grdp")
                 applied_times = {target: (source / target).stat().st_mtime_ns for target in targets}
                 applied_hashes = {target: hashlib.sha256((source / target).read_bytes()).hexdigest()
                                   for target in targets}
