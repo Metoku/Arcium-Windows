@@ -410,7 +410,7 @@
    for (size_t i = 0; i < containers->size(); i += 2u) {
 +    if (const auto* scope_name = (*containers)[i].GetIfString()) {
 +      if (*scope_name != "global")
-+        return nullptr;
++        continue;
 +      const auto* data = (*containers)[i + 1u].GetIfDict();
 +      if (!data || !data->FindList("items") || (global && *global != *data))
 +        return nullptr;
@@ -433,7 +433,7 @@
    if (!item_values) {
 --- a/chrome/utility/importer/arc_sidebar_snapshot_unittest.cc
 +++ b/chrome/utility/importer/arc_sidebar_snapshot_unittest.cc
-@@ -848,5 +848,132 @@
+@@ -848,5 +848,151 @@
    check(base::DictValue(), "");
  }
  
@@ -562,6 +562,25 @@
 +  ASSERT_TRUE(matched);
 +  EXPECT_EQ(matched->spaces.size(), 1u);
 +  EXPECT_EQ(matched->favorites.size(), 1u);
++}
++
++TEST(ArcSidebarSnapshotTest, WindowsStringScopesIgnoreLittleArc) {
++  auto root = ParseWindowsFixture();
++  ASSERT_TRUE(root);
++  auto& containers = *root->FindDict("sidebar")->FindList("containers");
++  auto saved = containers[1].Clone();
++  auto transient = saved.Clone();
++  transient.GetDict().FindList("spaces")->front().GetDict().Set("title",
++                                                                "Little Arc");
++  containers = base::ListValue()
++                   .Append("littleBrowser")
++                   .Append(std::move(transient))
++                   .Append("global")
++                   .Append(std::move(saved));
++  const auto snapshot = ParseArcSidebarSnapshot(*root, "Default");
++  ASSERT_TRUE(snapshot);
++  ASSERT_EQ(snapshot->spaces.size(), 1u);
++  EXPECT_EQ(snapshot->spaces[0].name, "Windows Work");
 +}
 +
  }  // namespace
