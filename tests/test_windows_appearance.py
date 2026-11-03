@@ -133,7 +133,7 @@ class BundleTests(unittest.TestCase):
             integrate_bundle(self.source, apply=True, catalogs=self.catalogs)
         message = str(caught.exception)
         self.assertIn("feature3.patch", message)
-        self.assertIn(str(self.source), message)
+        self.assertIn(str(self.source.resolve()), message)
         self.assertIn("Forward check:", message)
         self.assertNotIn("arcium-workflow-stage-", message)
         self.assertEqual(before, self.snapshot())
