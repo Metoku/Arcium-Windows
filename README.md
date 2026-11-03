@@ -1,6 +1,6 @@
 # Arcium-Windows
 
-> **Status: early scaffolding. No functional Windows build yet.**
+> **Status: experimental Windows port. A local browser build has been reported working; automated UI validation and release packaging remain unfinished.**
 
 Unofficial experimental Windows platform project for [Arcium](https://github.com/dr-baker/Arcium), a Chromium/Helium-based browser. This project is independent of, and not endorsed by, the upstream maintainers.
 
@@ -9,6 +9,10 @@ Unofficial experimental Windows platform project for [Arcium](https://github.com
 [dr-baker/Arcium](https://github.com/dr-baker/Arcium) owns shared browser behavior and Chromium patches. [dr-baker/Arcium-macOS](https://github.com/dr-baker/Arcium-macOS) is a macOS reference, not a Windows build source. This repository will own Windows platform integration, build scripts, testing and packaging.
 
 ## Automation
+
+For the optional Windows workflow controls and reversible shortcut preset, see
+[Arc workflow on Windows](docs/arc-workflow-windows.md). The integration applies
+to an already prepared tree and requires an incremental browser build.
 
 CI can detect upstream changes and open reviewable update proposals. Until a Windows port compiles successfully, it must **not** claim to produce working binaries or automatically publish releases. Upstream revisions will be pinned and tested before adoption.
 
