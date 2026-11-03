@@ -226,16 +226,22 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-dir", type=Path,
                         default=ROOT / "work/windows-platform/build/src")
+    parser.add_argument("--feature", choices=("workflow", "arc-import"),
+                        default="workflow", help="Optional Windows integration to apply")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--check", action="store_true", help="Read-only applicability check (default)")
     mode.add_argument("--apply", action="store_true", help="Apply only the Windows workflow patch")
     mode.add_argument("--revert", action="store_true", help="Undo only the Windows workflow patch")
     args = parser.parse_args()
     try:
-        status = integrate(args.source_dir, apply=args.apply, revert=args.revert)
+        selected_patch = (PATCH if args.feature == "workflow" else
+                          ROOT / "patches/windows/arc-import-windows.patch")
+        status = integrate(args.source_dir, apply=args.apply, revert=args.revert,
+                           patch=selected_patch)
     except (OSError, ValueError, RuntimeError) as error:
         parser.exit(1, f"{error}\n")
-    print(f"ARCIUM_WINDOWS_ARC_WORKFLOW_{status}")
+    marker = "ARC_WORKFLOW" if args.feature == "workflow" else "ARC_IMPORT"
+    print(f"ARCIUM_WINDOWS_{marker}_{status}")
     if args.apply or args.revert:
         print("Resume the existing build to compile the changed UI. Build outputs were retained.")
     else:

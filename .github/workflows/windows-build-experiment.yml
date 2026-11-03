@@ -53,6 +53,15 @@ jobs:
         run: python scripts/windows_port.py plan
       - name: Stage Helium Windows platform with Arcium shared core
         run: python scripts/windows_port.py stage
+      - name: Replay optional Windows Arc workflow and importer patches
+        run: python -m scripts.check_windows_arc_import_patch --core-dir work/windows-platform/helium-chromium --platform-dir work/windows-platform
+      - name: Upload optional Arc patch replay report (NOT a build)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-arc-import-patch-replay
+          path: work/windows-arc-import-replay.json
+          if-no-files-found: warn
       - name: Validate full-source preparation adapter (no downloads)
         run: python scripts/prepare_full_chromium.py --validate
       - name: Validate browser-only compilation adapter (no download or build)

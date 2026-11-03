@@ -14,6 +14,12 @@ For the optional Windows workflow controls and reversible shortcut preset, see
 [Arc workflow on Windows](docs/arc-workflow-windows.md). The integration applies
 to an already prepared tree and requires an incremental browser build.
 
+For the optional Windows Arc sidebar importer and Space picker, see
+[Import from Arc on Windows](docs/arc-import-windows.md). It reuses Arcium's
+saved-Pins importer with corrected Windows discovery and additional sidebar
+format support. Windows browser compilation and real-data acceptance remain
+required before calling migration complete.
+
 CI can detect upstream changes and open reviewable update proposals. Until a Windows port compiles successfully, it must **not** claim to produce working binaries or automatically publish releases. Upstream revisions will be pinned and tested before adoption.
 
 ## Implemented repository foundation
