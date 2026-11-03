@@ -73,11 +73,13 @@ def check(core: Path, platform: Path | None = None,
         sentinel_time = sentinel.stat().st_mtime_ns
         checks = []
         webui_report = None
-        for style in ("LF", "CRLF", "mixed"):
+        for style in ("LF", "CRLF", "mixed", "missing-final-newline"):
             for index, (target, data) in enumerate(sorted(originals.items())):
                 normalized = data.replace(b"\r\n", b"\n")
                 if style == "CRLF" or (style == "mixed" and index % 2):
                     normalized = normalized.replace(b"\n", b"\r\n")
+                if style == "missing-final-newline":
+                    normalized = normalized.removesuffix(b"\n")
                 (source / target).write_bytes(normalized)
             baseline = {target: (source / target).read_bytes() for target in targets}
             for order in permutations(catalogs):

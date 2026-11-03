@@ -71,6 +71,10 @@ def git_apply(source: Path, patch: Path, *, reverse: bool, check: bool) -> subpr
 def preserve_line_endings(original: bytes, changed_lf: bytes) -> bytes:
     """Keep unchanged lines byte-identical; insert with this file's EOL style."""
     original_lf = original.replace(b"\r\n", b"\n")
+    # Git validates LF-terminated temporary lines. Keep the user's original
+    # missing final newline when committing those snapshots back to source.
+    if original and not original.endswith(b"\n") and changed_lf.endswith(b"\n"):
+        changed_lf = changed_lf[:-1]
     if original_lf == changed_lf:
         return original
     crlf_count = original.count(b"\r\n")
@@ -165,7 +169,13 @@ def integrate(source: Path, *, apply: bool = False, revert: bool = False,
         for target, content in originals.items():
             staged_file = staged_source / target
             staged_file.parent.mkdir(parents=True, exist_ok=True)
-            staged_file.write_bytes(content.replace(b"\r\n", b"\n"))
+            normalized = content.replace(b"\r\n", b"\n")
+            # These catalogs were generated from LF-terminated source. A local
+            # missing EOF newline is formatting drift, not a missing hunk.
+            if normalized and not normalized.endswith(b"\n") and (
+                    b"\\ No newline at end of file" not in patch_bytes):
+                normalized += b"\n"
+            staged_file.write_bytes(normalized)
         staged_patch = staging / "workflow.patch"
         staged_patch.write_bytes(patch_bytes)
         forward = git_apply(staged_source, staged_patch, reverse=False, check=True)
@@ -192,10 +202,21 @@ def integrate(source: Path, *, apply: bool = False, revert: bool = False,
         elif backward.returncode == 0 and forward.returncode != 0:
             status = "UPDATE_AVAILABLE" if needs_upgrade else "APPLIED"
         else:
+            def diagnostic(result: subprocess.CompletedProcess[str]) -> str:
+                return result.stderr.replace(staged_source.as_posix() + "/", "").strip()
+
+            forward_detail = diagnostic(forward)
+            backward_detail = diagnostic(backward)
+            forward_count = forward_detail.count("patch failed:")
+            backward_count = backward_detail.count("patch failed:")
+            if forward_count <= backward_count:
+                details = ("Forward check:\n" + (forward_detail or "No diagnostic output") +
+                           f"\nAlready-applied check also failed ({backward_count} hunk locations).")
+            else:
+                details = (f"Forward check failed ({forward_count} hunk locations).\n"
+                           "Already-applied check:\n" + backward_detail)
             raise RuntimeError(
-                "The workflow patch does not match this source tree. No changes made.\n"
-                "Checked LF-normalized temporary copies of: " + str(source) + "\n"
-                + forward.stderr + backward.stderr)
+                f"Cannot integrate {patch.name}. No changes made.\n" + details)
         if not apply and not revert:
             return status
         desired = "READY" if revert else "APPLIED"
@@ -250,10 +271,13 @@ def integrate_bundle(source: Path, *, apply: bool = False, revert: bool = False,
             path.write_bytes(content)
         initial = []
         for catalog in reversed(catalogs) if revert else catalogs:
-            initial.append(integrate(staging, patch=catalog))
-            # Even --check rehearses the whole operation in temporary copies,
-            # so a failure in the last catalog cannot partially update source.
-            integrate(staging, apply=not revert, revert=revert, patch=catalog)
+            try:
+                initial.append(integrate(staging, patch=catalog))
+                # Even --check rehearses the whole operation in temporary copies,
+                # so a failure in the last catalog cannot partially update source.
+                integrate(staging, apply=not revert, revert=revert, patch=catalog)
+            except RuntimeError as error:
+                raise RuntimeError(f"Bundle validation failed for {source}:\n{error}") from error
         if not apply and not revert:
             if all(status == "APPLIED" for status in initial):
                 return "APPLIED"

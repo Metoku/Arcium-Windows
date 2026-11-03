@@ -17,7 +17,9 @@ python .\scripts\apply_windows_arc_workflow.py --feature all --apply
 ```
 
 The bundle includes workflow controls, Arc sidebar discovery/import, saved
-password CSV support and appearance. It rehearses the complete operation in a
+password CSV support and appearance. Source files may use LF, CRLF, mixed endings
+or omit the final newline. Formatting is normalized only in temporary snapshots;
+the original source ending style and final-newline presence are preserved. It rehearses the complete operation in a
 temporary copy before committing source changes together. Existing outputs and
 browser profiles are retained; a later mismatch cannot leave earlier catalogs
 partly applied. Already applied catalogs are retained. The known old shortcut
@@ -120,9 +122,9 @@ doubles. They check OS/accessibility settings, DWM failures, composition surface
 requirements, private/guest/policy contexts, mismatched profiles and explicit
 Space ownership. They do **not** link against Chromium or call Windows DWM.
 
-The pinned-source replay checks all 24 catalog orders with LF, CRLF and mixed
-endings, idempotence, read-only checks, exact reversion, resource XML and retained
-build output. The optional TypeScript checker exercises actual patched event
+The pinned-source replay checks all 24 catalog orders with LF, CRLF, mixed
+endings and missing final newlines (96 combinations), idempotence, read-only
+checks, exact reversion, resource XML and retained build output. The optional TypeScript checker exercises actual patched event
 handlers, panel dismissal and template controls with typed WebUI adapters.
 Chromium's complete transitive TypeScript/Mojo/C++ build remains a separate gate.
 
