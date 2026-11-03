@@ -168,6 +168,66 @@ class WorkflowPatchIntegrationTests(unittest.TestCase):
                 os.environ["GIT_WORK_TREE"] = original
         self.assertEqual(self.first.read_text(), "first changed\n")
 
+    def prepare_legacy_shortcut_patch(self, newline):
+        shortcut = self.source / workflow.SHORTCUT_SOURCE
+        shortcut.parent.mkdir(parents=True, exist_ok=True)
+        original = b"class Shortcuts {\n}\n"
+        corrected = (b"class Shortcuts {\n  canRestore(preset, busy) {\n"
+                     b"    return !busy && !!preset?.canModify && preset.hasPrevious;\n"
+                     b"  }\n}\n")
+        legacy = corrected.replace(b"&& preset.hasPrevious", b"&& !!preset.hasPrevious")
+        patch = "".join(difflib.unified_diff(
+            original.decode().splitlines(keepends=True),
+            corrected.decode().splitlines(keepends=True),
+            fromfile="a/" + workflow.SHORTCUT_SOURCE,
+            tofile="b/" + workflow.SHORTCUT_SOURCE))
+        patch += "".join(difflib.unified_diff(
+            ["second original\n"], ["second changed\n"],
+            fromfile="a/chrome/second.cc", tofile="b/chrome/second.cc"))
+        self.patch.write_bytes(patch.encode())
+        shortcut.write_bytes(legacy.replace(b"\n", newline))
+        self.second.write_bytes(b"second changed\n")
+        return shortcut, original.replace(b"\n", newline), corrected.replace(b"\n", newline)
+
+    def test_upgrade_applied_shortcut_patch_preserves_other_source_timestamps(self):
+        for newline in (b"\n", b"\r\n"):
+            with self.subTest(newline=newline):
+                shortcut, original, corrected = self.prepare_legacy_shortcut_patch(newline)
+                legacy = shortcut.read_bytes()
+                before = shortcut.stat().st_mtime_ns
+                second_before = self.second.stat().st_mtime_ns
+                self.assertEqual(integrate(self.source, patch=self.patch), "UPDATE_AVAILABLE")
+                self.assertEqual(shortcut.read_bytes(), legacy)
+                self.assertEqual(shortcut.stat().st_mtime_ns, before)
+                self.assertEqual(integrate(self.source, apply=True, patch=self.patch), "APPLIED")
+                self.assertEqual(shortcut.read_bytes(), corrected)
+                self.assertEqual(self.second.stat().st_mtime_ns, second_before)
+                self.assertEqual(self.second.read_bytes(), b"second changed\n")
+                upgraded_time = shortcut.stat().st_mtime_ns
+                self.assertEqual(integrate(self.source, apply=True, patch=self.patch), "APPLIED")
+                self.assertEqual(shortcut.stat().st_mtime_ns, upgraded_time)
+                self.assertEqual(integrate(self.source, revert=True, patch=self.patch), "READY")
+                self.assertEqual(shortcut.read_bytes(), original)
+                self.assertEqual(self.second.read_bytes(), b"second original\n")
+                self.assert_user_data_unchanged()
+
+    def test_legacy_shortcut_patch_still_requires_whole_patch_to_match(self):
+        shortcut, _, _ = self.prepare_legacy_shortcut_patch(b"\r\n")
+        legacy = shortcut.read_bytes()
+        self.second.write_bytes(b"a conflicting edit\n")
+        with self.assertRaisesRegex(RuntimeError, "No changes made"):
+            integrate(self.source, apply=True, patch=self.patch)
+        self.assertEqual(shortcut.read_bytes(), legacy)
+        self.assertEqual(self.second.read_bytes(), b"a conflicting edit\n")
+        self.assert_user_data_unchanged()
+
+    def test_revert_applied_legacy_shortcut_patch(self):
+        shortcut, original, _ = self.prepare_legacy_shortcut_patch(b"\r\n")
+        self.assertEqual(integrate(self.source, revert=True, patch=self.patch), "READY")
+        self.assertEqual(shortcut.read_bytes(), original)
+        self.assertEqual(self.second.read_bytes(), b"second original\n")
+        self.assert_user_data_unchanged()
+
     @unittest.skipIf(os.name == "nt", "Symlink creation may require Windows privileges")
     def test_rejects_symlink_escape(self):
         outside = self.parent / "outside.cc"

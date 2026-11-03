@@ -19,6 +19,9 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PATCH = ROOT / "patches" / "windows" / "arc-workflow-settings.patch"
+SHORTCUT_SOURCE = "chrome/browser/resources/settings/system_page/browser_shortcuts_page.ts"
+LEGACY_RESTORE_CHECK = b"    return !busy && !!preset?.canModify && !!preset.hasPrevious;"
+RESTORE_CHECK = b"    return !busy && !!preset?.canModify && preset.hasPrevious;"
 
 
 def patch_targets(text: str) -> list[str]:
@@ -167,10 +170,27 @@ def integrate(source: Path, *, apply: bool = False, revert: bool = False,
         staged_patch.write_bytes(patch_bytes)
         forward = git_apply(staged_source, staged_patch, reverse=False, check=True)
         backward = git_apply(staged_source, staged_patch, reverse=True, check=True)
+        needs_upgrade = False
+        # An earlier version was applied successfully but failed Chromium's
+        # type-aware lint. Repair only that known line in the temporary copy;
+        # the complete corrected patch must then reverse-check successfully.
+        if (forward.returncode and backward.returncode
+                and SHORTCUT_SOURCE in targets
+                and b"+" + RESTORE_CHECK + b"\n" in patch_bytes):
+            shortcut_file = staged_source / SHORTCUT_SOURCE
+            shortcut_bytes = shortcut_file.read_bytes()
+            if shortcut_bytes.count(LEGACY_RESTORE_CHECK) == 1:
+                shortcut_file.write_bytes(shortcut_bytes.replace(
+                    LEGACY_RESTORE_CHECK, RESTORE_CHECK, 1))
+                corrected = git_apply(staged_source, staged_patch,
+                                      reverse=True, check=True)
+                if corrected.returncode == 0:
+                    backward = corrected
+                    needs_upgrade = True
         if forward.returncode == 0 and backward.returncode != 0:
             status = "READY"
         elif backward.returncode == 0 and forward.returncode != 0:
-            status = "APPLIED"
+            status = "UPDATE_AVAILABLE" if needs_upgrade else "APPLIED"
         else:
             raise RuntimeError(
                 "The workflow patch does not match this source tree. No changes made.\n"
@@ -181,10 +201,11 @@ def integrate(source: Path, *, apply: bool = False, revert: bool = False,
         desired = "READY" if revert else "APPLIED"
         if status == desired:
             return status
-        result = git_apply(staged_source, staged_patch, reverse=revert, check=False)
-        if result.returncode:
-            raise RuntimeError("Patch application failed in staging; no source "
-                               "changes made:\n" + result.stderr)
+        if not needs_upgrade or revert:
+            result = git_apply(staged_source, staged_patch, reverse=revert, check=False)
+            if result.returncode:
+                raise RuntimeError("Patch application failed in staging; no source "
+                                   "changes made:\n" + result.stderr)
         verified = git_apply(staged_source, staged_patch, reverse=not revert, check=True)
         if verified.returncode:
             raise RuntimeError("Patch verification failed in staging; no source "

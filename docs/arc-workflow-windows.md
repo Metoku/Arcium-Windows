@@ -29,6 +29,12 @@ checking out the branch alone does not change an already-built executable.
 
 The helper accepts `--source-dir` for a different prepared Chromium tree.
 Repeated application is a no-op. A source mismatch fails before any write.
+If the earlier workflow patch is already applied, `--check` can report
+`ARCIUM_WINDOWS_ARC_WORKFLOW_UPDATE_AVAILABLE`. Run `--apply` again to remove
+the redundant boolean conversion rejected by Chromium's TypeScript lint.
+The helper verifies the complete corrected patch before writing and changes
+only the affected source file; the other source timestamps and build outputs
+are retained.
 LF/CRLF differences between a Windows Git checkout and Chromium's source are
 handled in temporary copies. Unchanged source lines retain their exact bytes;
 inserted lines use each target file's dominant newline style. The helper never

@@ -273,7 +273,7 @@
 +
 +  private canRestoreArcPreset_(preset: BrowserArcShortcutPreset|null,
 +                              busy: boolean): boolean {
-+    return !busy && !!preset?.canModify && !!preset.hasPrevious;
++    return !busy && !!preset?.canModify && preset.hasPrevious;
 +  }
 +
 +  private async onArcPresetClick_() {
