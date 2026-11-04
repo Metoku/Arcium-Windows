@@ -49,6 +49,11 @@ APPEARANCE_SNAPSHOT_SOURCES = tuple(
     for suffix in ("h", "cc"))
 LEGACY_SNAPSHOT_SIGNATURE = b"ArciumAppearanceSnapshot() const"
 SNAPSHOT_SIGNATURE = b"ArciumAppearanceSnapshot()"
+APPEARANCE_FRAME_SOURCE = "chrome/browser/ui/views/frame/browser_frame_view_win.cc"
+LEGACY_FRAME_GRADIENT = b"      const SkColor colors[] = {color, SkColorSetA(color, 0)};\n"
+FRAME_GRADIENT = b"""      const SkColor4f colors[] = {SkColor4f::FromColor(color),
+                                 SkColor4f::FromColor(SkColorSetA(color, 0))};
+"""
 LEGACY_DISCONNECT = b"""  override disconnectedCallback() {
     ++this.workspaceGeneration_;
     super.disconnectedCallback();
@@ -317,6 +322,12 @@ def integrate(source: Path, *, apply: bool = False, revert: bool = False,
                 if before.count(LEGACY_SNAPSHOT_SIGNATURE) == 1:
                     path.write_bytes(before.replace(
                         LEGACY_SNAPSHOT_SIGNATURE, SNAPSHOT_SIGNATURE, 1))
+                    staged_upgrade = True
+            if APPEARANCE_FRAME_SOURCE in targets:
+                path = staged_source / APPEARANCE_FRAME_SOURCE
+                before = path.read_bytes()
+                if before.count(LEGACY_FRAME_GRADIENT) == 1:
+                    path.write_bytes(before.replace(LEGACY_FRAME_GRADIENT, FRAME_GRADIENT, 1))
                     staged_upgrade = True
             if staged_upgrade:
                 corrected = git_apply(staged_source, staged_patch,

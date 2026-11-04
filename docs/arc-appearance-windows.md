@@ -26,17 +26,20 @@ partly applied. Already applied catalogs are retained. The known old shortcut
 lint error can be upgraded by the existing helper.
 
 If an earlier appearance patch is already installed, the helper recognizes its
-exact CSS, WebUI handlers, surface-label expression and snapshot signatures and
+exact CSS, WebUI handlers, surface-label expression, snapshot signatures and
+gradient color block and
 reports `UPDATE_AVAILABLE`. Applying again upgrades those source files only after
-the complete corrected appearance catalog can be reversed. This covers all four
+the complete corrected appearance catalog can be reversed. This covers all five
 previous appearance versions. Unknown source edits inside the catalog's hunks
 or an incomplete catalog are rejected without source writes. Generated output
 is retained.
 
 The Settings snapshot declaration and definition are non-const because they
-use Chromium's non-const `WebUIMessageHandler::web_ui()` accessor. Reapplying to
-the latest installed version changes only those two signatures. It does not
-require reverting the integrations or cleaning `out/Default`.
+use Chromium's non-const `WebUIMessageHandler::web_ui()` accessor. The frame
+gradient uses `SkColor4f::FromColor` for its two stops, matching the pinned
+`PaintShader::MakeRadialGradient` API. Reapplying to the latest installed version
+changes only that gradient block. It does not require reverting the integrations
+or cleaning `out/Default`.
 
 `--feature appearance` selects only this integration. `--feature all --revert`
 reverts all four optional source integrations; it does not undo user appearance
@@ -134,7 +137,13 @@ and window-to-Space capture functions in small C++ hosts with API contract
 doubles. Another host compiles the actual Settings snapshot declaration,
 preference table and complete method body against a non-const `web_ui()` API.
 The old declaration/definition must fail compilation with a `web_ui` diagnostic;
-the corrected pair must compile and pass snapshot-state checks. They check OS/accessibility settings, DWM failures, composition surface
+the corrected pair must compile and pass snapshot-state checks. A frame-paint
+host compiles the complete actual `OnPaint` method against the gradient API
+excerpt in `tests/fixtures/paint_shader_radial_gradient.h`. Source replay verifies
+that excerpt verbatim against the pinned Chromium header before accepting it.
+The old integer-color call must fail compilation; the corrected float-color call
+must pass RGB/alpha, center/radius, readability-layer order, opaque-backdrop and
+standard-titlebar fallback checks. They check OS/accessibility settings, DWM failures, composition surface
 requirements, private/guest/policy contexts, mismatched profiles and explicit
 Space ownership. They do **not** link against Chromium or call Windows DWM.
 
@@ -163,7 +172,7 @@ Negative controls must reproduce the two reported panel errors and the Settings
 lifecycle/assertion errors and the reported surface-label assertion before
 validation passes.
 
-Sixteen installed-version upgrade replays cover all four earlier appearance catalogs
+Twenty installed-version upgrade replays cover all five earlier appearance catalogs
 with LF, CRLF, mixed endings and absent final newlines. They check exact source
 results, read-only detection, unchanged unrelated source and retained build output.
 

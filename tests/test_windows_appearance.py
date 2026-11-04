@@ -9,6 +9,7 @@ from scripts.apply_windows_arc_workflow import (
     APPEARANCE_CSS_SOURCE, APPEARANCE_LAYOUT_TEMPLATE, LEGACY_APPEARANCE_CSS, ROOT,
     LEGACY_SURFACE_LABEL, SURFACE_LABEL,
     APPEARANCE_SNAPSHOT_SOURCES, LEGACY_SNAPSHOT_SIGNATURE, SNAPSHOT_SIGNATURE,
+    APPEARANCE_FRAME_SOURCE, LEGACY_FRAME_GRADIENT, FRAME_GRADIENT,
     appearance_css_addition, integrate, integrate_bundle,
 )
 
@@ -425,6 +426,83 @@ class AppearanceSnapshotUpgradeTests(unittest.TestCase):
         for name, data in self.originals.items():
             self.assertEqual((self.source / name).read_bytes(), data)
         self.assertEqual(self.output.read_bytes(), b"retained compiled output")
+
+
+class AppearanceFrameUpgradeTests(unittest.TestCase):
+    def setUp(self):
+        import difflib
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.source = Path(self.temporary.name) / "src"
+        self.source.mkdir()
+        (self.source / "BUILD.gn").write_text("# fixture\n")
+        fixed_css = appearance_css_addition(
+            (ROOT / "patches/windows/arc-appearance-windows.patch").read_bytes())
+        self.corrected = {
+            APPEARANCE_CSS_SOURCE:b"/* existing */\n" + fixed_css,
+            APPEARANCE_FRAME_SOURCE:b"// frame\n" + FRAME_GRADIENT + b"// footer\n",
+            "chrome/unrelated.cc":b"unrelated feature applied\n",
+        }
+        self.originals = {name:b"original\n" for name in self.corrected}
+        self.originals[APPEARANCE_CSS_SOURCE] = b"/* existing */\n"
+        sections = []
+        for name, data in self.corrected.items():
+            path = self.source / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+            sections.extend(difflib.unified_diff(self.originals[name].decode().splitlines(True),
+                data.decode().splitlines(True), fromfile="a/" + name, tofile="b/" + name))
+        self.patch = self.source.parent / "arc-appearance-windows.patch"
+        self.patch.write_text("".join(sections))
+        self.frame = self.source / APPEARANCE_FRAME_SOURCE
+        self.frame.write_bytes(self.corrected[APPEARANCE_FRAME_SOURCE].replace(
+            FRAME_GRADIENT, LEGACY_FRAME_GRADIENT))
+        self.output = self.source / "out/Default/retained.obj"
+        self.output.parent.mkdir(parents=True)
+        self.output.write_bytes(b"retained object")
+
+    def snapshot(self):
+        return {path:(path.read_bytes(), path.stat().st_mtime_ns)
+                for path in self.source.rglob("*") if path.is_file()}
+
+    def test_frame_only_upgrade_preserves_unrelated_files_and_source_endings(self):
+        for style in ("LF", "CRLF", "mixed", "no-eof"):
+            with self.subTest(style=style):
+                expected = self.corrected[APPEARANCE_FRAME_SOURCE]
+                old = expected.replace(FRAME_GRADIENT, LEGACY_FRAME_GRADIENT)
+                if style in ("CRLF", "mixed"):
+                    old = old.replace(b"\n", b"\r\n")
+                    expected = expected.replace(b"\n", b"\r\n")
+                if style == "mixed":
+                    old = old.replace(b"// frame\r\n", b"// frame\n")
+                    expected = expected.replace(b"// frame\r\n", b"// frame\n")
+                if style == "no-eof":
+                    old = old.removesuffix(b"\n")
+                    expected = expected.removesuffix(b"\n")
+                self.frame.write_bytes(old)
+                before = self.snapshot()
+                self.assertEqual(integrate(self.source, patch=self.patch), "UPDATE_AVAILABLE")
+                self.assertEqual(before, self.snapshot())
+                self.assertEqual(integrate(self.source, patch=self.patch, apply=True), "APPLIED")
+                self.assertEqual(self.frame.read_bytes(), expected)
+                after = self.snapshot()
+                for path in before:
+                    if path != self.frame: self.assertEqual(before[path], after[path])
+                integrate(self.source, patch=self.patch, apply=True)
+                self.assertEqual(after, self.snapshot())
+
+    def test_unknown_frame_edit_rejects_upgrade_atomically(self):
+        self.frame.write_bytes(self.frame.read_bytes().replace(b"// footer", b"// user changed"))
+        before = self.snapshot()
+        with self.assertRaisesRegex(RuntimeError, "complete appearance catalog"):
+            integrate(self.source, patch=self.patch, apply=True)
+        self.assertEqual(before, self.snapshot())
+
+    def test_old_frame_version_can_be_reverted(self):
+        self.assertEqual(integrate(self.source, patch=self.patch, revert=True), "READY")
+        for name, data in self.originals.items():
+            self.assertEqual((self.source / name).read_bytes(), data)
+        self.assertEqual(self.output.read_bytes(), b"retained object")
 
 
 if __name__ == "__main__":

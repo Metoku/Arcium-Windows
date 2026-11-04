@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 import unittest
 
-from scripts.apply_windows_arc_workflow import ROOT
+from scripts.apply_windows_arc_workflow import FRAME_GRADIENT, LEGACY_FRAME_GRADIENT, ROOT
 from scripts.check_patch_overlaps import select_patch_sections
 
 
@@ -34,7 +34,7 @@ def function(source, signature):
 
 @unittest.skipUnless(shutil.which('g++') or shutil.which('c++'), 'C++ compiler required')
 class WindowsAppearanceNativeContracts(unittest.TestCase):
-    def compile_and_run(self, source, rejected_source=None):
+    def compile_and_run(self, source, rejected_source=None, rejected_diagnostic='web_ui'):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             cpp = root / 'contract.cc'
@@ -47,8 +47,8 @@ class WindowsAppearanceNativeContracts(unittest.TestCase):
                                            str(cpp), '-o', str(binary)],
                                           capture_output=True, text=True)
                 self.assertNotEqual(rejected.returncode, 0,
-                                    'The reported const web_ui() call must fail compilation')
-                self.assertIn('web_ui', rejected.stderr)
+                                    'The previously reported source must fail compilation')
+                self.assertIn(rejected_diagnostic, rejected.stderr)
                 cpp.write_text(source)
             result = subprocess.run([compiler, '-std=c++20', '-Wall', '-Wextra',
                                      str(cpp), '-o', str(binary)],
@@ -368,6 +368,120 @@ int main(){
 }
 '''
         self.compile_and_run(prefix + actual + main)
+
+    def test_frame_paint_uses_pinned_float_color_api_and_preserves_readability(self):
+        source = postimage('chrome/browser/ui/views/frame/browser_frame_view_win.cc')
+        actual = function(source, 'void BrowserFrameViewWin::OnPaint(gfx::Canvas* canvas)')
+        self.assertIn(FRAME_GRADIENT.decode(), actual)
+        declaration = (ROOT / 'tests/fixtures/paint_shader_radial_gradient.h').read_text()
+        start = declaration.index('  static sk_sp<PaintShader> MakeRadialGradient(')
+        declaration = declaration[start:declaration.index(';', start) + 1]
+        prefix = r'''
+#include <algorithm>
+#include <array>
+#include <cassert>
+#include <cmath>
+#include <cstdint>
+#include <memory>
+#include <optional>
+#include <string>
+using SkColor=uint32_t;using U8CPU=unsigned;using SkScalar=float;
+unsigned SkColorGetA(SkColor color){return color>>24;}
+SkColor SkColorSetA(SkColor color,unsigned alpha){return (color&0xffffff)|(alpha<<24);}
+struct SkColor4f {
+ float fR=0,fG=0,fB=0,fA=0;
+ static SkColor4f FromColor(SkColor color){return {
+  ((color>>16)&255)/255.f,((color>>8)&255)/255.f,(color&255)/255.f,(color>>24)/255.f};}
+ SkColor toSkColor()const{return (uint32_t(std::lround(fA*255))<<24)|
+  (uint32_t(std::lround(fR*255))<<16)|(uint32_t(std::lround(fG*255))<<8)|uint32_t(std::lround(fB*255));}
+};
+namespace SkColors {constexpr SkColor4f kTransparent{};}
+struct SkPoint {float fX,fY;static SkPoint Make(float x,float y){return {x,y};}};
+enum class SkTileMode {kClamp};struct SkMatrix{};
+namespace SkGradient {struct Interpolation{};}
+template<typename T> using sk_sp=std::shared_ptr<T>;
+namespace cc {
+SkPoint last_center{};SkScalar last_radius=0;std::array<SkColor4f,2> last_colors{};
+std::array<SkScalar,2> last_positions{};int gradient_count=0;
+struct PaintShader {
+ static SkGradient::Interpolation DefaultInterpolation(){return {};}
+'''
+        shader = r'''
+};
+sk_sp<PaintShader> PaintShader::MakeRadialGradient(
+ const SkPoint& center,SkScalar radius,const SkColor4f colors[],const SkScalar pos[],
+ int color_count,SkTileMode mode,SkGradient::Interpolation,uint32_t,const SkMatrix*,SkColor4f) {
+ assert(color_count==2 && mode==SkTileMode::kClamp);
+ last_center=center;last_radius=radius;last_colors={colors[0],colors[1]};
+ last_positions={pos[0],pos[1]};++gradient_count;
+ return std::make_shared<PaintShader>();
+}
+struct PaintFlags {void setShader(sk_sp<PaintShader> shader){assert(shader);}};
+}
+namespace gfx {
+struct Rect {int width=200,height=100;};
+struct RectF {Rect rect;explicit RectF(Rect value):rect(value){}
+ float width()const{return rect.width;}float height()const{return rect.height;}};
+struct Canvas {
+ std::string events;SkColor floor=0;
+ void DrawRect(const RectF&,const cc::PaintFlags&){events+='G';}
+ void FillRect(Rect,SkColor color){events+='F';floor=color;}
+};
+}
+struct BrowserView {bool glass=true,native_base=true;};
+namespace helium {
+struct Point {SkColor4f color=SkColor4f::FromColor(0xff336699);
+ float x=.25f,y=.75f;double radius=.5,opacity=.5;};
+struct Configuration {
+ std::optional<SkColor> chrome_contrast_floor=0x80303030;
+ double material_opacity=.2,tint_strength=.8;
+ size_t point_count=1;std::array<Point,1> points;
+} configuration;
+struct Resolution {bool uses_translucent_native_base;};
+bool ShouldUseNativeFrameGlass(BrowserView* view){return view->glass;}
+auto GetNativeFrameGlassConfiguration(BrowserView*){return configuration;}
+Resolution GetNativeFrameGlassResolution(BrowserView* view){return {view->native_base};}
+Configuration GlassSurfaceConfigurationForPainting(Configuration value){return value;}
+}
+constexpr int kColorToolbar=0;
+struct ColorProvider {SkColor GetColor(int){return 0xff101010;}};
+struct BrowserFrameViewWin {
+ BrowserView view;ColorProvider colors;int titlebar_paints=0;
+ BrowserView* GetBrowserView(){return &view;}ColorProvider* GetColorProvider(){return &colors;}
+ gfx::Rect GetLocalBounds(){return {};}
+ void PaintTitlebar(gfx::Canvas*){++titlebar_paints;}
+ void OnPaint(gfx::Canvas*);
+};
+#define TRACE_EVENT0(...) ((void)0)
+'''
+        main = r'''
+bool near(float actual,float expected){return std::abs(actual-expected)<.00001f;}
+int main(){
+ BrowserFrameViewWin frame;gfx::Canvas canvas;frame.OnPaint(&canvas);
+ assert(canvas.events=="GF" && frame.titlebar_paints==0);
+ assert(cc::gradient_count==1 && near(cc::last_radius,60));
+ assert(near(cc::last_center.fX,50) && near(cc::last_center.fY,75));
+ assert(near(cc::last_colors[0].fR,.2f) && near(cc::last_colors[0].fG,.4f));
+ assert(near(cc::last_colors[0].fB,.6f) && near(cc::last_colors[0].fA,.4f));
+ assert(near(cc::last_colors[1].fA,0) && near(cc::last_colors[1].fR,.2f));
+ assert(cc::last_positions[0]==0 && cc::last_positions[1]==1);
+ assert(SkColorGetA(canvas.floor)==128);
+ frame.view.native_base=false;canvas.events.clear();frame.OnPaint(&canvas);
+ assert(SkColorGetA(canvas.floor)==255 && canvas.events=="GF");
+ frame.view.glass=false;canvas.events.clear();frame.OnPaint(&canvas);
+ assert(canvas.events.empty() && frame.titlebar_paints==1);
+ frame.view.glass=true;helium::configuration.point_count=0;
+ canvas.events.clear();frame.OnPaint(&canvas);assert(canvas.events=="F");
+ helium::configuration.chrome_contrast_floor.reset();frame.view.native_base=true;
+ canvas.events.clear();frame.OnPaint(&canvas);
+ assert(canvas.floor==0xff101010 && canvas.events=="F");
+}
+'''
+        old_body = actual.replace(FRAME_GRADIENT.decode(), LEGACY_FRAME_GRADIENT.decode())
+        self.assertNotEqual(actual, old_body)
+        self.compile_and_run(prefix + declaration + shader + actual + main,
+                             rejected_source=prefix + declaration + shader + old_body + main,
+                             rejected_diagnostic='MakeRadialGradient')
 
 
 if __name__ == '__main__':

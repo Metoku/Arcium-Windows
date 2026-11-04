@@ -913,7 +913,7 @@
  #include "chrome/browser/ui/views/tabs/new_tab_button.h"
  #include "chrome/browser/ui/views/tabs/tab.h"
  #include "chrome/browser/ui/views/tabs/tab_strip.h"
-@@ -471,6 +475,41 @@
+@@ -471,6 +475,42 @@
  
  void BrowserFrameViewWin::OnPaint(gfx::Canvas* canvas) {
    TRACE_EVENT0("views.frame", "BrowserFrameViewWin::OnPaint");
@@ -939,7 +939,8 @@
 +          point.color.toSkColor(),
 +          static_cast<U8CPU>(std::lround(255.0 * point.opacity *
 +                                         configuration.tint_strength)));
-+      const SkColor colors[] = {color, SkColorSetA(color, 0)};
++      const SkColor4f colors[] = {SkColor4f::FromColor(color),
++                                 SkColor4f::FromColor(SkColorSetA(color, 0))};
 +      const SkScalar positions[] = {0.f, 1.f};
 +      cc::PaintFlags flags;
 +      flags.setShader(cc::PaintShader::MakeRadialGradient(

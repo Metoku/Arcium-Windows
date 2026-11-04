@@ -21,6 +21,7 @@ from scripts.apply_windows_arc_workflow import (
     APPEARANCE_CSS_SOURCE, APPEARANCE_HANDLER_RENAMES, APPEARANCE_LAYOUT_SOURCE,
     APPEARANCE_LAYOUT_TEMPLATE, LEGACY_SURFACE_LABEL, SURFACE_LABEL,
     APPEARANCE_SNAPSHOT_SOURCES, LEGACY_SNAPSHOT_SIGNATURE, SNAPSHOT_SIGNATURE,
+    APPEARANCE_FRAME_SOURCE, LEGACY_FRAME_GRADIENT, FRAME_GRADIENT,
     LEGACY_APPEARANCE_CSS, LEGACY_DISCONNECT, PATCH, ROOT,
     appearance_css_addition, git_apply, integrate, integrate_bundle,
     patch_targets, preserve_line_endings,
@@ -88,6 +89,15 @@ def check(core: Path, platform: Path | None = None,
         webui_report = None
         legacy_css_upgrade_checked = False
         legacy_ui_upgrades = []
+        paint_api = temporary / "paint_shader.h"
+        paint_api_sha256 = download_original(chromium_version(), "cc/paint/paint_shader.h",
+                                             paint_api, mirror_first=True)
+        def radial_declaration(text):
+            start = text.index("  static sk_sp<PaintShader> MakeRadialGradient(")
+            return text[start:text.index(";", start) + 1]
+        expected_api = (ROOT / "tests/fixtures/paint_shader_radial_gradient.h").read_text(encoding="utf-8")
+        if radial_declaration(paint_api.read_text(encoding="utf-8")) != radial_declaration(expected_api):
+            raise RuntimeError("Pinned PaintShader API differs from the compiled regression fixture")
         lint_config = temporary / "stylelint.config_base.mjs"
         eslint_dir = temporary / "eslint"
         tsconfig_base = temporary / "tsconfig_base.json"
@@ -142,9 +152,9 @@ def check(core: Path, platform: Path | None = None,
                 if not any(entry["endings"] == style for entry in legacy_ui_upgrades):
                     current = {target: (source / target).read_bytes() for target in targets}
                     allowed = {stem + suffix for stem in APPEARANCE_HANDLER_RENAMES
-                               for suffix in (".ts", ".html.ts")} | set(APPEARANCE_SNAPSHOT_SOURCES)
+                               for suffix in (".ts", ".html.ts")} | set(APPEARANCE_SNAPSHOT_SOURCES) | {APPEARANCE_FRAME_SOURCE}
                     for previous_version in ("original", "css-corrected", "handlers-corrected",
-                                             "surface-label-corrected"):
+                                             "surface-label-corrected", "snapshot-corrected"):
                         compact_css = previous_version == "original"
                         old = dict(current)
                         if previous_version in ("original", "css-corrected"):
@@ -165,18 +175,25 @@ def check(core: Path, platform: Path | None = None,
                         name = APPEARANCE_LAYOUT_TEMPLATE
                         if old[name].count(SURFACE_LABEL) != 1:
                             raise RuntimeError("Expected exactly one corrected surface label")
-                        if previous_version != "surface-label-corrected":
+                        if previous_version not in ("surface-label-corrected", "snapshot-corrected"):
                             old[name] = old[name].replace(SURFACE_LABEL, LEGACY_SURFACE_LABEL, 1)
-                        for name in APPEARANCE_SNAPSHOT_SOURCES:
-                            if name.endswith(".h"):
-                                fixed = SNAPSHOT_SIGNATURE + b";"
-                                legacy = LEGACY_SNAPSHOT_SIGNATURE + b";"
-                            else:
-                                fixed = b"AppearanceHandler::" + SNAPSHOT_SIGNATURE + b" {"
-                                legacy = b"AppearanceHandler::" + LEGACY_SNAPSHOT_SIGNATURE + b" {"
-                            if old[name].count(fixed) != 1:
-                                raise RuntimeError("Expected exactly one snapshot signature")
-                            old[name] = old[name].replace(fixed, legacy, 1)
+                        if previous_version != "snapshot-corrected":
+                            for name in APPEARANCE_SNAPSHOT_SOURCES:
+                                if name.endswith(".h"):
+                                    fixed = SNAPSHOT_SIGNATURE + b";"
+                                    legacy = LEGACY_SNAPSHOT_SIGNATURE + b";"
+                                else:
+                                    fixed = b"AppearanceHandler::" + SNAPSHOT_SIGNATURE + b" {"
+                                    legacy = b"AppearanceHandler::" + LEGACY_SNAPSHOT_SIGNATURE + b" {"
+                                if old[name].count(fixed) != 1:
+                                    raise RuntimeError("Expected exactly one snapshot signature")
+                                old[name] = old[name].replace(fixed, legacy, 1)
+                        name = APPEARANCE_FRAME_SOURCE
+                        normalized = old[name].replace(b"\r\n", b"\n")
+                        if normalized.count(FRAME_GRADIENT) != 1:
+                            raise RuntimeError("Expected exactly one corrected frame gradient")
+                        old[name] = preserve_line_endings(old[name], normalized.replace(
+                            FRAME_GRADIENT, LEGACY_FRAME_GRADIENT, 1))
                         if compact_css:
                             name = APPEARANCE_CSS_SOURCE
                             normalized = old[name].replace(b"\r\n", b"\n")
@@ -255,6 +272,7 @@ def check(core: Path, platform: Path | None = None,
                 "windows_platform_replayed": platform is not None,
                 "targets": sorted(targets), "original_sha256": original_hashes,
                 "upstream_patch_sections": len(replayed), "checks": checks,
+                "paint_shader_api_sha256": paint_api_sha256, "paint_shader_radial_signature_verified": True,
                 "build_output_preserved": True, "legacy_css_upgrade_verified": legacy_css_upgrade_checked,
                 "legacy_webui_upgrades": legacy_ui_upgrades,
                 "browser_compiled": False,
