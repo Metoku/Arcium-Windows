@@ -23,6 +23,30 @@ SHORTCUT_SOURCE = "chrome/browser/resources/settings/system_page/browser_shortcu
 LEGACY_RESTORE_CHECK = b"    return !busy && !!preset?.canModify && !!preset.hasPrevious;"
 RESTORE_CHECK = b"    return !busy && !!preset?.canModify && preset.hasPrevious;"
 APPEARANCE_CSS_SOURCE = "chrome/browser/resources/settings/appearance_page/appearance_layout_page.css"
+# Exact method names shipped before Chromium's template lint was replayed.
+# These replacements are staged together and accepted only when the complete
+# corrected catalog reverse-checks; unknown local edits are never patched over.
+APPEARANCE_HANDLER_RENAMES = {
+    "chrome/browser/resources/side_panel/customize_chrome/app": {
+        "onWorkspaceAppearance_": "onWorkspaceAppearanceClick_",
+        "onCloseWorkspacePanel_": "onCloseWorkspacePanelClick_",
+    },
+    "chrome/browser/resources/settings/appearance_page/appearance_layout_page": {
+        "onWorkspacePreset_": "onWorkspacePresetClick_",
+        "onResetWorkspacePalette_": "onResetWorkspacePaletteClick_",
+        "onRemoveWorkspaceGlow_": "onRemoveWorkspaceGlowClick_",
+        "onAddWorkspaceGlow_": "onAddWorkspaceGlowClick_",
+        "onWorkspaceGlow_": "onWorkspaceGlowChange_",
+    },
+}
+APPEARANCE_LAYOUT_SOURCE = (
+    "chrome/browser/resources/settings/appearance_page/appearance_layout_page.ts")
+LEGACY_DISCONNECT = b"""  override disconnectedCallback() {
+    ++this.workspaceGeneration_;
+    super.disconnectedCallback();
+  }
+
+"""
 # Exact CSS emitted by the first appearance catalog; never rewrite unknown CSS.
 LEGACY_APPEARANCE_CSS = b""".workspace-description { padding: 0 20px; color: var(--cr-secondary-text-color); }
 fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
@@ -233,21 +257,55 @@ def integrate(source: Path, *, apply: bool = False, revert: bool = False,
         if (backward.returncode
                 and patch.name == "arc-appearance-windows.patch"
                 and APPEARANCE_CSS_SOURCE in targets):
+            staged_upgrade = False
             css_file = staged_source / APPEARANCE_CSS_SOURCE
             css_bytes = css_file.read_bytes()
             if css_bytes.count(LEGACY_APPEARANCE_CSS) == 1:
                 css_file.write_bytes(css_bytes.replace(
                     LEGACY_APPEARANCE_CSS, appearance_css_addition(patch_bytes), 1))
+                staged_upgrade = True
+            for stem, renames in APPEARANCE_HANDLER_RENAMES.items():
+                for suffix in (".ts", ".html.ts"):
+                    target = stem + suffix
+                    if target not in targets:
+                        continue
+                    path = staged_source / target
+                    before = path.read_bytes()
+                    after = before
+                    for old, new in renames.items():
+                        after = re.sub(rb"\b" + old.encode() + rb"\b", new.encode(), after)
+                    if after != before:
+                        path.write_bytes(after)
+                        staged_upgrade = True
+            if APPEARANCE_LAYOUT_SOURCE in targets:
+                path = staged_source / APPEARANCE_LAYOUT_SOURCE
+                before = path.read_bytes()
+                after = before
+                # The old catalog placed this lifecycle method before
+                # connectedCallback(), contrary to Chromium's class-order rule.
+                connected = after.find(b"  override connectedCallback() {")
+                if (after.count(LEGACY_DISCONNECT) == 1
+                        and after.index(LEGACY_DISCONNECT) < connected):
+                    anchor = b"  protected showVerticalSettings_(): boolean {"
+                    if after.count(anchor) == 1:
+                        after = after.replace(LEGACY_DISCONNECT, b"", 1).replace(
+                            anchor, LEGACY_DISCONNECT + anchor, 1)
+                after = after.replace(b"    const point = points[index]!;\n",
+                                      b"    const point = points[index];\n")
+                if after != before:
+                    path.write_bytes(after)
+                    staged_upgrade = True
+            if staged_upgrade:
                 corrected = git_apply(staged_source, staged_patch,
                                       reverse=True, check=True)
-                # The complete native/UI catalog must be present. Merely finding
-                # the old CSS never authorizes edits to an otherwise unknown tree.
+                # The complete native/UI catalog must be present. Known old
+                # snippets alone never authorize changes to an unknown tree.
                 if corrected.returncode == 0:
                     backward = corrected
                     needs_upgrade = True
                 else:
                     raise RuntimeError(
-                        "Legacy appearance CSS was found, but the complete appearance "
+                        "Legacy appearance source was found, but the complete appearance "
                         "catalog could not be verified. No changes made.\n" +
                         corrected.stderr.replace(staged_source.as_posix() + "/", ""))
         if forward.returncode == 0 and backward.returncode != 0:

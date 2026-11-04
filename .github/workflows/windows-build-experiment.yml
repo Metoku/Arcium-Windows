@@ -57,7 +57,7 @@ jobs:
         with:
           node-version: "22"
       - name: Install pinned appearance validation tools
-        run: npm install --prefix work/appearance-ui --no-save --ignore-scripts --no-audit --no-fund typescript@6.0.2 stylelint@17.0.0 "@stylistic/stylelint-plugin@5.0.0" postcss@8.5.3
+        run: npm install --prefix work/appearance-ui --no-save --ignore-scripts --no-audit --no-fund typescript@6.0.2 stylelint@17.0.0 "@stylistic/stylelint-plugin@5.0.0" postcss@8.5.3 eslint@10.2.0 "@typescript-eslint/eslint-plugin@8.58.2" "@typescript-eslint/parser@8.58.2" eslint-plugin-lit@2.2.1
       - name: Replay optional Windows Arc integration patches
         run: python -m scripts.check_windows_arc_import_patch --core-dir work/windows-platform/helium-chromium --platform-dir work/windows-platform --typescript work/appearance-ui/node_modules/typescript
       - name: Upload optional Arc patch replay report (NOT a build)

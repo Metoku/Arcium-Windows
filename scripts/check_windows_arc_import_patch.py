@@ -18,8 +18,10 @@ import tempfile
 import xml.etree.ElementTree as ET
 
 from scripts.apply_windows_arc_workflow import (
-    APPEARANCE_CSS_SOURCE, LEGACY_APPEARANCE_CSS, PATCH, ROOT,
-    appearance_css_addition, git_apply, integrate, patch_targets,
+    APPEARANCE_CSS_SOURCE, APPEARANCE_HANDLER_RENAMES, APPEARANCE_LAYOUT_SOURCE,
+    LEGACY_APPEARANCE_CSS, LEGACY_DISCONNECT, PATCH, ROOT,
+    appearance_css_addition, git_apply, integrate, integrate_bundle,
+    patch_targets, preserve_line_endings,
 )
 from scripts.check_patch_overlaps import discover_patch_paths, download_original, select_patch_sections
 from scripts.windows_port import audit_staged, chromium_version, git, read_pin, read_series
@@ -28,6 +30,12 @@ from scripts.windows_port import audit_staged, chromium_version, git, read_pin, 
 IMPORT_PATCH = ROOT / "patches/windows/arc-import-windows.patch"
 PASSWORD_PATCH = ROOT / "patches/windows/arc-password-import-windows.patch"
 APPEARANCE_PATCH = ROOT / "patches/windows/arc-appearance-windows.patch"
+ESLINT_ASSETS = """eslint_ts.config_base.ts inline_event_handler.ts
+lit_element_bindings.ts lit_element_invalid_interface.ts lit_element_structure.ts
+lit_element_template_structure.ts lit_property_accessor.ts lit_reactive_properties.ts
+lit_use_fire_helper.ts no_assert_equals_boolean.ts no_mixed_type_and_value_imports.ts
+polymer_property_class_member.ts polymer_property_declare.ts query_utils.ts
+web_component_missing_deps.ts webui_eslint_plugin.ts""".split()
 
 
 def normalize_headers(diff: str) -> str:
@@ -77,11 +85,17 @@ def check(core: Path, platform: Path | None = None,
         checks = []
         webui_report = None
         legacy_css_upgrade_checked = False
+        legacy_ui_upgrades = []
         lint_config = temporary / "stylelint.config_base.mjs"
+        eslint_dir = temporary / "eslint"
         if typescript is not None:
             download_original(chromium_version(),
                 "ui/webui/resources/tools/stylelint.config_base.mjs", lint_config,
                 mirror_first=True)
+            for asset in ESLINT_ASSETS:
+                download_original(chromium_version(),
+                    "ui/webui/resources/tools/eslint/" + asset,
+                    eslint_dir / asset, mirror_first=True)
         for style in ("LF", "CRLF", "mixed", "missing-final-newline"):
             for index, (target, data) in enumerate(sorted(originals.items())):
                 normalized = data.replace(b"\r\n", b"\n")
@@ -120,11 +134,57 @@ def check(core: Path, platform: Path | None = None,
                            if target != APPEARANCE_CSS_SOURCE):
                         raise RuntimeError("CSS upgrade changed unrelated source")
                     legacy_css_upgrade_checked = True
+                if not any(entry["endings"] == style for entry in legacy_ui_upgrades):
+                    current = {target: (source / target).read_bytes() for target in targets}
+                    allowed = {stem + suffix for stem in APPEARANCE_HANDLER_RENAMES
+                               for suffix in (".ts", ".html.ts")}
+                    for compact_css in (False, True):
+                        old = dict(current)
+                        for stem, renames in APPEARANCE_HANDLER_RENAMES.items():
+                            for suffix in (".ts", ".html.ts"):
+                                name = stem + suffix
+                                normalized = old[name].replace(b"\r\n", b"\n")
+                                for previous, corrected in renames.items():
+                                    normalized = normalized.replace(corrected.encode(), previous.encode())
+                                old[name] = preserve_line_endings(old[name], normalized)
+                        name = APPEARANCE_LAYOUT_SOURCE
+                        normalized = old[name].replace(b"\r\n", b"\n")
+                        anchor = b"  private async saveWorkspace_"
+                        normalized = normalized.replace(LEGACY_DISCONNECT, b"", 1).replace(
+                            anchor, LEGACY_DISCONNECT + anchor, 1).replace(
+                            b"    const point = points[index];", b"    const point = points[index]!;")
+                        old[name] = preserve_line_endings(old[name], normalized)
+                        if compact_css:
+                            name = APPEARANCE_CSS_SOURCE
+                            normalized = old[name].replace(b"\r\n", b"\n")
+                            if not normalized.endswith(b"\n"):
+                                normalized += b"\n"
+                            normalized = normalized.replace(
+                                appearance_css_addition(APPEARANCE_PATCH.read_bytes()),
+                                LEGACY_APPEARANCE_CSS, 1)
+                            old[name] = preserve_line_endings(old[name], normalized)
+                        for target in targets:
+                            if old[target] != current[target]:
+                                (source / target).write_bytes(old[target])
+                        timestamps = {target: (source / target).stat().st_mtime_ns for target in targets}
+                        if integrate_bundle(source) != "UPDATE_AVAILABLE":
+                            raise RuntimeError("Previously installed WebUI catalog was not recognized")
+                        if timestamps != {target: (source / target).stat().st_mtime_ns for target in targets}:
+                            raise RuntimeError("WebUI upgrade check rewrote source")
+                        integrate_bundle(source, apply=True)
+                        if any((source / target).read_bytes() != current[target] for target in targets):
+                            raise RuntimeError("Installed WebUI catalog did not upgrade exactly")
+                        if any((source / target).stat().st_mtime_ns != stamp
+                               for target, stamp in timestamps.items()
+                               if target not in allowed | {APPEARANCE_CSS_SOURCE}):
+                            raise RuntimeError("WebUI upgrade rewrote unrelated source")
+                        legacy_ui_upgrades.append({"endings":style, "compact_css":compact_css})
                 ET.parse(source / "chrome/app/settings_strings.grdp")
                 if typescript is not None and webui_report is None:
                     result = subprocess.run(
                         ["node", str(ROOT / "scripts/check_windows_appearance_ui.cjs"),
-                         "--source-dir", str(source), "--typescript", str(typescript.resolve())],
+                         "--source-dir", str(source), "--typescript", str(typescript.resolve()),
+                         "--eslint-dir", str(eslint_dir)],
                         text=True, encoding="utf-8", capture_output=True)
                     if result.returncode:
                         raise RuntimeError("Appearance WebUI checks failed:\n" +
@@ -139,6 +199,15 @@ def check(core: Path, platform: Path | None = None,
                         raise RuntimeError("Chromium appearance CSS lint failed:\n" +
                                            css_result.stdout + css_result.stderr)
                     webui_report["css_lint"] = json.loads(css_result.stdout)
+                    lint_result = subprocess.run(
+                        ["node", str(ROOT / "scripts/check_windows_webui_lint.cjs"),
+                         "--source-dir", str(source), "--rules-dir", str(eslint_dir),
+                         "--node-modules", str(typescript.resolve().parent)],
+                        text=True, encoding="utf-8", capture_output=True)
+                    if lint_result.returncode:
+                        raise RuntimeError("Chromium WebUI lint checks failed:\n" +
+                                           lint_result.stdout + lint_result.stderr)
+                    webui_report["scoped_webui_lint"] = json.loads(lint_result.stdout)
                 applied_times = {target: (source / target).stat().st_mtime_ns for target in targets}
                 applied_hashes = {target: hashlib.sha256((source / target).read_bytes()).hexdigest()
                                   for target in targets}
@@ -164,6 +233,7 @@ def check(core: Path, platform: Path | None = None,
                 "targets": sorted(targets), "original_sha256": original_hashes,
                 "upstream_patch_sections": len(replayed), "checks": checks,
                 "build_output_preserved": True, "legacy_css_upgrade_verified": legacy_css_upgrade_checked,
+                "legacy_webui_upgrades": legacy_ui_upgrades,
                 "browser_compiled": False,
                 "browser_launch_verified": False, "appearance_webui": webui_report}
 

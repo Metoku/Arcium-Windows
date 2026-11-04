@@ -230,5 +230,84 @@ class AppearanceCSSUpgradeTests(unittest.TestCase):
         self.assertEqual(self.output.read_bytes(), b"existing compiled object")
 
 
+class AppearanceHandlerUpgradeTests(unittest.TestCase):
+    def setUp(self):
+        import difflib
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.source = Path(self.temporary.name) / "src"
+        self.source.mkdir()
+        (self.source / "BUILD.gn").write_text("# fixture\n")
+        self.patch = self.source.parent / "arc-appearance-windows.patch"
+        catalog = ROOT / "patches/windows/arc-appearance-windows.patch"
+        css = b"/* existing */\n" + appearance_css_addition(catalog.read_bytes())
+        self.corrected = {
+            APPEARANCE_CSS_SOURCE: css,
+            "chrome/browser/resources/side_panel/customize_chrome/app.ts":
+                b"class App {\n  onWorkspaceAppearanceClick_() {}\n  onCloseWorkspacePanelClick_() {}\n}\n",
+            "chrome/browser/resources/side_panel/customize_chrome/app.html.ts":
+                b'html`<button @click="${this.onWorkspaceAppearanceClick_}"></button>\n'
+                b'<button @click="${this.onCloseWorkspacePanelClick_}"></button>`;\n',
+            "chrome/native.cc": b"native after\n",
+        }
+        self.baseline = {name:b"original\n" for name in self.corrected}
+        self.baseline[APPEARANCE_CSS_SOURCE] = b"/* existing */\n"
+        sections = []
+        for name, data in self.corrected.items():
+            path = self.source / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+            sections.extend(difflib.unified_diff(self.baseline[name].decode().splitlines(True),
+                data.decode().splitlines(True), fromfile="a/" + name, tofile="b/" + name))
+        self.patch.write_text("".join(sections))
+        self.output = self.source / "out/Default/retained.obj"
+        self.output.parent.mkdir(parents=True)
+        self.output.write_bytes(b"retained object")
+        for name in self.corrected:
+            path = self.source / name
+            path.write_bytes(path.read_bytes().replace(b"onWorkspaceAppearanceClick_", b"onWorkspaceAppearance_")
+                             .replace(b"onCloseWorkspacePanelClick_", b"onCloseWorkspacePanel_"))
+
+    def snapshot(self):
+        return {path:(path.read_bytes(), path.stat().st_mtime_ns)
+                for path in self.source.rglob("*") if path.is_file()}
+
+    def test_installed_handlers_upgrade_together_and_preserve_native_output(self):
+        before = self.snapshot()
+        self.assertEqual(integrate(self.source, patch=self.patch), "UPDATE_AVAILABLE")
+        self.assertEqual(before, self.snapshot())
+        integrate(self.source, patch=self.patch, apply=True)
+        for name, data in self.corrected.items():
+            path = self.source / name
+            self.assertEqual(path.read_bytes(), data)
+            if not name.endswith(".ts"):
+                self.assertEqual((data, path.stat().st_mtime_ns), before[path])
+        after = self.snapshot()
+        integrate(self.source, patch=self.patch, apply=True)
+        self.assertEqual(after, self.snapshot())
+        self.assertEqual(before[self.output], after[self.output])
+
+    def test_unknown_source_edit_is_rejected_atomically(self):
+        path = self.source / "chrome/native.cc"
+        path.write_bytes(b"user edited native source\n")
+        before = self.snapshot()
+        with self.assertRaisesRegex(RuntimeError, "complete appearance catalog"):
+            integrate(self.source, patch=self.patch, apply=True)
+        self.assertEqual(before, self.snapshot())
+
+    def test_combined_old_css_and_handler_upgrade(self):
+        path = self.source / APPEARANCE_CSS_SOURCE
+        path.write_bytes(b"/* existing */\n" + LEGACY_APPEARANCE_CSS)
+        self.assertEqual(integrate(self.source, patch=self.patch, apply=True), "APPLIED")
+        for name, data in self.corrected.items():
+            self.assertEqual((self.source / name).read_bytes(), data)
+
+    def test_installed_old_handlers_can_be_reverted(self):
+        self.assertEqual(integrate(self.source, patch=self.patch, revert=True), "READY")
+        for name, data in self.baseline.items():
+            self.assertEqual((self.source / name).read_bytes(), data)
+        self.assertEqual(self.output.read_bytes(), b"retained object")
+
+
 if __name__ == "__main__":
     unittest.main()

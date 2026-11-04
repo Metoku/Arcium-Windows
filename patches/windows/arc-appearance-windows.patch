@@ -176,7 +176,7 @@
 +  <fieldset ?disabled="${this.workspaceBusy_ || !this.workspace_.available}">
 +    <div class="workspace-row">
 +      <span>$i18n{workspacePresetDescription}</span>
-+      <button id="workspacePreset" @click="${this.onWorkspacePreset_}">$i18n{workspacePreset}</button>
++      <button id="workspacePreset" @click="${this.onWorkspacePresetClick_}">$i18n{workspacePreset}</button>
 +    </div>
 +    ${['mode', 'webMode'].map(action => html`
 +    <label class="workspace-row">
@@ -210,7 +210,7 @@
 +    <p class="workspace-description" role="status">
 +      ${this.workspaceLabel_(this.workspace_.windowGlassActive ? 'workspaceGlassActive' : 'workspaceGlassFallback')}
 +    </p>
-+    <button id="resetWorkspacePalette" @click="${this.onResetWorkspacePalette_}">$i18n{workspaceResetPalette}</button>
++    <button id="resetWorkspacePalette" @click="${this.onResetWorkspacePaletteClick_}">$i18n{workspaceResetPalette}</button>
 +    <label class="workspace-row"><span>$i18n{workspaceColorEffect}</span>
 +      <select data-action="chrome" data-key="colorEffect" @change="${this.onWorkspaceChange_}"
 +          .value="${this.workspace_.chrome.colorEffect}">
@@ -233,18 +233,18 @@
 +      <details class="workspace-glow"><summary>$i18n{workspaceGlow} ${index + 1}</summary>
 +        <label class="workspace-row"><span>$i18n{workspaceColor}</span>
 +          <input type="color" .value="${point.color}" data-index="${index}" data-key="color"
-+              @change="${this.onWorkspaceGlow_}">
++              @change="${this.onWorkspaceGlowChange_}">
 +        </label>
 +        ${this.workspaceGlowControls_.map(control => html`
 +          <label class="workspace-row"><span>${this.workspaceLabel_(control.label)}</span>
 +            <input type="range" min="${control.min}" max="${control.max}" step="0.01"
 +                .value="${String(point[control.key])}" data-index="${index}" data-key="${control.key}"
-+                @change="${this.onWorkspaceGlow_}">
++                @change="${this.onWorkspaceGlowChange_}">
 +          </label>`)}
-+        <button data-index="${index}" @click="${this.onRemoveWorkspaceGlow_}">$i18n{workspaceRemoveGlow}</button>
++        <button data-index="${index}" @click="${this.onRemoveWorkspaceGlowClick_}">$i18n{workspaceRemoveGlow}</button>
 +      </details>`)}
 +    <button ?disabled="${this.workspace_.chrome.points.length >= 4}"
-+        @click="${this.onAddWorkspaceGlow_}">$i18n{workspaceAddGlow}</button>
++        @click="${this.onAddWorkspaceGlowClick_}">$i18n{workspaceAddGlow}</button>
 +    ${['controlsChroma', 'panelsChroma'].map(key => html`
 +    <label class="workspace-row"><span>${this.workspaceLabel_(key === 'controlsChroma' ? 'workspaceControlsChroma' : 'workspacePanelsChroma')}</span>
 +      <input type="range" min="0" max="2" step="0.01" data-action="chroma" data-key="${key}"
@@ -364,7 +364,7 @@
        browserLayoutPref_: {type: Object},
        browserLayoutOptions_: {type: Array},
        showVerticalTabsExpandOnHoverEnabled_: {type: Boolean},
-@@ -58,6 +83,133 @@
+@@ -58,6 +83,128 @@
        zenModeSidebarPinnedPref_: {type: Object},
        forcedExpandOnHoverPref_: {type: Object},
      };
@@ -409,11 +409,6 @@
 +    }
 +  }
 +
-+  override disconnectedCallback() {
-+    ++this.workspaceGeneration_;
-+    super.disconnectedCallback();
-+  }
-+
 +  private async saveWorkspace_(action: string, value: unknown) {
 +    if (this.workspaceBusy_ || !this.workspace_?.spaceId) return;
 +    const target = this.workspace_.spaceId;
@@ -433,11 +428,11 @@
 +    }
 +  }
 +
-+  protected onResetWorkspacePalette_() {
++  protected onResetWorkspacePaletteClick_() {
 +    void this.saveWorkspace_('resetPalette', true);
 +  }
 +
-+  protected onWorkspacePreset_() {
++  protected onWorkspacePresetClick_() {
 +    void this.saveWorkspace_('preset', true);
 +  }
 +
@@ -469,13 +464,13 @@
 +    void this.saveWorkspace_(action, value);
 +  }
 +
-+  protected onWorkspaceGlow_(event: Event) {
++  protected onWorkspaceGlowChange_(event: Event) {
 +    const input = event.currentTarget as HTMLInputElement;
 +    const index = Number(input.dataset['index']);
 +    const key = input.dataset['key'];
 +    const points = this.workspace_?.chrome.points.map(point => ({...point}));
 +    if (!points?.[index] || !key) return;
-+    const point = points[index]!;
++    const point = points[index];
 +    if (key === 'color') point.color = input.value;
 +    else if (key === 'x' || key === 'y' || key === 'radius' || key === 'opacity') {
 +      point[key] = Number(input.value);
@@ -483,7 +478,7 @@
 +    void this.saveWorkspace_('chrome', {points});
 +  }
 +
-+  protected onAddWorkspaceGlow_() {
++  protected onAddWorkspaceGlowClick_() {
 +    const points = this.workspace_?.chrome.points.map(point => ({...point}));
 +    if (!points || points.length >= 4) return;
 +    points.push({id: crypto.randomUUID(), color: '#a8baff', x: 0.5,
@@ -491,14 +486,14 @@
 +    void this.saveWorkspace_('chrome', {points, enabled: true, colorEffect: 'glows'});
 +  }
 +
-+  protected onRemoveWorkspaceGlow_(event: Event) {
++  protected onRemoveWorkspaceGlowClick_(event: Event) {
 +    const index = Number((event.currentTarget as HTMLElement).dataset['index']);
 +    const points = this.workspace_?.chrome.points.filter((_, i) => i !== index);
 +    if (points) void this.saveWorkspace_('chrome', {points});
    }
  
    protected accessor browserLayoutPref_: PrefObject<number>|undefined =
-@@ -100,6 +252,13 @@
+@@ -100,6 +247,13 @@
    override connectedCallback() {
      super.connectedCallback();
  
@@ -512,6 +507,18 @@
      this.mirrorPrefs({
        'helium.browser.layout': 'browserLayoutPref_',
        'helium.browser.zen_mode': 'zenModePref_',
+@@ -107,6 +261,11 @@
+     });
+   }
+ 
++  override disconnectedCallback() {
++    ++this.workspaceGeneration_;
++    super.disconnectedCallback();
++  }
++
+   protected showVerticalSettings_(): boolean {
+     return this.browserLayoutPref_?.value === BrowserLayout.VERTICAL;
+   }
 --- a/chrome/browser/resources/side_panel/customize_chrome/app.html.ts
 +++ b/chrome/browser/resources/side_panel/customize_chrome/app.html.ts
 @@ -1,6 +1,8 @@
@@ -528,10 +535,10 @@
    // clang-format off
    return html`<!--_html_template_start_-->
 +<div class="sp-card" style="display:flex;gap:8px;padding:12px">
-+  ${loadTimeData.getBoolean('isWindowsWorkspaceAppearance') ? html`<cr-button id="workspaceAppearance" @click="${this.onWorkspaceAppearance_}">
++  ${loadTimeData.getBoolean('isWindowsWorkspaceAppearance') ? html`<cr-button id="workspaceAppearance" @click="${this.onWorkspaceAppearanceClick_}">
 +    $i18n{workspaceAppearance}
 +  </cr-button>` : ''}
-+  <cr-button id="closeWorkspacePanel" @click="${this.onCloseWorkspacePanel_}">
++  <cr-button id="closeWorkspacePanel" @click="${this.onCloseWorkspacePanelClick_}">
 +    $i18n{closeWorkspacePanel}
 +  </cr-button>
 +</div>
@@ -548,15 +555,15 @@
 +    if (event.key === 'Escape' && !event.defaultPrevented && !event.isComposing) {
 +      event.preventDefault();
 +      event.stopPropagation();
-+      this.onCloseWorkspacePanel_();
++      this.onCloseWorkspacePanelClick_();
 +    }
 +  };
 +
-+  protected onCloseWorkspacePanel_() {
++  protected onCloseWorkspacePanelClick_() {
 +    this.apiProxy_.handler.closePanel();
 +  }
 +
-+  protected onWorkspaceAppearance_() {
++  protected onWorkspaceAppearanceClick_() {
 +    this.apiProxy_.handler.openWorkspaceAppearance();
 +  }
 +

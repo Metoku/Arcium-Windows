@@ -76,7 +76,7 @@ function evaluate(text, filename) {
 }
 // Type-check the new Settings fields and handlers with typed WebUI adapters.
 // The real Chromium dependency graph remains a separate compilation gate.
-function checkIsolatedTypes() {
+async function checkIsolatedTypes() {
   const os = require('node:os');
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'arcium-appearance-types-'));
   try {
@@ -120,9 +120,28 @@ function checkIsolatedTypes() {
         lib:['lib.es2022.d.ts','lib.dom.d.ts']});
     const errors = ts.getPreEmitDiagnostics(program);
     assert.equal(errors.length, 0, errors.map(d => ts.flattenDiagnosticMessageText(d.messageText,'\n')).join('\n'));
+    if (args.includes('--eslint-dir')) {
+      const {checkLint} = require('./check_windows_webui_lint.cjs');
+      const options = {
+        source:temporary, rulesDir:path.resolve(value('--eslint-dir')),
+        modules:path.dirname(path.resolve(value('--typescript'))), program,
+        files:['appearance_layout_page.ts'], typed:true};
+      const report = await checkLint(options);
+      const file = path.join(temporary, 'appearance_layout_page.ts');
+      const disconnect = '  override disconnectedCallback() {\n    ++this.workspaceGeneration_;\n    super.disconnectedCallback();\n  }\n\n';
+      const legacy = fs.readFileSync(file, 'utf8').replace(disconnect, '')
+        .replace('  private async saveWorkspace_', disconnect + '  private async saveWorkspace_')
+        .replace('const point = points[index];', 'const point = points[index]!;');
+      fs.writeFileSync(file, legacy);
+      const legacyProgram = ts.createProgram(program.getRootFileNames(), program.getCompilerOptions());
+      await checkLint({...options, program:legacyProgram, expectedRules:[
+        '@webui-eslint/lit-element-structure', '@typescript-eslint/no-unnecessary-type-assertion']});
+      report.legacy_settings_errors_reproduced = true;
+      return report;
+    }
+    return null;
   } finally {fs.rmSync(temporary,{recursive:true,force:true});}
 }
-checkIsolatedTypes();
 const Layout = evaluate(layout, 'appearance_layout_page.ts').SettingsAppearanceLayoutPageElement;
 const getHtml = evaluate(template, 'appearance_layout_page.html.ts').getHtml;
 transpile(panel, 'customize_chrome_app.ts');
@@ -137,6 +156,7 @@ async function test(name, body) {
   await body(); tests.push(name);
 }
 (async () => {
+  const typedLint = await checkIsolatedTypes();
   await test('color commits a Space tint without rewriting unrelated recipe fields', async () => {
     const el = create(); change(el, 'chrome', 'tintColor', '#aabbcc'); await settle();
     assert.equal(request.spaceId, 'space-a'); assert.equal(request.action, 'chrome');
@@ -147,19 +167,19 @@ async function test(name, body) {
     assert.deepEqual(copy(request.value), {material: 'frosted', enabled: true});
   });
   await test('glow edits preserve IDs and untouched points', async () => {
-    const el = create(); el.onWorkspaceGlow_({currentTarget: {dataset: {index: '1', key: 'x'}, value: '0.4'}});
+    const el = create(); el.onWorkspaceGlowChange_({currentTarget: {dataset: {index: '1', key: 'x'}, value: '0.4'}});
     await settle(); assert.equal(request.value.points[0].id, 'first');
     assert.equal(request.value.points[0].x, 0.1); assert.equal(request.value.points[1].id, 'second');
     assert.equal(request.value.points[1].x, 0.4);
   });
   await test('glow count is bounded and deletion targets only the chosen point', async () => {
     const el = create(); el.workspace_.chrome.points.push(copy(state.chrome.points[0]), copy(state.chrome.points[0]));
-    el.onAddWorkspaceGlow_(); assert.equal(request, null);
-    el.onRemoveWorkspaceGlow_({currentTarget: {dataset: {index: '1'}}}); await settle();
+    el.onAddWorkspaceGlowClick_(); assert.equal(request, null);
+    el.onRemoveWorkspaceGlowClick_({currentTarget: {dataset: {index: '1'}}}); await settle();
     assert.equal(request.value.points.length, 3); assert.equal(request.value.points[0].id, 'first');
   });
   await test('new glow gets a unique ID and selects the gradient effect', async () => {
-    const el = create(); el.onAddWorkspaceGlow_(); await settle();
+    const el = create(); el.onAddWorkspaceGlowClick_(); await settle();
     assert.equal(request.value.points.length, 3); assert.notEqual(request.value.points[2].id, 'first');
     assert.equal(request.value.colorEffect, 'glows');
   });
@@ -198,24 +218,25 @@ async function test(name, body) {
   const body = name => method(name).body.getText(parsed);
   await test('panel Close invokes the Mojo close action', async () => {
     let closed=0;
-    const fn = vm.runInNewContext('(function()'+body('onCloseWorkspacePanel_')+')');
+    const fn = vm.runInNewContext('(function()'+body('onCloseWorkspacePanelClick_')+')');
     fn.call({apiProxy_: {handler: {closePanel: () => closed++}}}); assert.equal(closed, 1);
   });
   await test('panel appearance button opens the shared editor', async () => {
     let opened=0;
-    const fn = vm.runInNewContext('(function()'+body('onWorkspaceAppearance_')+')');
+    const fn = vm.runInNewContext('(function()'+body('onWorkspaceAppearanceClick_')+')');
     fn.call({apiProxy_: {handler: {openWorkspaceAppearance: () => opened++}}}); assert.equal(opened, 1);
   });
   await test('Escape closes the panel but respects composing or handled keys', async () => {
     const init = method('onWorkspacePanelKeyDown_').initializer.getText(parsed);
     const expression = transpile('const callback = '+init+'; exports.callback=callback;', 'escape.ts');
     let closed=0;const exports={};
-    vm.runInNewContext('(function(){'+expression+'}).call(host)', {exports,host:{onCloseWorkspacePanel_:()=>closed++}});
+    vm.runInNewContext('(function(){'+expression+'}).call(host)', {exports,host:{onCloseWorkspacePanelClick_:()=>closed++}});
     const event = {key:'Escape',defaultPrevented:false,isComposing:false,preventDefault(){},stopPropagation(){}};
     exports.callback(event); assert.equal(closed,1);
     exports.callback({...event,defaultPrevented:true}); exports.callback({...event,isComposing:true});
     assert.equal(closed,1);
   });
   console.log(JSON.stringify({status:'ISOLATED_WEBUI_CONTRACTS_PASSED',tests,
+    typed_lint:typedLint,
     typescript:ts.version,isolated_strict_types_verified:true,browser_render_verified:false,chromium_transitive_types_verified:false}));
 })().catch(error => {console.error(error);process.exitCode=1;});
