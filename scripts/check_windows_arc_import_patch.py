@@ -159,7 +159,9 @@ def check(core: Path, platform: Path | None = None,
         replay_targets |= {path for path in all_paths if path.startswith(ONBOARDING_ROOT + "/")}
     original_hashes = {}
     with tempfile.TemporaryDirectory(prefix="arcium-arc-import-replay-") as temporary:
-        temporary = Path(temporary)
+        # Windows TEMP may use RUNNER~1 while Node resolves its modules through
+        # the long account name. Vite's root and module paths must agree.
+        temporary = Path(temporary).resolve()
         source = temporary / "src"
         source.mkdir()
         # This marker satisfies the helper's source-root check; the fixture

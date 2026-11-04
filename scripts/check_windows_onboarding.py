@@ -117,6 +117,9 @@ def verify_native_sources(source: Path) -> dict:
 
 
 def build_onboarding_frontend(source: Path) -> dict:
+    # Resolve Windows 8.3 aliases/junctions before passing both cwd and paths to
+    # Node. Its ESM loader otherwise expands only one side of Vite's root.
+    source = source.resolve(strict=True)
     root = source / ONBOARDING_ROOT
     output = source.parent / 'onboarding-dist'
     header = source.parent / 'onboarding-localized.h'
