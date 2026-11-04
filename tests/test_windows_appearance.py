@@ -6,7 +6,8 @@ import tempfile
 import unittest
 
 from scripts.apply_windows_arc_workflow import (
-    APPEARANCE_CSS_SOURCE, LEGACY_APPEARANCE_CSS, ROOT,
+    APPEARANCE_CSS_SOURCE, APPEARANCE_LAYOUT_TEMPLATE, LEGACY_APPEARANCE_CSS, ROOT,
+    LEGACY_SURFACE_LABEL, SURFACE_LABEL,
     appearance_css_addition, integrate, integrate_bundle,
 )
 
@@ -249,6 +250,7 @@ class AppearanceHandlerUpgradeTests(unittest.TestCase):
                 b'html`<button @click="${this.onWorkspaceAppearanceClick_}"></button>\n'
                 b'<button @click="${this.onCloseWorkspacePanelClick_}"></button>`;\n',
             "chrome/native.cc": b"native after\n",
+            APPEARANCE_LAYOUT_TEMPLATE: b"// template\nhtml`" + SURFACE_LABEL + b"`;\n// footer\n",
         }
         self.baseline = {name:b"original\n" for name in self.corrected}
         self.baseline[APPEARANCE_CSS_SOURCE] = b"/* existing */\n"
@@ -266,7 +268,8 @@ class AppearanceHandlerUpgradeTests(unittest.TestCase):
         for name in self.corrected:
             path = self.source / name
             path.write_bytes(path.read_bytes().replace(b"onWorkspaceAppearanceClick_", b"onWorkspaceAppearance_")
-                             .replace(b"onCloseWorkspacePanelClick_", b"onCloseWorkspacePanel_"))
+                             .replace(b"onCloseWorkspacePanelClick_", b"onCloseWorkspacePanel_")
+                             .replace(SURFACE_LABEL, LEGACY_SURFACE_LABEL))
 
     def snapshot(self):
         return {path:(path.read_bytes(), path.stat().st_mtime_ns)
@@ -307,6 +310,37 @@ class AppearanceHandlerUpgradeTests(unittest.TestCase):
         for name, data in self.baseline.items():
             self.assertEqual((self.source / name).read_bytes(), data)
         self.assertEqual(self.output.read_bytes(), b"retained object")
+
+    def test_latest_installed_template_only_upgrade_preserves_other_sources(self):
+        for style in ("LF", "CRLF", "mixed", "no-eof"):
+            with self.subTest(style=style):
+                for name, data in self.corrected.items():
+                    (self.source / name).write_bytes(data)
+                path = self.source / APPEARANCE_LAYOUT_TEMPLATE
+                old = self.corrected[APPEARANCE_LAYOUT_TEMPLATE].replace(SURFACE_LABEL, LEGACY_SURFACE_LABEL)
+                if style in ("CRLF", "mixed"):
+                    old = old.replace(b"\n", b"\r\n")
+                if style == "mixed": old = old.replace(b"// template\r\n", b"// template\n")
+                if style == "no-eof": old = old.removesuffix(b"\n")
+                path.write_bytes(old)
+                before = self.snapshot()
+                self.assertEqual(integrate(self.source, patch=self.patch), "UPDATE_AVAILABLE")
+                self.assertEqual(before, self.snapshot())
+                self.assertEqual(integrate(self.source, patch=self.patch, apply=True), "APPLIED")
+                self.assertEqual(path.read_bytes(), old.replace(LEGACY_SURFACE_LABEL, SURFACE_LABEL))
+                after = self.snapshot()
+                for file in before:
+                    if file != path: self.assertEqual(before[file], after[file])
+                integrate(self.source, patch=self.patch, apply=True)
+                self.assertEqual(after, self.snapshot())
+
+    def test_unknown_template_edit_prevents_all_source_writes(self):
+        path = self.source / APPEARANCE_LAYOUT_TEMPLATE
+        path.write_bytes(path.read_bytes().replace(b"toUpperCase", b"toLowerCase"))
+        before = self.snapshot()
+        with self.assertRaisesRegex(RuntimeError, "complete appearance catalog"):
+            integrate(self.source, patch=self.patch, apply=True)
+        self.assertEqual(before, self.snapshot())
 
 
 if __name__ == "__main__":

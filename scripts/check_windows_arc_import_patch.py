@@ -19,6 +19,7 @@ import xml.etree.ElementTree as ET
 
 from scripts.apply_windows_arc_workflow import (
     APPEARANCE_CSS_SOURCE, APPEARANCE_HANDLER_RENAMES, APPEARANCE_LAYOUT_SOURCE,
+    APPEARANCE_LAYOUT_TEMPLATE, LEGACY_SURFACE_LABEL, SURFACE_LABEL,
     LEGACY_APPEARANCE_CSS, LEGACY_DISCONNECT, PATCH, ROOT,
     appearance_css_addition, git_apply, integrate, integrate_bundle,
     patch_targets, preserve_line_endings,
@@ -88,10 +89,13 @@ def check(core: Path, platform: Path | None = None,
         legacy_ui_upgrades = []
         lint_config = temporary / "stylelint.config_base.mjs"
         eslint_dir = temporary / "eslint"
+        tsconfig_base = temporary / "tsconfig_base.json"
         if typescript is not None:
             download_original(chromium_version(),
                 "ui/webui/resources/tools/stylelint.config_base.mjs", lint_config,
                 mirror_first=True)
+            download_original(chromium_version(), "tools/typescript/tsconfig_base.json",
+                              tsconfig_base, mirror_first=True)
             for asset in ESLINT_ASSETS:
                 download_original(chromium_version(),
                     "ui/webui/resources/tools/eslint/" + asset,
@@ -138,22 +142,28 @@ def check(core: Path, platform: Path | None = None,
                     current = {target: (source / target).read_bytes() for target in targets}
                     allowed = {stem + suffix for stem in APPEARANCE_HANDLER_RENAMES
                                for suffix in (".ts", ".html.ts")}
-                    for compact_css in (False, True):
+                    for previous_version in ("original", "css-corrected", "handlers-corrected"):
+                        compact_css = previous_version == "original"
                         old = dict(current)
-                        for stem, renames in APPEARANCE_HANDLER_RENAMES.items():
-                            for suffix in (".ts", ".html.ts"):
-                                name = stem + suffix
-                                normalized = old[name].replace(b"\r\n", b"\n")
-                                for previous, corrected in renames.items():
-                                    normalized = normalized.replace(corrected.encode(), previous.encode())
-                                old[name] = preserve_line_endings(old[name], normalized)
-                        name = APPEARANCE_LAYOUT_SOURCE
-                        normalized = old[name].replace(b"\r\n", b"\n")
-                        anchor = b"  private async saveWorkspace_"
-                        normalized = normalized.replace(LEGACY_DISCONNECT, b"", 1).replace(
-                            anchor, LEGACY_DISCONNECT + anchor, 1).replace(
-                            b"    const point = points[index];", b"    const point = points[index]!;")
-                        old[name] = preserve_line_endings(old[name], normalized)
+                        if previous_version != "handlers-corrected":
+                            for stem, renames in APPEARANCE_HANDLER_RENAMES.items():
+                                for suffix in (".ts", ".html.ts"):
+                                    name = stem + suffix
+                                    normalized = old[name].replace(b"\r\n", b"\n")
+                                    for previous, corrected in renames.items():
+                                        normalized = normalized.replace(corrected.encode(), previous.encode())
+                                    old[name] = preserve_line_endings(old[name], normalized)
+                            name = APPEARANCE_LAYOUT_SOURCE
+                            normalized = old[name].replace(b"\r\n", b"\n")
+                            anchor = b"  private async saveWorkspace_"
+                            normalized = normalized.replace(LEGACY_DISCONNECT, b"", 1).replace(
+                                anchor, LEGACY_DISCONNECT + anchor, 1).replace(
+                                b"    const point = points[index];", b"    const point = points[index]!;")
+                            old[name] = preserve_line_endings(old[name], normalized)
+                        name = APPEARANCE_LAYOUT_TEMPLATE
+                        if old[name].count(SURFACE_LABEL) != 1:
+                            raise RuntimeError("Expected exactly one corrected surface label")
+                        old[name] = old[name].replace(SURFACE_LABEL, LEGACY_SURFACE_LABEL, 1)
                         if compact_css:
                             name = APPEARANCE_CSS_SOURCE
                             normalized = old[name].replace(b"\r\n", b"\n")
@@ -178,13 +188,13 @@ def check(core: Path, platform: Path | None = None,
                                for target, stamp in timestamps.items()
                                if target not in allowed | {APPEARANCE_CSS_SOURCE}):
                             raise RuntimeError("WebUI upgrade rewrote unrelated source")
-                        legacy_ui_upgrades.append({"endings":style, "compact_css":compact_css})
+                        legacy_ui_upgrades.append({"endings":style, "previous_version":previous_version})
                 ET.parse(source / "chrome/app/settings_strings.grdp")
                 if typescript is not None and webui_report is None:
                     result = subprocess.run(
                         ["node", str(ROOT / "scripts/check_windows_appearance_ui.cjs"),
                          "--source-dir", str(source), "--typescript", str(typescript.resolve()),
-                         "--eslint-dir", str(eslint_dir)],
+                         "--eslint-dir", str(eslint_dir), "--tsconfig-base", str(tsconfig_base)],
                         text=True, encoding="utf-8", capture_output=True)
                     if result.returncode:
                         raise RuntimeError("Appearance WebUI checks failed:\n" +

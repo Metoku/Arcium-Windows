@@ -29,7 +29,8 @@ If an earlier appearance patch is already installed, the helper recognizes its
 exact CSS and WebUI handler versions and reports `UPDATE_AVAILABLE`. Applying
 again upgrades those source files only after the complete corrected appearance
 catalog can be reversed. This covers both the original compact CSS and the
-later CSS-corrected catalog. Unknown source edits or an incomplete native/UI
+later CSS-corrected and handler-corrected catalogs. The current fix replaces
+`value[0]!.toUpperCase()` with `value.charAt(0).toUpperCase()` in the surface label. Unknown source edits or an incomplete native/UI
 catalog are rejected without source writes. Generated output is retained.
 
 `--feature appearance` selects only this integration. `--feature all --revert`
@@ -144,12 +145,17 @@ The checker also downloads Chromium's exact ESLint config and WebUI rules at the
 pinned revision. It checks all seven patched TypeScript/template files, including
 click/change handler names and lifecycle method order. The six rules requiring
 the absent transitive/generated graph are explicitly listed as skipped in the
-partial-source report. The strictly typed Settings adapter additionally runs all
-applicable default rules on its class file, including unnecessary assertions.
+partial-source report. The strictly typed Settings adapter additionally runs all applicable default
+rules on both the class and HTML template, including unnecessary assertions,
+reactive-property and expression-binding checks. It preserves the actual Lit
+import names so the upstream template rules execute. Compiler flags come from
+the pinned Chromium `tools/typescript/tsconfig_base.json`; the pair also passes
+with indexed-access checking disabled for compatibility with existing builds.
 Negative controls must reproduce the two reported panel errors and the Settings
-lifecycle/assertion errors before validation passes.
+lifecycle/assertion errors and the reported surface-label assertion before
+validation passes.
 
-Eight installed-version upgrade replays cover both earlier appearance catalogs
+Twelve installed-version upgrade replays cover all three earlier appearance catalogs
 with LF, CRLF, mixed endings and absent final newlines. They check exact source
 results, read-only detection and retained native source/build output.
 

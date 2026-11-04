@@ -41,6 +41,9 @@ APPEARANCE_HANDLER_RENAMES = {
 }
 APPEARANCE_LAYOUT_SOURCE = (
     "chrome/browser/resources/settings/appearance_page/appearance_layout_page.ts")
+APPEARANCE_LAYOUT_TEMPLATE = APPEARANCE_LAYOUT_SOURCE.removesuffix(".ts") + ".html.ts"
+LEGACY_SURFACE_LABEL = b"value[0]!.toUpperCase() + value.slice(1)"
+SURFACE_LABEL = b"value.charAt(0).toUpperCase() + value.slice(1)"
 LEGACY_DISCONNECT = b"""  override disconnectedCallback() {
     ++this.workspaceGeneration_;
     super.disconnectedCallback();
@@ -294,6 +297,12 @@ def integrate(source: Path, *, apply: bool = False, revert: bool = False,
                                       b"    const point = points[index];\n")
                 if after != before:
                     path.write_bytes(after)
+                    staged_upgrade = True
+            if APPEARANCE_LAYOUT_TEMPLATE in targets:
+                path = staged_source / APPEARANCE_LAYOUT_TEMPLATE
+                before = path.read_bytes()
+                if before.count(LEGACY_SURFACE_LABEL) == 1:
+                    path.write_bytes(before.replace(LEGACY_SURFACE_LABEL, SURFACE_LABEL, 1))
                     staged_upgrade = True
             if staged_upgrade:
                 corrected = git_apply(staged_source, staged_patch,

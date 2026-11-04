@@ -9,8 +9,8 @@ const path = require('node:path');
 const vm = require('node:vm');
 const args = process.argv.slice(2);
 const value = name => args[args.indexOf(name) + 1];
-if (!args.includes('--source-dir') || !args.includes('--typescript')) {
-  throw new Error('Use --source-dir PATH --typescript PATH_TO_TYPESCRIPT_MODULE');
+if (['--source-dir', '--typescript', '--tsconfig-base'].some(arg => !args.includes(arg))) {
+  throw new Error('Use --source-dir PATH --typescript PATH_TO_TYPESCRIPT_MODULE --tsconfig-base PATH');
 }
 const source = path.resolve(value('--source-dir'));
 const ts = require(path.resolve(value('--typescript')));
@@ -81,10 +81,10 @@ async function checkIsolatedTypes() {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'arcium-appearance-types-'));
   try {
     const rewrite = text => text
-      .replaceAll("'/shared/settings/prefs2/pref_service_observer_mixin_lit.js'", "'fixture-prefs'")
-      .replaceAll("'//resources/lit/v3_0/lit.rollup.js'", "'fixture-lit'");
+      .replaceAll("'/shared/settings/prefs2/pref_service_observer_mixin_lit.js'", "'fixture-prefs'");
     fs.writeFileSync(path.join(temporary, 'appearance_layout_page.ts'), rewrite(layout));
     fs.writeFileSync(path.join(temporary, 'appearance_layout_page.html.ts'), rewrite(template));
+    fs.writeFileSync(path.join(temporary, 'lit-adapter.ts'), 'export function html(strings:TemplateStringsArray,...values:unknown[]):unknown{return [strings,values];}');
     fs.writeFileSync(path.join(temporary, 'stubs.d.ts'), `
       declare namespace chrome.settingsPrivate {
         interface PrefObject<T> {key:string;type:unknown;value:T;}
@@ -96,7 +96,6 @@ async function checkIsolatedTypes() {
           render():unknown;connectedCallback():void;disconnectedCallback():void;
         }
       }
-      declare module 'fixture-lit' {export function html(strings:TemplateStringsArray,...values:unknown[]):unknown;}
       declare module 'fixture-prefs' {
         export function PrefServiceObserverMixinLit<T extends new (...args:any[])=>HTMLElement>(base:T):
           T & (new (...args:any[])=>{mirrorPrefs(names:Record<string,string>):void;});
@@ -111,13 +110,28 @@ async function checkIsolatedTypes() {
       declare module '*controls/settings_dropdown_menu.js' {}
       declare module '*controls/settings_radio_group.js' {}
       declare module '*controls/settings_toggle_button.js' {}
+      interface HTMLElementTagNameMap {
+        'settings-toggle-button': HTMLElement & {pref:chrome.settingsPrivate.PrefObject<boolean>};
+        'settings-dropdown-menu': HTMLElement & {menuOptions:Array<{value:number|string,name:string}>};
+      }
       declare module '*settings_page/settings_section.js' {}
       declare module '*.css.js' {export function getCss():unknown;}
     `);
-    const program = ts.createProgram(['appearance_layout_page.ts', 'appearance_layout_page.html.ts', 'stubs.d.ts']
-      .map(file => path.join(temporary, file)), {strict:true,noEmit:true,noUncheckedIndexedAccess:true,
-        target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext,moduleResolution:ts.ModuleResolutionKind.Bundler,
-        lib:['lib.es2022.d.ts','lib.dom.d.ts']});
+    const configFile = path.resolve(value('--tsconfig-base'));
+    const config = JSON.parse(fs.readFileSync(configFile, 'utf8'));
+    const {options:compilerOptions, errors:configErrors} = ts.convertCompilerOptionsFromJson(
+      config.compilerOptions, temporary);
+    assert.equal(configErrors.length, 0);
+    // Use the pinned compiler flags; dependency lookup is supplied by these
+    // isolated typed adapters instead of a full Chromium checkout.
+    delete compilerOptions.types;
+    delete compilerOptions.typeRoots;
+    compilerOptions.noEmit = true;
+    compilerOptions.rootDir = temporary.replaceAll('\\','/');
+    compilerOptions.paths = {'//resources/lit/v3_0/lit.rollup.js':[path.join(temporary, 'lit-adapter.ts')]};
+    const roots = ['appearance_layout_page.ts', 'appearance_layout_page.html.ts', 'stubs.d.ts']
+      .map(file => path.join(temporary, file));
+    const program = ts.createProgram(roots, compilerOptions);
     const errors = ts.getPreEmitDiagnostics(program);
     assert.equal(errors.length, 0, errors.map(d => ts.flattenDiagnosticMessageText(d.messageText,'\n')).join('\n'));
     if (args.includes('--eslint-dir')) {
@@ -125,8 +139,27 @@ async function checkIsolatedTypes() {
       const options = {
         source:temporary, rulesDir:path.resolve(value('--eslint-dir')),
         modules:path.dirname(path.resolve(value('--typescript'))), program,
-        files:['appearance_layout_page.ts'], typed:true};
+        files:['appearance_layout_page.ts', 'appearance_layout_page.html.ts'], typed:true};
       const report = await checkLint(options);
+      const compatibilityOptions = {...compilerOptions, noUncheckedIndexedAccess:false};
+      const compatibilityProgram = ts.createProgram(roots, compatibilityOptions);
+      const compatibilityErrors = ts.getPreEmitDiagnostics(compatibilityProgram);
+      assert.equal(compatibilityErrors.length, 0, compatibilityErrors.map(d =>
+        ts.flattenDiagnosticMessageText(d.messageText, '\n')).join('\n'));
+      await checkLint({...options, program:compatibilityProgram});
+      report.indexed_access_modes_checked = [compilerOptions.noUncheckedIndexedAccess, false];
+      report.compiler_config_sha256 = crypto.createHash('sha256')
+        .update(fs.readFileSync(configFile)).digest('hex');
+      const templateFile = path.join(temporary, 'appearance_layout_page.html.ts');
+      const fixedTemplate = fs.readFileSync(templateFile, 'utf8');
+      const oldTemplate = fixedTemplate.replace('value.charAt(0).toUpperCase()', 'value[0]!.toUpperCase()');
+      assert.notEqual(oldTemplate, fixedTemplate);
+      fs.writeFileSync(templateFile, oldTemplate);
+      await checkLint({...options, files:['appearance_layout_page.html.ts'],
+        program:ts.createProgram(roots, compatibilityOptions),
+        expectedRules:['@typescript-eslint/no-unnecessary-type-assertion']});
+      fs.writeFileSync(templateFile, fixedTemplate);
+      report.reported_template_error_reproduced = true;
       const file = path.join(temporary, 'appearance_layout_page.ts');
       const disconnect = '  override disconnectedCallback() {\n    ++this.workspaceGeneration_;\n    super.disconnectedCallback();\n  }\n\n';
       const legacy = fs.readFileSync(file, 'utf8').replace(disconnect, '')

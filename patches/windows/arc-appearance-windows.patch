@@ -254,7 +254,7 @@
 +    <label class="workspace-row"><span>$i18n{workspaceSurfaces}</span>
 +      <select data-action="surface" .value="${this.workspace_.surface}" @change="${this.onWorkspaceChange_}">
 +        ${['glass', 'refractive', 'quiet', 'solid', 'custom'].map(value => html`
-+          <option value="${value}">${this.workspaceLabel_('workspace' + value[0]!.toUpperCase() + value.slice(1))}</option>`)}
++          <option value="${value}">${this.workspaceLabel_('workspace' + value.charAt(0).toUpperCase() + value.slice(1))}</option>`)}
 +      </select>
 +    </label>
 +    ${this.workspaceTuningControls_.map(control => html`
