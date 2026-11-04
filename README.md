@@ -12,9 +12,15 @@ Unofficial experimental Windows platform project for [Arcium](https://github.com
 
 For synchronized Space colors, Windows Mica/Acrylic, rounded-frame and sidebar
 controls, see [Windows workspace appearance](docs/arc-appearance-windows.md).
-`--feature all --apply` validates and applies all four optional integrations as
+`--feature all --apply` validates and applies all five integrations as
 one source transaction before an incremental build. Native compilation and
 visible acceptance are still required for the appearance port.
+
+For first-launch setup, browser import and an independent Windows profile, see
+[Windows onboarding and profile isolation](docs/windows-onboarding.md).
+Arcium uses `%LOCALAPPDATA%\Arcium\User Data` instead of Helium's profile folder.
+Existing prepared trees need `--feature onboarding --apply` and an incremental
+build; new browser-only builds apply this integration automatically before GN.
 
 For the optional Windows workflow controls and reversible shortcut preset, see
 [Arc workflow on Windows](docs/arc-workflow-windows.md). The integration applies

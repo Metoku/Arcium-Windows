@@ -62,7 +62,12 @@ if (require.main === module) {
   for (const arg of ['--source-dir', '--rules-dir', '--node-modules']) assert(args.includes(arg));
   const source = value('--source-dir'), modules = value('--node-modules');
   const ts = require(path.join(modules, 'typescript'));
-  const files = fs.readdirSync(source, {recursive:true}).filter(file => file.endsWith('.ts'));
+  // The Svelte onboarding app has its own bundled tools and build checks.
+  // Apply Chromium's WebUI rules to the reconstructed Chrome resources only.
+  const resourceRoot = path.join(source, 'chrome/browser/resources');
+  const files = fs.readdirSync(resourceRoot, {recursive:true})
+    .filter(file => file.endsWith('.ts'))
+    .map(file => path.relative(source, path.join(resourceRoot, file)));
   const program = ts.createProgram(files.map(file => path.join(source, file)),
     // Chromium's rules compare rootDir with TypeScript's slash-normalized
     // SourceFile.fileName values, including when the host is Windows.

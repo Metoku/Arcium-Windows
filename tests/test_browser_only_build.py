@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 
 from scripts.browser_only_build import (
     BROWSER_ONLY_TARGETS, ORIGINAL_RELEASE_TARGETS,
+    ONBOARDING_ANCHOR, ONBOARDING_STEP,
     first_compiler_failure, make_browser_only_builder, print_diagnostic,
     REQUIRED_NATIVE_CHROMIUM_SDK, require_native_chromium_sdk,
     latest_build_progress, require_compilation_cache, stop_build_tree
@@ -46,6 +47,11 @@ class BrowserOnlyBuilderTests(unittest.TestCase):
         self.assertNotIn(ORIGINAL_RELEASE_TARGETS, code)
         self.assertNotIn("helium_version.check_existing_version(", code)
         self.assertNotIn("helium_version.append_version(", code)
+        self.assertEqual(code.count(ONBOARDING_STEP), 1)
+
+    def test_unknown_first_run_entry_is_rejected_before_native_build(self):
+        with self.assertRaisesRegex(ValueError, "pre-GN onboarding"):
+            make_browser_only_builder(pinned_fixture().replace(ONBOARDING_ANCHOR, ""))
 
     def test_native_compile_requires_reviewed_28000_sdk(self):
         self.assertEqual(REQUIRED_NATIVE_CHROMIUM_SDK, "10.0.28000.0")

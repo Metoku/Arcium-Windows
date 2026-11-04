@@ -17,7 +17,8 @@ python .\scripts\apply_windows_arc_workflow.py --feature all --apply
 ```
 
 The bundle includes workflow controls, Arc sidebar discovery/import, saved
-password CSV support and appearance. Source files may use LF, CRLF, mixed endings
+password CSV support, appearance, and [independent Windows onboarding/profile
+identity](windows-onboarding.md). Source files may use LF, CRLF, mixed endings
 or omit the final newline. Formatting is normalized only in temporary snapshots;
 the original source ending style and final-newline presence are preserved. It rehearses the complete operation in a
 temporary copy before committing source changes together. Existing outputs and
@@ -62,7 +63,7 @@ DevTools and picture-in-picture windows, alongside the existing profile/Space
 ownership checks.
 
 `--feature appearance` selects only this integration. `--feature all --revert`
-reverts all four optional source integrations; it does not undo user appearance
+reverts all five source integrations, including Windows profile identity; it does not undo user appearance
 choices or delete imported records. Rebuild after either application or reversion.
 
 Header and Mojo changes can invalidate more than a few object files. Reusing the

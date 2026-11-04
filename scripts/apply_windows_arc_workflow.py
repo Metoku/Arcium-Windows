@@ -19,6 +19,17 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PATCH = ROOT / "patches" / "windows" / "arc-workflow-settings.patch"
+ONBOARDING_PATCH = ROOT / "patches/windows/onboarding-windows.patch"
+PASSWORD_PATCH = ROOT / "patches/windows/arc-password-import-windows.patch"
+# These exact existing files are also part of the Windows first-run integration.
+# Keep the general components tree outside the application helper's write scope.
+ONBOARDING_EXTERNAL_TARGETS = frozenset({
+    "components/policy/tools/generate_policy_source.py",
+    "components/helium_onboarding/helium_onboarding_strings.grdp",
+    "components/helium_onboarding/BUILD.gn",
+    "components/helium_onboarding/src/pages/Welcome.svelte",
+    "components/helium_onboarding/src/pages/DataImport.svelte",
+})
 SHORTCUT_SOURCE = "chrome/browser/resources/settings/system_page/browser_shortcuts_page.ts"
 LEGACY_RESTORE_CHECK = b"    return !busy && !!preset?.canModify && !!preset.hasPrevious;"
 RESTORE_CHECK = b"    return !busy && !!preset?.canModify && preset.hasPrevious;"
@@ -96,7 +107,7 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 
 
 def patch_targets(text: str) -> list[str]:
-    """Only allow this integration patch to edit existing Chromium UI files."""
+    """Allow existing Chromium UI files and the exact Windows setup targets."""
     old_paths = re.findall(r"^--- a/(\S+)$", text, re.MULTILINE)
     new_paths = re.findall(r"^\+\+\+ b/(\S+)$", text, re.MULTILINE)
     if (not old_paths or old_paths != new_paths
@@ -108,7 +119,7 @@ def patch_targets(text: str) -> list[str]:
     for path in new_paths:
         parts = PurePosixPath(path).parts
         if (
-            not path.startswith("chrome/")
+            (not path.startswith("chrome/") and path not in ONBOARDING_EXTERNAL_TARGETS)
             or ".." in parts
             or "\\" in path
             or ":" in path
@@ -440,8 +451,9 @@ def integrate_bundle(source: Path, *, apply: bool = False, revert: bool = False,
         raise ValueError("Choose apply or revert")
     if catalogs is None:
         catalogs = (PATCH, ROOT / "patches/windows/arc-import-windows.patch",
-                    ROOT / "patches/windows/arc-password-import-windows.patch",
-                    ROOT / "patches/windows/arc-appearance-windows.patch")
+                    PASSWORD_PATCH,
+                    ROOT / "patches/windows/arc-appearance-windows.patch",
+                    ONBOARDING_PATCH)
     source = source.resolve(strict=True)
     if not (source / "BUILD.gn").is_file():
         raise ValueError("Expected a prepared Chromium source root containing BUILD.gn")
@@ -482,7 +494,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-dir", type=Path,
                         default=ROOT / "work/windows-platform/build/src")
-    parser.add_argument("--feature", choices=("workflow", "arc-import", "passwords", "appearance", "mac-buttons", "all"),
+    parser.add_argument("--feature", choices=("workflow", "arc-import", "passwords", "appearance", "mac-buttons", "onboarding", "all"),
                         default="workflow", help="Optional Windows integration to apply")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--check", action="store_true", help="Read-only applicability check (default)")
@@ -493,9 +505,10 @@ def main() -> int:
         catalogs = {
             "workflow": PATCH,
             "arc-import": ROOT / "patches/windows/arc-import-windows.patch",
-            "passwords": ROOT / "patches/windows/arc-password-import-windows.patch",
+            "passwords": PASSWORD_PATCH,
             "appearance": ROOT / "patches/windows/arc-appearance-windows.patch",
             "mac-buttons": ROOT / "patches/windows/mac-window-buttons.patch",
+            "onboarding": ONBOARDING_PATCH,
         }
         if args.feature == "all":
             status = integrate_bundle(args.source_dir, apply=args.apply, revert=args.revert)
@@ -507,6 +520,7 @@ def main() -> int:
     marker = {"workflow": "ARC_WORKFLOW", "arc-import": "ARC_IMPORT",
               "passwords": "ARC_PASSWORDS", "appearance": "ARC_APPEARANCE",
               "mac-buttons": "MAC_BUTTONS",
+              "onboarding": "ONBOARDING",
               "all": "ALL"}[args.feature]
     print(f"ARCIUM_WINDOWS_{marker}_{status}")
     if args.apply or args.revert:

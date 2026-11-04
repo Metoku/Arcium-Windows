@@ -256,7 +256,9 @@ class WorkflowCatalogTests(unittest.TestCase):
         self.assertTrue(all(path.startswith("chrome/") for path in targets))
 
     def test_rejects_traversal_and_new_file_sections(self):
-        for target in ("../escape", "chrome/../../escape", "D:/escape", "out/Default/args.gn"):
+        for target in ("../escape", "chrome/../../escape", "D:/escape", "out/Default/args.gn",
+                       "components/other.cc", "components/helium_onboarding/../../escape",
+                       "components/helium_onboarding/src/lib/browser/prefs.ts"):
             with self.subTest(target=target), self.assertRaises(ValueError):
                 patch_targets(f"--- a/{target}\n+++ b/{target}\n")
         with self.assertRaises(ValueError):

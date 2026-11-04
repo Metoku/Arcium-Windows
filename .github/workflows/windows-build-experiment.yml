@@ -55,7 +55,7 @@ jobs:
         run: python scripts/windows_port.py stage
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
       - name: Install pinned appearance validation tools
         run: npm install --prefix work/appearance-ui --no-save --ignore-scripts --no-audit --no-fund typescript@6.0.2 stylelint@17.0.0 "@stylistic/stylelint-plugin@5.0.0" postcss@8.5.3 eslint@10.2.0 "@typescript-eslint/eslint-plugin@8.58.2" "@typescript-eslint/parser@8.58.2" eslint-plugin-lit@2.2.1
       - name: Replay optional Windows Arc integration patches

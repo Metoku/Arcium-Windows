@@ -26,8 +26,9 @@ After `ARCIUM_WINDOWS_MAC_BUTTONS_APPLIED`, resume the existing build:
 ```
 
 Source and compiled output are retained. This is a separate opt-in style;
-`--feature all` retains its existing four-catalog workflow/import/appearance
-scope. The caption style can be applied before or after that bundle.
+`--feature all` covers workflow, imports, appearance and independent Windows
+onboarding/profile identity. The caption style can be applied before or after
+that bundle.
 
 Launch the freshly built browser and open
 `helium://flags/#arcium-mac-window-buttons`. Enable **Mac-style window buttons**
@@ -51,7 +52,7 @@ priority, and the old right-side DWM button rectangle is ignored in the new
 layout. Existing maximize/restore hit codes and action bindings remain in place.
 Caption input follows the supplied reveal ratio, including sidebar navigation.
 
-CI replays the style before and after the full four-catalog bundle with LF,
+CI replays the style before and after the workflow/import/appearance bundle with LF,
 CRLF, mixed endings and absent final newlines. It checks idempotence, exact
 reversion and retained build output. Compiler contracts exercise the actual
 patched eligibility, painting, button ordering, layout/exclusion and frame-hit

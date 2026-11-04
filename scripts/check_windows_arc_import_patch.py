@@ -29,10 +29,14 @@ from scripts.apply_windows_arc_workflow import (
     LEGACY_APPEARANCE_CSS, LEGACY_DISCONNECT, PATCH, ROOT,
     appearance_css_addition, git_apply, integrate, integrate_bundle,
     patch_targets, preserve_line_endings,
+    ONBOARDING_PATCH,
 )
 from scripts.check_patch_overlaps import discover_patch_paths, download_original, select_patch_sections
 from scripts.windows_port import audit_staged, chromium_version, git, read_pin, read_series
 from scripts.check_windows_mac_buttons import MAC_PATCH, MAC_API_FILES, check_mac_buttons
+from scripts.check_windows_onboarding import (
+    ONBOARDING_ROOT, ONBOARDING_API_FILES, prepare_onboarding_assets, check_onboarding,
+)
 
 
 IMPORT_PATCH = ROOT / "patches/windows/arc-import-windows.patch"
@@ -130,7 +134,8 @@ def verify_appearance_resources(source: Path, targets: set[str]) -> dict:
 
 
 def check(core: Path, platform: Path | None = None,
-          typescript: Path | None = None) -> dict:
+          typescript: Path | None = None,
+          onboarding_archive: Path | None = None) -> dict:
     expected = read_pin("arcium-core.sha")
     if git("-C", core, "rev-parse", "HEAD") != expected:
         raise ValueError("The Arc import fixture requires the pinned Arcium core revision")
@@ -146,7 +151,12 @@ def check(core: Path, platform: Path | None = None,
         GENERATED_RESOURCES_GRD, BROWSER_WINDOW_INTERFACE_HEADER, NATIVE_THEME_HEADER}
     mac_targets = set(patch_targets(MAC_PATCH.read_text(encoding="utf-8")))
     replay_targets |= mac_targets | set(MAC_API_FILES)
-    _, created = discover_patch_paths(patches)
+    all_paths, created = discover_patch_paths(patches)
+    onboarding_targets = (set(patch_targets(ONBOARDING_PATCH.read_text(encoding="utf-8")))
+                          if platform is not None else set())
+    if onboarding_targets:
+        replay_targets |= onboarding_targets | set(ONBOARDING_API_FILES)
+        replay_targets |= {path for path in all_paths if path.startswith(ONBOARDING_ROOT + "/")}
     original_hashes = {}
     with tempfile.TemporaryDirectory(prefix="arcium-arc-import-replay-") as temporary:
         temporary = Path(temporary)
@@ -155,7 +165,14 @@ def check(core: Path, platform: Path | None = None,
         # This marker satisfies the helper's source-root check; the fixture
         # contains only selected files and is deliberately not a build tree.
         (source / "BUILD.gn").write_text("# Partial patch replay fixture; not buildable.\n")
+        onboarding_assets = (prepare_onboarding_assets(core, source, onboarding_archive)
+                             if onboarding_targets else None)
         for target in sorted(replay_targets - created):
+            if target.startswith(ONBOARDING_ROOT + "/"):
+                # Sources and tools came from the SHA256-verified release.
+                if not (source / target).is_file():
+                    raise RuntimeError(f"Missing pinned onboarding asset: {target}")
+                continue
             original_hashes[target] = download_original(
                 chromium_version(), target, source / target, mirror_first=True)
         replayed = []
@@ -183,6 +200,8 @@ def check(core: Path, platform: Path | None = None,
         native_theme_sha256 = hashlib.sha256(native_theme_header.read_bytes()).hexdigest()
         originals = {target: (source / target).read_bytes() for target in targets}
         mac_originals = {target:(source / target).read_bytes() for target in mac_targets}
+        onboarding_originals = {target:(source / target).read_bytes()
+                                for target in onboarding_targets}
         sentinel = source / "out/Default/retained.obj"
         sentinel.parent.mkdir(parents=True)
         sentinel.write_bytes(b"existing compiled output")
@@ -336,11 +355,11 @@ def check(core: Path, platform: Path | None = None,
                             if old[target] != current[target]:
                                 (source / target).write_bytes(old[target])
                         timestamps = {target: (source / target).stat().st_mtime_ns for target in targets}
-                        if integrate_bundle(source) != "UPDATE_AVAILABLE":
+                        if integrate_bundle(source, catalogs=catalogs) != "UPDATE_AVAILABLE":
                             raise RuntimeError("Previously installed WebUI catalog was not recognized")
                         if timestamps != {target: (source / target).stat().st_mtime_ns for target in targets}:
                             raise RuntimeError("WebUI upgrade check rewrote source")
-                        integrate_bundle(source, apply=True)
+                        integrate_bundle(source, apply=True, catalogs=catalogs)
                         if any((source / target).read_bytes() != current[target] for target in targets):
                             raise RuntimeError("Installed WebUI catalog did not upgrade exactly")
                         if any((source / target).stat().st_mtime_ns != stamp
@@ -414,6 +433,9 @@ def check(core: Path, platform: Path | None = None,
                                "order": [p.name for p in order],
                                "applied_sha256": applied_hashes})
         mac_report = check_mac_buttons(source, originals | mac_originals, catalogs)
+        onboarding_report = (check_onboarding(
+            source, originals | mac_originals | onboarding_originals,
+            catalogs, onboarding_assets) if onboarding_targets else None)
         if (sentinel.read_bytes() != b"existing compiled output" or
                 sentinel.stat().st_mtime_ns != sentinel_time):
             raise RuntimeError("The Mac caption helper changed retained compilation output")
@@ -431,6 +453,7 @@ def check(core: Path, platform: Path | None = None,
                 "legacy_webui_upgrades": legacy_ui_upgrades,
                 "resource_bindings":resource_report, "browser_compiled": False,
                 "mac_window_buttons":mac_report,
+                "windows_onboarding":onboarding_report,
                 "browser_launch_verified": False, "appearance_webui": webui_report}
 
 
@@ -440,11 +463,13 @@ def main() -> int:
     parser.add_argument("--platform-dir", type=Path)
     parser.add_argument("--typescript", type=Path,
                         help="TypeScript module for optional isolated appearance WebUI checks")
+    parser.add_argument("--onboarding-archive", type=Path,
+                        help="Optional cached onboarding release; its pinned SHA256 is always checked")
     parser.add_argument("--report", type=Path, default=ROOT / "work/windows-arc-import-replay.json")
     args = parser.parse_args()
     report = check(args.core_dir.resolve(),
                    args.platform_dir.resolve() if args.platform_dir else None,
-                   args.typescript)
+                   args.typescript, args.onboarding_archive)
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(f"ARCIUM_WINDOWS_ARC_IMPORT_PATCH_REPLAY_PASSED: {len(report['targets'])} targets; "
