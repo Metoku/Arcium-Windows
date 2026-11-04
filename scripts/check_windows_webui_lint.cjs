@@ -60,7 +60,9 @@ if (require.main === module) {
   const ts = require(path.join(modules, 'typescript'));
   const files = fs.readdirSync(source, {recursive:true}).filter(file => file.endsWith('.ts'));
   const program = ts.createProgram(files.map(file => path.join(source, file)),
-    {rootDir:source, target:ts.ScriptTarget.ES2022, module:ts.ModuleKind.ESNext,
+    // Chromium's rules compare rootDir with TypeScript's slash-normalized
+    // SourceFile.fileName values, including when the host is Windows.
+    {rootDir:source.replaceAll('\\', '/'), target:ts.ScriptTarget.ES2022, module:ts.ModuleKind.ESNext,
       moduleResolution:ts.ModuleResolutionKind.Bundler, strict:true, noUncheckedIndexedAccess:true});
   checkLint({source, modules, rulesDir:value('--rules-dir'), program, files})
     .then(async report => {
