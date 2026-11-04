@@ -21,6 +21,11 @@ ROOT = Path(__file__).resolve().parents[1]
 PATCH = ROOT / "patches" / "windows" / "arc-workflow-settings.patch"
 ONBOARDING_PATCH = ROOT / "patches/windows/onboarding-windows.patch"
 PASSWORD_PATCH = ROOT / "patches/windows/arc-password-import-windows.patch"
+EXTERNAL_EXTENSION_SOURCE = "chrome/browser/extensions/external_registry_loader_win.cc"
+LEGACY_EXTERNAL_EXTENSION_REGISTRY = (
+    b'const wchar_t kRegistryExtensions[] = L"Software\\\\Google\\\\Chrome\\\\Extensions";')
+EXTERNAL_EXTENSION_REGISTRY = (
+    b'const wchar_t kRegistryExtensions[] = L"Software\\\\Arcium\\\\Extensions";')
 # These exact existing files are also part of the Windows first-run integration.
 # Keep the general components tree outside the application helper's write scope.
 ONBOARDING_EXTERNAL_TARGETS = frozenset({
@@ -277,6 +282,20 @@ def integrate(source: Path, *, apply: bool = False, revert: bool = False,
         forward = git_apply(staged_source, staged_patch, reverse=False, check=True)
         backward = git_apply(staged_source, staged_patch, reverse=True, check=True)
         needs_upgrade = False
+        if (forward.returncode and backward.returncode
+                and patch.name == ONBOARDING_PATCH.name
+                and EXTERNAL_EXTENSION_SOURCE in targets):
+            path = staged_source / EXTERNAL_EXTENSION_SOURCE
+            before = path.read_bytes()
+            if before.count(LEGACY_EXTERNAL_EXTENSION_REGISTRY) == 1:
+                path.write_bytes(before.replace(
+                    LEGACY_EXTERNAL_EXTENSION_REGISTRY, EXTERNAL_EXTENSION_REGISTRY, 1))
+                corrected = git_apply(staged_source, staged_patch, reverse=True, check=True)
+                # Accept the earlier ten-file onboarding catalog only when the
+                # complete current catalog verifies. Unknown partial edits fail.
+                if corrected.returncode == 0:
+                    backward = corrected
+                    needs_upgrade = True
         # An earlier version was applied successfully but failed Chromium's
         # type-aware lint. Repair only that known line in the temporary copy;
         # the complete corrected patch must then reverse-check successfully.

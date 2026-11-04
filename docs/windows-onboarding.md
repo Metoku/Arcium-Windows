@@ -7,7 +7,8 @@ Helium files intact, including data saved there by earlier Arcium builds.
 
 The application name/ID, browser and PDF ProgIDs, direct-launch protocol,
 application/Active Setup identity, notification/elevation/tracing class IDs,
-product registry path and Windows policy root are distinct. Existing COM
+product registry path, external-extension registry root (`Software\Arcium\Extensions`)
+and Windows policy root are distinct. Existing COM
 interface contracts stay unchanged. The build output still uses `chrome.exe`;
 installer production, signing and update distribution remain separate work.
 
@@ -25,10 +26,14 @@ if ($LASTEXITCODE -ne 0) { throw 'Stop: onboarding was not applied.' }
 ```
 
 The application marker is `ARCIUM_WINDOWS_ONBOARDING_APPLIED`. It validates all
-ten existing source files together, supports reapplication, and preserves
+eleven existing source files together, supports reapplication, and preserves
 compiled output and user data. It also participates in the atomic
 `--feature all` bundle. The optional Mac-style buttons remain a separate
 `--feature mac-buttons` catalog and coexist with this change.
+If the first published ten-file onboarding catalog was already applied, the
+helper reports `UPDATE_AVAILABLE` and adds the separate external-extension
+registry key only after the complete current catalog reverse-checks. Unknown
+partial edits remain rejected without writes.
 
 New `scripts/browser_only_build.py` builds apply onboarding, the independent
 identity and native password support after the shared/Windows patch stages and before GN. An existing build

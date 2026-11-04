@@ -19,6 +19,8 @@ import urllib.request
 
 from scripts.apply_windows_arc_workflow import (
     ROOT, ONBOARDING_PATCH, integrate, integrate_bundle,
+    EXTERNAL_EXTENSION_SOURCE, LEGACY_EXTERNAL_EXTENSION_REGISTRY,
+    EXTERNAL_EXTENSION_REGISTRY,
 )
 from scripts.check_windows_mac_buttons import MAC_PATCH, cpp_function
 
@@ -84,6 +86,11 @@ def verify_native_sources(source: Path) -> dict:
                   for target in node.targets)]
     if values != [r'SOFTWARE\\Policies\\Arcium']:
         raise RuntimeError('Arcium still shares an upstream Windows policy root')
+    declaration = next(line[1:] for line in ONBOARDING_PATCH.read_text().splitlines()
+                       if line.startswith('+const wchar_t kRegistryExtensions[]'))
+    extension_loader = source / 'chrome/browser/extensions/external_registry_loader_win.cc'
+    if declaration not in extension_loader.read_text(encoding='utf-8'):
+        raise RuntimeError('Arcium still shares an upstream external-extension registry root')
     startup = (source / ONBOARDING_API_FILES[-1]).read_text(encoding='utf-8')
     if ('if (!is_incognito_or_guest && !no_first_run)' not in startup or
             '!profile_->GetPrefs()->GetBoolean(prefs::kHeliumDidOnboarding)' not in startup or
@@ -105,6 +112,7 @@ def verify_native_sources(source: Path) -> dict:
     return {'header_bodies_verified':len(fixture['headers']),
             'function_bodies_verified':count, 'cpp_contracts_passed':True,
             'first_run_route_verified':True, 'policy_root_verified':True,
+            'extension_registry_root_verified':True,
             'incremental_asset_inputs_verified':True}
 
 
@@ -147,6 +155,7 @@ def check_onboarding(source: Path, originals: dict[str, bytes],
                      catalogs: tuple[Path, ...], assets: dict) -> dict:
     """Exercise fresh/already-patched bundles and retain native build output."""
     checks, postimages, proof, frontend = [], {}, None, None
+    upgrades = []
     sentinel = source.parent / 'existing-helium-profile/Default/Preferences'
     sentinel.parent.mkdir(parents=True)
     sentinel.write_bytes(b'{"extensions":{"settings":{"existing-extension":{}}}}')
@@ -177,6 +186,41 @@ def check_onboarding(source: Path, originals: dict[str, bytes],
             if proof is None:
                 proof = verify_native_sources(source)
                 frontend = build_onboarding_frontend(source)
+                # Unknown extension roots must not be silently replaced.
+                path = source / EXTERNAL_EXTENSION_SOURCE
+                fixed = path.read_bytes()
+                path.write_bytes(fixed.replace(EXTERNAL_EXTENSION_REGISTRY,
+                                                EXTERNAL_EXTENSION_REGISTRY.replace(
+                                                    b'Arcium', b'CustomBrowser'), 1))
+                unknown = {name:(source / name).read_bytes() for name in originals}
+                try:
+                    integrate(source, patch=ONBOARDING_PATCH, apply=True)
+                except RuntimeError:
+                    pass
+                else:
+                    raise RuntimeError('Onboarding accepted an unknown extension root')
+                if unknown != {name:(source / name).read_bytes() for name in originals}:
+                    raise RuntimeError('Rejected onboarding application changed source')
+                path.write_bytes(fixed)
+                proof['unknown_extension_root_rejected'] = True
+            if style not in upgrades:
+                # A user may already have applied the first published version.
+                path = source / EXTERNAL_EXTENSION_SOURCE
+                fixed = path.read_bytes()
+                path.write_bytes(fixed.replace(EXTERNAL_EXTENSION_REGISTRY,
+                                               LEGACY_EXTERNAL_EXTENSION_REGISTRY, 1))
+                timestamps = {name:(source / name).stat().st_mtime_ns for name in originals}
+                if integrate(source, patch=ONBOARDING_PATCH) != 'UPDATE_AVAILABLE':
+                    raise RuntimeError('Earlier onboarding catalog was not recognized')
+                if timestamps != {name:(source / name).stat().st_mtime_ns for name in originals}:
+                    raise RuntimeError('Read-only onboarding upgrade check changed source')
+                integrate_bundle(source, apply=True)
+                if postimage != {name:(source / name).read_bytes() for name in originals}:
+                    raise RuntimeError('Earlier onboarding catalog did not upgrade exactly')
+                if any((source / name).stat().st_mtime_ns != stamp
+                       for name, stamp in timestamps.items() if name != EXTERNAL_EXTENSION_SOURCE):
+                    raise RuntimeError('Onboarding upgrade rewrote unrelated source')
+                upgrades.append(style)
             times = {name:(source / name).stat().st_mtime_ns for name in originals}
             # --feature all must recognize previously installed catalogs, add
             # onboarding atomically, and coexist with optional Mac captions.
@@ -193,5 +237,6 @@ def check_onboarding(source: Path, originals: dict[str, bytes],
             checks.append({'endings':style, 'order':[p.name for p in order]})
     return {'status':'ONBOARDING_REPLAY_AND_FRONTEND_CHECKS_PASSED',
             'assets':assets, 'checks':checks, 'native_contracts':proof,
+            'earlier_version_upgrades':upgrades,
             'frontend':frontend, 'existing_profile_retained':True,
             'browser_compiled':False, 'windows_runtime_verified':False}

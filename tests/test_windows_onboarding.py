@@ -15,6 +15,9 @@ from scripts.apply_windows_arc_workflow import ROOT, ONBOARDING_PATCH, patch_tar
 
 
 FIXTURE = json.loads((ROOT / 'tests/fixtures/windows_onboarding_native.json').read_text())
+EXTENSION_REGISTRY_DECLARATION = next(
+    line[1:] for line in ONBOARDING_PATCH.read_text().splitlines()
+    if line.startswith('+const wchar_t kRegistryExtensions[]'))
 
 
 def function(file, signature):
@@ -100,7 +103,8 @@ struct InstallDetails {
 }
 namespace chrome {constexpr wchar_t kUserDataDirname[]=L"User Data";}
 ''' + function(paths, 'bool GetDefaultUserDataDirectory(')
-             + function(paths, 'bool GetDefaultRoamingUserDataDirectory(') + r'''
+             + function(paths, 'bool GetDefaultRoamingUserDataDirectory(')
+             + EXTENSION_REGISTRY_DECLARATION + r'''
 int main() {
  using namespace install_static;
  using namespace std::literals;
@@ -119,6 +123,7 @@ int main() {
  assert(mode.elevator_iid.a==0xC89A04FF && mode.tracing_service_iid.a==0xe0b03e2d);
  assert(GetChromeInstallSubDirectory()==L"Arcium");
  assert(GetRegistryPath()==LR"(Software\Arcium)");
+ assert(std::wstring_view(kRegistryExtensions)==LR"(Software\Arcium\Extensions)");
  base::FilePath local, roaming;
  assert(GetDefaultUserDataDirectory(&local));
  assert(local.path==LR"(C:\Users\Test\AppData\Local\Arcium\User Data)");
@@ -175,7 +180,7 @@ int main() {
 class OnboardingCatalogContracts(unittest.TestCase):
     def test_target_scope_and_windows_policy_separation(self):
         text = ONBOARDING_PATCH.read_text()
-        self.assertEqual(len(patch_targets(text)), 10)
+        self.assertEqual(len(patch_targets(text)), 11)
         line = next(line[1:] for line in text.splitlines()
                     if line.startswith('+CHROMIUM_POLICY_KEY ='))
         value = ast.literal_eval(line.split('=', 1)[1].strip())
