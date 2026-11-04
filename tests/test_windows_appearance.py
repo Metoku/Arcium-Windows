@@ -13,6 +13,7 @@ from scripts.apply_windows_arc_workflow import (
     APPEARANCE_CUSTOMIZE_UI_SOURCE, LEGACY_SETTINGS_STRINGS_INCLUDE,
     GENERATED_RESOURCES_INCLUDE, LEGACY_CLOSE_WORKSPACE_STRING, CLOSE_WORKSPACE_STRING,
     APPEARANCE_CAPTURE_SOURCE, LEGACY_WINDOW_TYPE_CHECK, WINDOW_TYPE_CHECK,
+    APPEARANCE_COLOR_PICKER_SOURCE, LEGACY_DARK_COLOR_CHECK, DARK_COLOR_CHECK,
     appearance_css_addition, git_apply, integrate, integrate_bundle,
 )
 
@@ -679,6 +680,82 @@ class AppearanceWindowTypeUpgradeTests(unittest.TestCase):
         self.assertEqual(before, self.snapshot())
 
     def test_old_model_query_can_be_reverted(self):
+        self.assertEqual(integrate(self.source, patch=self.patch, revert=True), "READY")
+        for name, data in self.originals.items():
+            self.assertEqual((self.source / name).read_bytes(), data)
+        self.assertEqual(self.output.read_bytes(), b"retained object")
+
+
+class AppearanceNativeThemeUpgradeTests(unittest.TestCase):
+    def setUp(self):
+        import difflib
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.source = Path(self.temporary.name) / "src"
+        self.source.mkdir()
+        (self.source / "BUILD.gn").write_text("# fixture\n")
+        css = appearance_css_addition(
+            (ROOT / "patches/windows/arc-appearance-windows.patch").read_bytes())
+        self.originals = {APPEARANCE_CSS_SOURCE:b"/* existing */\n",
+                          APPEARANCE_COLOR_PICKER_SOURCE:b"// original picker\n"}
+        self.corrected = {
+            APPEARANCE_CSS_SOURCE:self.originals[APPEARANCE_CSS_SOURCE] + css,
+            APPEARANCE_COLOR_PICKER_SOURCE:b"// picker\n" + DARK_COLOR_CHECK +
+                b"\n// other palette logic\n" + DARK_COLOR_CHECK + b"\n// footer\n"}
+        sections = []
+        for name, data in self.corrected.items():
+            path = self.source / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+            sections.extend(difflib.unified_diff(self.originals[name].decode().splitlines(True),
+                data.decode().splitlines(True), fromfile="a/" + name, tofile="b/" + name))
+        self.patch = self.source.parent / "arc-appearance-windows.patch"
+        self.patch.write_text("".join(sections), encoding="utf-8", newline="\n")
+        self.picker = self.source / APPEARANCE_COLOR_PICKER_SOURCE
+        self.picker.write_bytes(self.corrected[APPEARANCE_COLOR_PICKER_SOURCE].replace(
+            DARK_COLOR_CHECK, LEGACY_DARK_COLOR_CHECK))
+        self.output = self.source / "out/Default/retained.obj"
+        self.output.parent.mkdir(parents=True)
+        self.output.write_bytes(b"retained object")
+
+    def snapshot(self):
+        return {path:(path.read_bytes(), path.stat().st_mtime_ns)
+                for path in self.source.rglob("*") if path.is_file()}
+
+    def test_both_native_theme_queries_upgrade_without_touching_other_files(self):
+        for style in ("LF", "CRLF", "mixed", "no-eof"):
+            with self.subTest(style=style):
+                expected = self.corrected[APPEARANCE_COLOR_PICKER_SOURCE]
+                old = expected.replace(DARK_COLOR_CHECK, LEGACY_DARK_COLOR_CHECK)
+                if style in ("CRLF", "mixed"):
+                    old = old.replace(b"\n", b"\r\n")
+                    expected = expected.replace(b"\n", b"\r\n")
+                if style == "mixed":
+                    old = old.replace(b"// picker\r\n", b"// picker\n")
+                    expected = expected.replace(b"// picker\r\n", b"// picker\n")
+                if style == "no-eof":
+                    old = old.removesuffix(b"\n")
+                    expected = expected.removesuffix(b"\n")
+                self.picker.write_bytes(old)
+                before = self.snapshot()
+                self.assertEqual(integrate(self.source, patch=self.patch), "UPDATE_AVAILABLE")
+                self.assertEqual(before, self.snapshot())
+                self.assertEqual(integrate(self.source, patch=self.patch, apply=True), "APPLIED")
+                self.assertEqual(self.picker.read_bytes(), expected)
+                after = self.snapshot()
+                for path in before:
+                    if path != self.picker: self.assertEqual(before[path], after[path])
+                integrate(self.source, patch=self.patch, apply=True)
+                self.assertEqual(after, self.snapshot())
+
+    def test_unknown_picker_edit_is_rejected_atomically(self):
+        self.picker.write_bytes(self.picker.read_bytes().replace(b"// footer", b"// local changes"))
+        before = self.snapshot()
+        with self.assertRaisesRegex(RuntimeError, "complete appearance catalog"):
+            integrate(self.source, patch=self.patch, apply=True)
+        self.assertEqual(before, self.snapshot())
+
+    def test_old_color_picker_queries_can_be_reverted(self):
         self.assertEqual(integrate(self.source, patch=self.patch, revert=True), "READY")
         for name, data in self.originals.items():
             self.assertEqual((self.source / name).read_bytes(), data)

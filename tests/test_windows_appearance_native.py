@@ -11,6 +11,7 @@ import unittest
 
 from scripts.apply_windows_arc_workflow import (
     FRAME_GRADIENT, LEGACY_FRAME_GRADIENT, ROOT, LEGACY_WINDOW_TYPE_CHECK, WINDOW_TYPE_CHECK,
+    APPEARANCE_COLOR_PICKER_SOURCE, DARK_COLOR_CHECK, LEGACY_DARK_COLOR_CHECK,
 )
 from scripts.check_patch_overlaps import select_patch_sections
 
@@ -32,6 +33,22 @@ def function(source, signature):
         if source[end] == '}': depth -= 1
         end += 1
     return source[start:end]
+
+
+def native_theme_contract():
+    api = (ROOT / 'tests/fixtures/native_theme_appearance.h').read_text()
+    return r'''
+namespace ui {
+struct ColorProviderKey {enum class ForcedColors {kNone,kActive};};
+struct NativeTheme {
+''' + api + r'''
+ ColorProviderKey::ForcedColors forced_colors_=ColorProviderKey::ForcedColors::kNone;
+ PreferredColorScheme preferred_color_scheme_=PreferredColorScheme::kNoPreference;
+ PreferredContrast preferred_contrast_=PreferredContrast::kNoPreference;
+};
+NativeTheme* NativeTheme::GetInstanceForNativeUi(){static NativeTheme theme;return &theme;}
+}
+'''
 
 
 @unittest.skipUnless(shutil.which('g++') or shutil.which('c++'), 'C++ compiler required')
@@ -83,16 +100,7 @@ struct OSInfo {static OSInfo* GetInstance(){static OSInfo info;return &info;}
 struct RegKey {RegKey(int,const wchar_t*,int){}
  int ReadValueDW(const wchar_t*,DWORD* value){*value=transparency;return read_result;}};
 }
-namespace ui {
-struct ColorProviderKey {enum class ForcedColors {kNone,kActive};};
-struct NativeTheme {
- enum class PreferredContrast {kNoPreference,kMore};
- ColorProviderKey::ForcedColors colors=ColorProviderKey::ForcedColors::kNone;
- PreferredContrast contrast=PreferredContrast::kNoPreference;
- static NativeTheme* GetInstanceForNativeUi(){static NativeTheme theme;return &theme;}
- auto forced_colors()const{return colors;} auto preferred_contrast()const{return contrast;}
-};
-}
+''' + native_theme_contract() + r'''
 struct WindowsGlassAvailability {bool supported=false;bool transparency_disabled=false;};
 struct GlassBackendAvailability {bool native_liquid_glass=false,native_material=false,
  chromium=false,reduce_transparency=false;};
@@ -109,12 +117,102 @@ int main(){
  read_result=-1; transparency=0; assert(!update().reduce_transparency);
  read_result=0; transparency=1;
  auto* theme=ui::NativeTheme::GetInstanceForNativeUi();
- theme->colors=ui::ColorProviderKey::ForcedColors::kActive; assert(update().reduce_transparency);
- theme->colors=ui::ColorProviderKey::ForcedColors::kNone;
- theme->contrast=ui::NativeTheme::PreferredContrast::kMore;assert(update().reduce_transparency);
+ theme->forced_colors_=ui::ColorProviderKey::ForcedColors::kActive; assert(update().reduce_transparency);
+ theme->forced_colors_=ui::ColorProviderKey::ForcedColors::kNone;
+ theme->preferred_contrast_=ui::NativeTheme::PreferredContrast::kMore;assert(update().reduce_transparency);
 }
 '''
         self.compile_and_run(prefix + actual + main)
+
+    def test_color_picker_palette_and_mode_use_real_native_theme_api(self):
+        source = postimage(APPEARANCE_COLOR_PICKER_SOURCE)
+        starts = list(re.finditer(r'^  if \(workspace\) \{', source, re.MULTILINE))
+        self.assertEqual(len(starts), 2, 'Compile both workspace color-picker blocks')
+        actual = '\n'.join(function(source[match.start():], '  if (workspace) {')
+                           for match in starts)
+        self.assertEqual(actual.count(DARK_COLOR_CHECK.decode()), 2)
+        prefix = r'''
+#include <cassert>
+#include <charconv>
+#include <cstdint>
+#include <map>
+#include <optional>
+#include <string>
+''' + native_theme_contract() + r'''
+using SkColor=uint32_t;
+constexpr int SK_AlphaOPAQUE=255;
+SkColor SkColorSetA(unsigned rgb,int alpha){return (rgb&0xffffffu)|(unsigned(alpha)<<24);}
+namespace base {
+bool HexStringToUInt(const std::string& text,unsigned* rgb){
+ auto result=std::from_chars(text.data(),text.data()+text.size(),*rgb,16);
+ return result.ec==std::errc{} && result.ptr==text.data()+text.size();
+}
+}
+struct Dict {
+ std::map<std::string,std::string> strings;
+ std::map<std::string,Dict> dictionaries;
+ const std::string* FindString(const char* key)const{
+  auto found=strings.find(key);return found==strings.end()?nullptr:&found->second;
+ }
+ const Dict* FindDict(const char* key)const{
+  auto found=dictionaries.find(key);return found==dictionaries.end()?nullptr:&found->second;
+ }
+};
+struct Workspace {
+ int mode=0;bool managed=false;Dict appearance,palette;
+ auto GetChromeAppearance()const{return appearance;}
+ auto GetSpacePalette()const{return palette;}
+ int GetAppearanceMode()const{return mode;}
+ bool IsAppearanceManaged()const{return managed;}
+};
+struct Theme {
+ bool follow_device_theme=true,is_dark_mode=true,colors_managed_by_policy=true,
+      has_third_party_theme=true,is_grey_baseline=true;
+};
+struct Result {SkColor color;Theme theme;};
+Result Update(Workspace* workspace,const ui::NativeTheme* native_theme){
+ std::optional<SkColor> user_color=0xffabcdefu;
+ Theme state;auto* theme=&state;
+'''
+        suffix = r'''
+ return {*user_color,state};
+}
+int main(){
+ using Scheme=ui::NativeTheme::PreferredColorScheme;
+ ui::NativeTheme native;Workspace workspace;
+ workspace.palette.dictionaries["light"].strings["accent"]="#112233";
+ workspace.palette.dictionaries["dark"].strings["accent"]="#445566";
+ for(auto scheme:{Scheme::kNoPreference,Scheme::kLight,Scheme::kDark}){
+  native.preferred_color_scheme_=scheme;
+  for(int mode=0;mode<=2;++mode){
+   workspace.mode=mode;
+   bool dark=mode==2||(mode==0&&scheme==Scheme::kDark);
+   for(bool managed:{false,true}){
+    workspace.managed=managed;auto result=Update(&workspace,&native);
+    assert(result.theme.is_dark_mode==dark);
+    assert(result.color==(dark?0xff445566u:0xff112233u));
+    assert(result.theme.colors_managed_by_policy==managed);
+    assert(!result.theme.follow_device_theme);
+    assert(!result.theme.has_third_party_theme&&!result.theme.is_grey_baseline);
+   }
+  }
+ }
+ auto detached=Update(nullptr,&native);
+ assert(detached.color==0xffabcdefu&&detached.theme.follow_device_theme);
+ assert(detached.theme.has_third_party_theme&&detached.theme.is_grey_baseline);
+ workspace.appearance.strings={{"colorEffect","tint"},{"tintColor","#789abc"}};
+ assert(Update(&workspace,&native).color==0xff789abcu);
+ workspace.appearance.strings["tintColor"]="invalid";
+ assert(Update(&workspace,&native).color==0xffabcdefu);
+ workspace.appearance.strings.clear();workspace.palette.dictionaries.clear();
+ assert(Update(&workspace,&native).color==0xffabcdefu);
+}
+'''
+        current = prefix + actual + suffix
+        rejected = prefix + actual.replace(DARK_COLOR_CHECK.decode(),
+                                            LEGACY_DARK_COLOR_CHECK.decode()) + suffix
+        self.compile_and_run(current, rejected_source=rejected,
+                             rejected_diagnostic='ShouldUseDarkColors')
 
     def test_snapshot_declaration_and_body_use_nonconst_webui_accessor(self):
         source = postimage('chrome/browser/ui/webui/settings/appearance_handler.cc')

@@ -5,7 +5,8 @@ param(
     [ValidateSet('check', 'resume')]
     [string]$Mode = 'resume',
     [ValidateRange(1, 12)]
-    [int]$Jobs = 5
+    [int]$Jobs = 5,
+    [switch]$KeepGoing
 )
 
 Set-StrictMode -Version Latest
@@ -81,6 +82,11 @@ try {
     Write-Host "Windows SDK: $expectedSdk"
     Write-Host "Parallel C++ jobs: $Jobs"
     Write-Host 'Existing Ninja outputs WILL be retained. No patches will be applied again.'
+    $failureOption = ''
+    if ($KeepGoing) {
+        $failureOption = ' -k=0'
+        Write-Host 'Keep-going enabled: compile independent targets after errors; blocked dependents are skipped.'
+    }
 
     if ($Mode -eq 'check') {
         Write-Host 'ARCIUM_LOCAL_RESUME_PREREQUISITES_PASSED'
@@ -122,7 +128,7 @@ try {
         '  exit /b 1',
         ')',
         'echo ARCIUM_LOCAL_GN_DESC_PASSED',
-        ('"' + $python + '" "third_party\depot_tools\autoninja.py" -j ' + $Jobs + ' -C out\Default chrome'),
+        ('"' + $python + '" "third_party\depot_tools\autoninja.py" -j ' + $Jobs + $failureOption + ' -C out\Default chrome'),
         'exit /b %errorlevel%'
     )
     # cmd.exe is code-page-sensitive. Keep this temporary file ASCII and

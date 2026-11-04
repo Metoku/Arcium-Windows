@@ -63,6 +63,12 @@ CLOSE_WORKSPACE_STRING = b'{"closeWorkspacePanel", IDS_NTP_CLOSE}'
 APPEARANCE_CAPTURE_SOURCE = "chrome/browser/ui/helium/arcium_settings_model.cc"
 LEGACY_WINDOW_TYPE_CHECK = b"      !browser->GetIsNormalType()) {"
 WINDOW_TYPE_CHECK = b"      browser->GetType() != BrowserWindowInterface::Type::TYPE_NORMAL) {"
+APPEARANCE_COLOR_PICKER_SOURCE = (
+    "chrome/browser/ui/webui/cr_components/theme_color_picker/theme_color_picker_handler.cc")
+LEGACY_DARK_COLOR_CHECK = b"        mode == 2 || (mode == 0 && native_theme->ShouldUseDarkColors());"
+DARK_COLOR_CHECK = b"""        mode == 2 ||
+        (mode == 0 && native_theme->preferred_color_scheme() ==
+                          ui::NativeTheme::PreferredColorScheme::kDark);"""
 LEGACY_DISCONNECT = b"""  override disconnectedCallback() {
     ++this.workspaceGeneration_;
     super.disconnectedCallback();
@@ -361,6 +367,12 @@ def integrate(source: Path, *, apply: bool = False, revert: bool = False,
                 before = path.read_bytes()
                 if before.count(LEGACY_WINDOW_TYPE_CHECK) == 1:
                     path.write_bytes(before.replace(LEGACY_WINDOW_TYPE_CHECK, WINDOW_TYPE_CHECK, 1))
+                    staged_upgrade = True
+            if APPEARANCE_COLOR_PICKER_SOURCE in targets:
+                path = staged_source / APPEARANCE_COLOR_PICKER_SOURCE
+                before = path.read_bytes()
+                if before.count(LEGACY_DARK_COLOR_CHECK) == 2:
+                    path.write_bytes(before.replace(LEGACY_DARK_COLOR_CHECK, DARK_COLOR_CHECK))
                     staged_upgrade = True
             if staged_upgrade:
                 corrected = git_apply(staged_source, staged_patch,

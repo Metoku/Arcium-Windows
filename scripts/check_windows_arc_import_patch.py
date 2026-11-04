@@ -25,6 +25,7 @@ from scripts.apply_windows_arc_workflow import (
     APPEARANCE_CUSTOMIZE_UI_SOURCE, LEGACY_SETTINGS_STRINGS_INCLUDE,
     GENERATED_RESOURCES_INCLUDE, LEGACY_CLOSE_WORKSPACE_STRING, CLOSE_WORKSPACE_STRING,
     APPEARANCE_CAPTURE_SOURCE, LEGACY_WINDOW_TYPE_CHECK, WINDOW_TYPE_CHECK,
+    APPEARANCE_COLOR_PICKER_SOURCE, LEGACY_DARK_COLOR_CHECK, DARK_COLOR_CHECK,
     LEGACY_APPEARANCE_CSS, LEGACY_DISCONNECT, PATCH, ROOT,
     appearance_css_addition, git_apply, integrate, integrate_bundle,
     patch_targets, preserve_line_endings,
@@ -39,6 +40,7 @@ APPEARANCE_PATCH = ROOT / "patches/windows/arc-appearance-windows.patch"
 GENERATED_RESOURCES_GRD = "chrome/app/generated_resources.grd"
 BROWSER_WINDOW_INTERFACE_HEADER = (
     "chrome/browser/ui/browser_window/public/browser_window_interface.h")
+NATIVE_THEME_HEADER = "ui/native_theme/native_theme.h"
 ESLINT_ASSETS = """eslint_ts.config_base.ts inline_event_handler.ts
 lit_element_bindings.ts lit_element_invalid_interface.ts lit_element_structure.ts
 lit_element_template_structure.ts lit_property_accessor.ts lit_reactive_properties.ts
@@ -64,6 +66,25 @@ def browser_window_type_api(text: str) -> str:
     if len(profiles) != 2:
         raise RuntimeError("Unexpected BrowserWindowInterface profile query declarations")
     return enum + "\n" + "\n".join(profiles) + "\n"
+
+
+def native_theme_appearance_api(text: str) -> str:
+    """Extract the real enum/accessors used by both appearance compiler hosts."""
+    patterns = (
+        r"  enum class PreferredColorScheme \{.*?\n  \};",
+        r"  enum class PreferredContrast \{.*?\n  \};",
+        r"  static NativeTheme\* GetInstanceForNativeUi\(\);",
+        r"  ColorProviderKey::ForcedColors forced_colors\(\) const \{.*?\}",
+        r"  PreferredColorScheme preferred_color_scheme\(\) const \{.*?\}",
+        r"  PreferredContrast preferred_contrast\(\) const \{.*?\}",
+    )
+    declarations = []
+    for pattern in patterns:
+        matches = re.findall(pattern, text, re.DOTALL)
+        if len(matches) != 1:
+            raise RuntimeError(f"Unexpected NativeTheme appearance API: {pattern}")
+        declarations.append(matches[0])
+    return "\n\n".join(declarations) + "\n"
 
 
 def verify_appearance_resources(source: Path, targets: set[str]) -> dict:
@@ -120,7 +141,8 @@ def check(core: Path, platform: Path | None = None,
     targets = set().union(*(patch_targets(p.read_text(encoding="utf-8")) for p in catalogs))
     # Reconstruct the resource owner and browser API with shared/platform overlays.
     # These are read-only checks, outside the catalogs' 43 write targets.
-    replay_targets = targets | {GENERATED_RESOURCES_GRD, BROWSER_WINDOW_INTERFACE_HEADER}
+    replay_targets = targets | {
+        GENERATED_RESOURCES_GRD, BROWSER_WINDOW_INTERFACE_HEADER, NATIVE_THEME_HEADER}
     _, created = discover_patch_paths(patches)
     original_hashes = {}
     with tempfile.TemporaryDirectory(prefix="arcium-arc-import-replay-") as temporary:
@@ -150,6 +172,12 @@ def check(core: Path, platform: Path | None = None,
                 browser_api_fixture.read_text(encoding="utf-8")):
             raise RuntimeError("Pinned BrowserWindowInterface API differs from the capture compiler fixture")
         browser_api_sha256 = hashlib.sha256(browser_header.read_bytes()).hexdigest()
+        native_theme_header = source / NATIVE_THEME_HEADER
+        native_theme_fixture = ROOT / "tests/fixtures/native_theme_appearance.h"
+        if native_theme_appearance_api(native_theme_header.read_text(encoding="utf-8")) != native_theme_appearance_api(
+                native_theme_fixture.read_text(encoding="utf-8")):
+            raise RuntimeError("Pinned NativeTheme API differs from the appearance compiler fixture")
+        native_theme_sha256 = hashlib.sha256(native_theme_header.read_bytes()).hexdigest()
         originals = {target: (source / target).read_bytes() for target in targets}
         sentinel = source / "out/Default/retained.obj"
         sentinel.parent.mkdir(parents=True)
@@ -225,10 +253,10 @@ def check(core: Path, platform: Path | None = None,
                     allowed = {stem + suffix for stem in APPEARANCE_HANDLER_RENAMES
                                for suffix in (".ts", ".html.ts")} | set(APPEARANCE_SNAPSHOT_SOURCES) | {
                                    APPEARANCE_FRAME_SOURCE, APPEARANCE_CUSTOMIZE_UI_SOURCE,
-                                   APPEARANCE_CAPTURE_SOURCE}
+                                   APPEARANCE_CAPTURE_SOURCE, APPEARANCE_COLOR_PICKER_SOURCE}
                     for previous_version in ("original", "css-corrected", "handlers-corrected",
                                              "surface-label-corrected", "snapshot-corrected", "gradient-corrected",
-                                             "resources-corrected"):
+                                             "resources-corrected", "window-type-corrected"):
                         compact_css = previous_version == "original"
                         old = dict(current)
                         if previous_version in ("original", "css-corrected"):
@@ -251,7 +279,8 @@ def check(core: Path, platform: Path | None = None,
                             raise RuntimeError("Expected exactly one corrected surface label")
                         if previous_version in ("original", "css-corrected", "handlers-corrected"):
                             old[name] = old[name].replace(SURFACE_LABEL, LEGACY_SURFACE_LABEL, 1)
-                        if previous_version not in ("snapshot-corrected", "gradient-corrected", "resources-corrected"):
+                        if previous_version not in ("snapshot-corrected", "gradient-corrected", "resources-corrected",
+                                                    "window-type-corrected"):
                             for name in APPEARANCE_SNAPSHOT_SOURCES:
                                 if name.endswith(".h"):
                                     fixed = SNAPSHOT_SIGNATURE + b";"
@@ -262,14 +291,14 @@ def check(core: Path, platform: Path | None = None,
                                 if old[name].count(fixed) != 1:
                                     raise RuntimeError("Expected exactly one snapshot signature")
                                 old[name] = old[name].replace(fixed, legacy, 1)
-                        if previous_version not in ("gradient-corrected", "resources-corrected"):
+                        if previous_version not in ("gradient-corrected", "resources-corrected", "window-type-corrected"):
                             name = APPEARANCE_FRAME_SOURCE
                             normalized = old[name].replace(b"\r\n", b"\n")
                             if normalized.count(FRAME_GRADIENT) != 1:
                                 raise RuntimeError("Expected exactly one corrected frame gradient")
                             old[name] = preserve_line_endings(old[name], normalized.replace(
                                 FRAME_GRADIENT, LEGACY_FRAME_GRADIENT, 1))
-                        if previous_version != "resources-corrected":
+                        if previous_version not in ("resources-corrected", "window-type-corrected"):
                             name = APPEARANCE_CUSTOMIZE_UI_SOURCE
                             normalized = old[name].replace(b"\r\n", b"\n")
                             if (normalized.count(GENERATED_RESOURCES_INCLUDE) != 1
@@ -282,7 +311,14 @@ def check(core: Path, platform: Path | None = None,
                         name = APPEARANCE_CAPTURE_SOURCE
                         if old[name].count(WINDOW_TYPE_CHECK) != 1:
                             raise RuntimeError("Expected corrected capture window-type query")
-                        old[name] = old[name].replace(WINDOW_TYPE_CHECK, LEGACY_WINDOW_TYPE_CHECK, 1)
+                        if previous_version != "window-type-corrected":
+                            old[name] = old[name].replace(WINDOW_TYPE_CHECK, LEGACY_WINDOW_TYPE_CHECK, 1)
+                        name = APPEARANCE_COLOR_PICKER_SOURCE
+                        normalized = old[name].replace(b"\r\n", b"\n")
+                        if normalized.count(DARK_COLOR_CHECK) != 2:
+                            raise RuntimeError("Expected both corrected NativeTheme color-scheme queries")
+                        old[name] = preserve_line_endings(old[name], normalized.replace(
+                            DARK_COLOR_CHECK, LEGACY_DARK_COLOR_CHECK))
                         if compact_css:
                             name = APPEARANCE_CSS_SOURCE
                             normalized = old[name].replace(b"\r\n", b"\n")
@@ -381,6 +417,8 @@ def check(core: Path, platform: Path | None = None,
                 "paint_shader_api_sha256": paint_api_sha256, "paint_shader_radial_signature_verified": True,
                 "browser_window_api_sha256": browser_api_sha256,
                 "browser_window_type_api_verified": True,
+                "native_theme_api_sha256": native_theme_sha256,
+                "native_theme_appearance_api_verified": True,
                 "build_output_preserved": True, "legacy_css_upgrade_verified": legacy_css_upgrade_checked,
                 "legacy_webui_upgrades": legacy_ui_upgrades,
                 "resource_bindings":resource_report, "browser_compiled": False,

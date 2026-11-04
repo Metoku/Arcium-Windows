@@ -175,6 +175,20 @@ cd C:\src\Arcium-Windows
 
 Ninja/Siso uses previously built outputs in `work\windows-platform\build\src\out\Default` and recompiles only what is required. Stopping with Ctrl+C is generally safe, though any interrupted object may need to be rebuilt. You may shut down the PC after the compiler fully exits. Keep the build tree intact.
 
+To collect independent compiler failures in one incremental build, add the
+optional `-KeepGoing` switch:
+
+```powershell
+.\scripts\local_windows_resume.ps1 -Mode resume -Jobs 8 -KeepGoing
+```
+
+This passes Siso's documented `-k=0` flag. It continues tasks whose prerequisites
+are available, records their errors in `out\Default\siso_output`, and returns a
+failure if any task fails. Tasks blocked by a failed dependency cannot run. It
+can take longer after an error, but completed outputs are reusable. Omitting the
+switch keeps the existing stop-on-failure behavior. See the
+[Chromium Siso guidance](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/docs/siso_tips.md#run-steps-as-much-as-possible).
+
 Do not run `git clean -xfd` in the staged Chromium tree, delete `out\Default`, or re-run patch preparation to resume.
 
 ### V8 metagen fails because `gn desc` uses the Windows Store Python alias

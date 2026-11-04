@@ -27,9 +27,10 @@ lint error can be upgraded by the existing helper.
 
 If an earlier appearance patch is already installed, the helper recognizes its
 exact CSS, WebUI handlers, surface-label expression, snapshot signatures,
-gradient color block, obsolete resource include and window-type query. It reports
+gradient color block, obsolete resource include, window-type query and both
+obsolete NativeTheme dark-color queries. It reports
 `UPDATE_AVAILABLE`. Applying again upgrades those source files only after
-the complete corrected appearance catalog can be reversed. This covers all seven
+the complete corrected appearance catalog can be reversed. This covers all eight
 previous appearance versions. Unknown source edits inside the catalog's hunks
 or an incomplete catalog are rejected without source writes. Generated output
 is retained.
@@ -43,6 +44,10 @@ header and the panel's existing `IDS_NTP_CLOSE` label. Its obsolete
 `chrome/grit/generated_resources.h`, which the file already includes. It does
 not require reverting the integrations or cleaning `out/Default`. A stale
 include is detected even when it falls outside the current patch hunks.
+
+Both color-picker paths compare `NativeTheme::preferred_color_scheme()` with
+`NativeTheme::PreferredColorScheme::kDark` in system mode. Explicit light/dark
+Space choices take precedence. The pinned interface has no `ShouldUseDarkColors()`.
 
 The window-to-Space capture checks `BrowserWindowInterface::GetType()` against
 `BrowserWindowInterface::Type::TYPE_NORMAL`. `GetIsNormalType()` belongs to
@@ -187,7 +192,7 @@ Negative controls must reproduce the two reported panel errors and the Settings
 lifecycle/assertion errors and the reported surface-label assertion before
 validation passes.
 
-Twenty-eight installed-version upgrade replays cover all seven earlier appearance catalogs
+Thirty-two installed-version upgrade replays cover all eight earlier appearance catalogs
 with LF, CRLF, mixed endings and absent final newlines. They check exact source
 results, read-only detection, unchanged unrelated source and retained build output.
 
@@ -200,6 +205,11 @@ control. These checks verify metadata and bindings; they do not run GRIT or
 compile the full customization controller.
 
 Chromium's complete transitive TypeScript/Mojo/C++ build remains a separate gate.
+The NativeTheme enum and accessor fixture is verified against the effective pinned
+header after shared/platform overlays. Compiler hosts use those actual declarations
+for both native availability and both color-picker workspace blocks. They reject
+the removed method and exercise system/light/dark modes, managed state, palette/tint
+colors and a missing workspace. These hosts do not compile the full Chromium target.
 
 Before marking this port accepted, use a disposable browser profile to verify:
 
