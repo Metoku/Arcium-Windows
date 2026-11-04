@@ -238,10 +238,16 @@ Existing `out\Default` objects should remain reusable. If another step fails, pr
 Only after the compilation prints `ARCIUM_LOCAL_CHROME_COMPILED` and the `chrome.exe` exists:
 
 ```powershell
-python scripts\windows_browser_smoke.py --timeout 60
+python -m scripts.windows_browser_smoke --timeout 60
 ```
 
 This launches the new executable **headlessly with a disposable profile**, opens `about:blank`, then deletes the temporary profile. This **does not** install the browser, validate its full Arc-like Windows UI, or make it safe for regular browsing/distribution.
+
+Run this from the repository root. Success prints `HEADLESS_LAUNCH_PASSED` and
+the report path (`work\browser-launch-smoke.json` by default). The direct-file
+invocation `python scripts\windows_browser_smoke.py --timeout 60` is also
+supported; the script resolves its own root without importing the `scripts`
+package. Updating this Python helper does not require a browser rebuild.
 
 ## If something fails
 
