@@ -3,6 +3,7 @@
 This checks decisions and error paths, not native Chromium linkage or rendering.
 """
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -33,13 +34,22 @@ def function(source, signature):
 
 @unittest.skipUnless(shutil.which('g++') or shutil.which('c++'), 'C++ compiler required')
 class WindowsAppearanceNativeContracts(unittest.TestCase):
-    def compile_and_run(self, source):
+    def compile_and_run(self, source, rejected_source=None):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             cpp = root / 'contract.cc'
             binary = root / 'contract.exe'
             cpp.write_text(source)
             compiler = shutil.which('g++') or shutil.which('c++')
+            if rejected_source is not None:
+                cpp.write_text(rejected_source)
+                rejected = subprocess.run([compiler, '-std=c++20', '-Wall', '-Wextra',
+                                           str(cpp), '-o', str(binary)],
+                                          capture_output=True, text=True)
+                self.assertNotEqual(rejected.returncode, 0,
+                                    'The reported const web_ui() call must fail compilation')
+                self.assertIn('web_ui', rejected.stderr)
+                cpp.write_text(source)
             result = subprocess.run([compiler, '-std=c++20', '-Wall', '-Wextra',
                                      str(cpp), '-o', str(binary)],
                                     capture_output=True, text=True)
@@ -103,6 +113,136 @@ int main(){
 }
 '''
         self.compile_and_run(prefix + actual + main)
+
+    def test_snapshot_declaration_and_body_use_nonconst_webui_accessor(self):
+        source = postimage('chrome/browser/ui/webui/settings/appearance_handler.cc')
+        header = postimage('chrome/browser/ui/webui/settings/appearance_handler.h')
+        declaration = re.search(
+            r'base::DictValue ArciumAppearanceSnapshot\(\)(?: const)?;', header).group()
+        actual = function(source, 'base::DictValue AppearanceHandler::ArciumAppearanceSnapshot()')
+        # Compile the actual preference table as well as the snapshot method.
+        table_start = source.index('struct WorkspacePreference {')
+        table_end = source.index('};', source.index('kWorkspacePreferences[]', table_start)) + 2
+        table = source[table_start:table_end]
+        prefix = r'''
+#include <cassert>
+#include <map>
+#include <memory>
+#include <string>
+#include <type_traits>
+#include <utility>
+#include <variant>
+#include <vector>
+namespace base {
+using Scalar = std::variant<bool, int, std::string>;
+struct Value {
+ Scalar scalar;
+ Value(bool value):scalar(value){} Value(int value):scalar(value){}
+};
+struct DictValue {
+ std::map<std::string, Scalar> values;
+ template<typename T> DictValue& Set(const char* key, T value) {
+  using U = std::decay_t<T>;
+  if constexpr (std::is_same_v<U, Value>) values.insert_or_assign(key,value.scalar);
+  else if constexpr (std::is_same_v<U, bool> || std::is_same_v<U, int> || std::is_same_v<U, std::string>)
+   values.insert_or_assign(key,value);
+  return *this;
+ }
+ bool boolean(const char* key) const {return std::get<bool>(values.at(key));}
+ std::string text(const char* key) const {return std::get<std::string>(values.at(key));}
+};
+struct ListValue {template<typename T> void Append(T){}};
+std::string UTF16ToUTF8(const std::u16string& value) {return {value.begin(),value.end()};}
+}
+namespace arcium {
+constexpr char kChromeFrameBorderWidthPref[]="frameWidth",kChromeUIScalePref[]="scale",
+ kCollapsedSidebarStylePref[]="collapseStyle",kArcSidebarNavigationEnabledPref[]="sidebarNavigation";
+}
+namespace prefs {constexpr char kHeliumRoundedFrame[]="roundedFrame";}
+struct Space {
+ std::string id()const{return "assigned-space";}
+ std::u16string name()const{return u"Assigned Space";}
+};
+struct SpaceInfo {std::string id;std::u16string name;};
+struct Model {
+ bool enabled=true,exists=true,managed=false;Space space;
+ bool available()const{return enabled;}
+ Space* GetAppearanceSpace(){return exists?&space:nullptr;}
+ std::vector<SpaceInfo> GetSpaces(){return {{"assigned-space",u"Assigned Space"}};}
+ bool GetBoolean(const char*){return true;} int GetInteger(const char*){return 100;}
+ bool HasPreference(const char*){return true;} bool IsManaged(const char*){return false;}
+ int GetSidebarWidth(){return 220;}bool HasSidebarWidth(){return true;}
+ bool IsSidebarWidthManaged(){return false;}bool IsAppearanceManaged(){return managed;}
+ base::DictValue GetChromeAppearance(){return {};}
+ base::DictValue GetSpacePalette(){return {};}
+ int GetAppearanceMode(){return 0;}int GetWebAppearanceMode(){return 0;}
+ std::string GetSurfaceSet(){return "glass";}
+ base::DictValue GetSurfaceTuning(){return {};}base::DictValue GetContentFrame(){return {};}
+};
+struct BrowserView;
+struct Browser {BrowserView* view=nullptr;};
+struct BrowserView {
+ bool use_native=true,native_base=true;
+ static BrowserView* GetBrowserViewForBrowser(Browser* browser){return browser->view;}
+};
+namespace content {
+struct WebContents {Browser* browser=nullptr;};
+struct WebUI {WebContents contents;WebContents* GetWebContents(){return &contents;}};
+// Matches content/public/browser/web_ui_message_handler.h: web_ui() has
+// no const overload. Do not make this double more permissive than Chromium.
+struct WebUIMessageHandler {
+ WebUI ui;int accessor_calls=0;
+ WebUI* web_ui(){++accessor_calls;return &ui;}
+};
+}
+namespace webui {
+Browser* GetBrowserWindowInterface(content::WebContents* contents){return contents->browser;}
+}
+namespace helium {
+struct Availability {bool native_material=true,reduce_transparency=false;} availability;
+struct Resolution {bool uses_translucent_native_base;};
+auto GetNativeFrameGlassAvailability(){return availability;}
+bool ShouldUseNativeFrameGlass(BrowserView* view){return view->use_native;}
+Resolution GetNativeFrameGlassResolution(BrowserView* view){return {view->native_base};}
+}
+namespace settings {
+struct AppearanceHandler : content::WebUIMessageHandler {
+ std::unique_ptr<Model> arcium_appearance_;
+'''
+        class_end = '\n};\n'
+        suffix = r'''
+}
+int main(){
+ settings::AppearanceHandler handler;
+ assert(!handler.ArciumAppearanceSnapshot().boolean("available"));
+ assert(handler.accessor_calls==0);
+ handler.arcium_appearance_=std::make_unique<Model>();
+ BrowserView view;Browser browser{&view};handler.ui.contents.browser=&browser;
+ auto snapshot=handler.ArciumAppearanceSnapshot();
+ assert(handler.accessor_calls==1 && snapshot.boolean("available"));
+ assert(snapshot.text("spaceId")=="assigned-space" && snapshot.text("name")=="Assigned Space");
+ assert(snapshot.boolean("windowGlassActive") && snapshot.boolean("windowGlassSupported"));
+ handler.ui.contents.browser=nullptr;
+ assert(!handler.ArciumAppearanceSnapshot().boolean("windowGlassActive"));
+ handler.ui.contents.browser=&browser;view.native_base=false;
+ assert(!handler.ArciumAppearanceSnapshot().boolean("windowGlassActive"));
+ view.native_base=true;helium::availability.reduce_transparency=true;
+ assert(!handler.ArciumAppearanceSnapshot().boolean("windowGlassSupported"));
+ handler.arcium_appearance_->managed=true;
+ assert(!handler.ArciumAppearanceSnapshot().boolean("available"));
+ handler.arcium_appearance_->enabled=false;
+ int calls=handler.accessor_calls;
+ assert(!handler.ArciumAppearanceSnapshot().boolean("available"));
+ assert(handler.accessor_calls==calls);
+}
+'''
+        current = prefix + declaration + class_end + table + actual + suffix
+        old_declaration = declaration.replace('ArciumAppearanceSnapshot();',
+                                              'ArciumAppearanceSnapshot() const;')
+        old_body = actual.replace('AppearanceHandler::ArciumAppearanceSnapshot() {',
+                                  'AppearanceHandler::ArciumAppearanceSnapshot() const {')
+        rejected = prefix + old_declaration + class_end + table + old_body + suffix
+        self.compile_and_run(current, rejected_source=rejected)
 
     def test_capture_uses_explicit_window_space_and_rejects_other_contexts(self):
         source = postimage('chrome/browser/ui/helium/arcium_settings_model.cc')

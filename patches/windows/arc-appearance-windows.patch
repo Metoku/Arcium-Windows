@@ -1445,7 +1445,7 @@
 +  ResolveJavascriptCallback(args[0], base::Value(ArciumAppearanceSnapshot()));
 +}
 +
-+base::DictValue AppearanceHandler::ArciumAppearanceSnapshot() const {
++base::DictValue AppearanceHandler::ArciumAppearanceSnapshot() {
 +  auto* model = arcium_appearance_.get();
 +  if (!model || !model->available())
 +    return base::DictValue().Set("available", false);
@@ -1643,7 +1643,7 @@
 +  void GetArciumAppearance(const base::ListValue& args);
 +  void SetArciumAppearance(const base::ListValue& args);
 +  void OnArciumAppearanceChanged();
-+  base::DictValue ArciumAppearanceSnapshot() const;
++  base::DictValue ArciumAppearanceSnapshot();
 +  bool ApplyArciumAppearance(const base::DictValue& request);
 +  std::unique_ptr<arcium_settings::ArciumSettingsModel> arcium_appearance_;
 +#endif

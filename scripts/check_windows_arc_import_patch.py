@@ -20,6 +20,7 @@ import xml.etree.ElementTree as ET
 from scripts.apply_windows_arc_workflow import (
     APPEARANCE_CSS_SOURCE, APPEARANCE_HANDLER_RENAMES, APPEARANCE_LAYOUT_SOURCE,
     APPEARANCE_LAYOUT_TEMPLATE, LEGACY_SURFACE_LABEL, SURFACE_LABEL,
+    APPEARANCE_SNAPSHOT_SOURCES, LEGACY_SNAPSHOT_SIGNATURE, SNAPSHOT_SIGNATURE,
     LEGACY_APPEARANCE_CSS, LEGACY_DISCONNECT, PATCH, ROOT,
     appearance_css_addition, git_apply, integrate, integrate_bundle,
     patch_targets, preserve_line_endings,
@@ -141,11 +142,12 @@ def check(core: Path, platform: Path | None = None,
                 if not any(entry["endings"] == style for entry in legacy_ui_upgrades):
                     current = {target: (source / target).read_bytes() for target in targets}
                     allowed = {stem + suffix for stem in APPEARANCE_HANDLER_RENAMES
-                               for suffix in (".ts", ".html.ts")}
-                    for previous_version in ("original", "css-corrected", "handlers-corrected"):
+                               for suffix in (".ts", ".html.ts")} | set(APPEARANCE_SNAPSHOT_SOURCES)
+                    for previous_version in ("original", "css-corrected", "handlers-corrected",
+                                             "surface-label-corrected"):
                         compact_css = previous_version == "original"
                         old = dict(current)
-                        if previous_version != "handlers-corrected":
+                        if previous_version in ("original", "css-corrected"):
                             for stem, renames in APPEARANCE_HANDLER_RENAMES.items():
                                 for suffix in (".ts", ".html.ts"):
                                     name = stem + suffix
@@ -163,7 +165,18 @@ def check(core: Path, platform: Path | None = None,
                         name = APPEARANCE_LAYOUT_TEMPLATE
                         if old[name].count(SURFACE_LABEL) != 1:
                             raise RuntimeError("Expected exactly one corrected surface label")
-                        old[name] = old[name].replace(SURFACE_LABEL, LEGACY_SURFACE_LABEL, 1)
+                        if previous_version != "surface-label-corrected":
+                            old[name] = old[name].replace(SURFACE_LABEL, LEGACY_SURFACE_LABEL, 1)
+                        for name in APPEARANCE_SNAPSHOT_SOURCES:
+                            if name.endswith(".h"):
+                                fixed = SNAPSHOT_SIGNATURE + b";"
+                                legacy = LEGACY_SNAPSHOT_SIGNATURE + b";"
+                            else:
+                                fixed = b"AppearanceHandler::" + SNAPSHOT_SIGNATURE + b" {"
+                                legacy = b"AppearanceHandler::" + LEGACY_SNAPSHOT_SIGNATURE + b" {"
+                            if old[name].count(fixed) != 1:
+                                raise RuntimeError("Expected exactly one snapshot signature")
+                            old[name] = old[name].replace(fixed, legacy, 1)
                         if compact_css:
                             name = APPEARANCE_CSS_SOURCE
                             normalized = old[name].replace(b"\r\n", b"\n")

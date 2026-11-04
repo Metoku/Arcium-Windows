@@ -44,6 +44,11 @@ APPEARANCE_LAYOUT_SOURCE = (
 APPEARANCE_LAYOUT_TEMPLATE = APPEARANCE_LAYOUT_SOURCE.removesuffix(".ts") + ".html.ts"
 LEGACY_SURFACE_LABEL = b"value[0]!.toUpperCase() + value.slice(1)"
 SURFACE_LABEL = b"value.charAt(0).toUpperCase() + value.slice(1)"
+APPEARANCE_SNAPSHOT_SOURCES = tuple(
+    "chrome/browser/ui/webui/settings/appearance_handler." + suffix
+    for suffix in ("h", "cc"))
+LEGACY_SNAPSHOT_SIGNATURE = b"ArciumAppearanceSnapshot() const"
+SNAPSHOT_SIGNATURE = b"ArciumAppearanceSnapshot()"
 LEGACY_DISCONNECT = b"""  override disconnectedCallback() {
     ++this.workspaceGeneration_;
     super.disconnectedCallback();
@@ -303,6 +308,15 @@ def integrate(source: Path, *, apply: bool = False, revert: bool = False,
                 before = path.read_bytes()
                 if before.count(LEGACY_SURFACE_LABEL) == 1:
                     path.write_bytes(before.replace(LEGACY_SURFACE_LABEL, SURFACE_LABEL, 1))
+                    staged_upgrade = True
+            for target in APPEARANCE_SNAPSHOT_SOURCES:
+                if target not in targets:
+                    continue
+                path = staged_source / target
+                before = path.read_bytes()
+                if before.count(LEGACY_SNAPSHOT_SIGNATURE) == 1:
+                    path.write_bytes(before.replace(
+                        LEGACY_SNAPSHOT_SIGNATURE, SNAPSHOT_SIGNATURE, 1))
                     staged_upgrade = True
             if staged_upgrade:
                 corrected = git_apply(staged_source, staged_patch,

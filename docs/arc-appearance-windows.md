@@ -26,12 +26,17 @@ partly applied. Already applied catalogs are retained. The known old shortcut
 lint error can be upgraded by the existing helper.
 
 If an earlier appearance patch is already installed, the helper recognizes its
-exact CSS and WebUI handler versions and reports `UPDATE_AVAILABLE`. Applying
-again upgrades those source files only after the complete corrected appearance
-catalog can be reversed. This covers both the original compact CSS and the
-later CSS-corrected and handler-corrected catalogs. The current fix replaces
-`value[0]!.toUpperCase()` with `value.charAt(0).toUpperCase()` in the surface label. Unknown source edits or an incomplete native/UI
-catalog are rejected without source writes. Generated output is retained.
+exact CSS, WebUI handlers, surface-label expression and snapshot signatures and
+reports `UPDATE_AVAILABLE`. Applying again upgrades those source files only after
+the complete corrected appearance catalog can be reversed. This covers all four
+previous appearance versions. Unknown source edits inside the catalog's hunks
+or an incomplete catalog are rejected without source writes. Generated output
+is retained.
+
+The Settings snapshot declaration and definition are non-const because they
+use Chromium's non-const `WebUIMessageHandler::web_ui()` accessor. Reapplying to
+the latest installed version changes only those two signatures. It does not
+require reverting the integrations or cleaning `out/Default`.
 
 `--feature appearance` selects only this integration. `--feature all --revert`
 reverts all four optional source integrations; it does not undo user appearance
@@ -126,7 +131,10 @@ content shadow. These are backed by existing render/layout consumers.
 
 Repository tests compile the actual new Windows availability, backdrop controller
 and window-to-Space capture functions in small C++ hosts with API contract
-doubles. They check OS/accessibility settings, DWM failures, composition surface
+doubles. Another host compiles the actual Settings snapshot declaration,
+preference table and complete method body against a non-const `web_ui()` API.
+The old declaration/definition must fail compilation with a `web_ui` diagnostic;
+the corrected pair must compile and pass snapshot-state checks. They check OS/accessibility settings, DWM failures, composition surface
 requirements, private/guest/policy contexts, mismatched profiles and explicit
 Space ownership. They do **not** link against Chromium or call Windows DWM.
 
@@ -155,9 +163,9 @@ Negative controls must reproduce the two reported panel errors and the Settings
 lifecycle/assertion errors and the reported surface-label assertion before
 validation passes.
 
-Twelve installed-version upgrade replays cover all three earlier appearance catalogs
+Sixteen installed-version upgrade replays cover all four earlier appearance catalogs
 with LF, CRLF, mixed endings and absent final newlines. They check exact source
-results, read-only detection and retained native source/build output.
+results, read-only detection, unchanged unrelated source and retained build output.
 
 Chromium's complete transitive TypeScript/Mojo/C++ build remains a separate gate.
 

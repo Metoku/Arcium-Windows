@@ -8,6 +8,7 @@ import unittest
 from scripts.apply_windows_arc_workflow import (
     APPEARANCE_CSS_SOURCE, APPEARANCE_LAYOUT_TEMPLATE, LEGACY_APPEARANCE_CSS, ROOT,
     LEGACY_SURFACE_LABEL, SURFACE_LABEL,
+    APPEARANCE_SNAPSHOT_SOURCES, LEGACY_SNAPSHOT_SIGNATURE, SNAPSHOT_SIGNATURE,
     appearance_css_addition, integrate, integrate_bundle,
 )
 
@@ -341,6 +342,89 @@ class AppearanceHandlerUpgradeTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "complete appearance catalog"):
             integrate(self.source, patch=self.patch, apply=True)
         self.assertEqual(before, self.snapshot())
+
+
+class AppearanceSnapshotUpgradeTests(unittest.TestCase):
+    def setUp(self):
+        import difflib
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.source = Path(self.temporary.name) / "src"
+        self.source.mkdir()
+        (self.source / "BUILD.gn").write_text("# fixture\n")
+        header, cpp = APPEARANCE_SNAPSHOT_SOURCES
+        fixed_css = appearance_css_addition(
+            (ROOT / "patches/windows/arc-appearance-windows.patch").read_bytes())
+        self.corrected = {
+            APPEARANCE_CSS_SOURCE:b"/* existing */\n" + fixed_css,
+            header:b"// header\n  base::DictValue " + SNAPSHOT_SIGNATURE + b";\n// footer\n",
+            cpp:b"// implementation\nbase::DictValue AppearanceHandler::" +
+                SNAPSHOT_SIGNATURE + b" {\n  return {};\n}\n// footer\n",
+            "chrome/unrelated.cc":b"unrelated feature applied\n",
+        }
+        self.originals = {name:b"original\n" for name in self.corrected}
+        self.originals[APPEARANCE_CSS_SOURCE] = b"/* existing */\n"
+        sections = []
+        for name, data in self.corrected.items():
+            path = self.source / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+            sections.extend(difflib.unified_diff(self.originals[name].decode().splitlines(True),
+                data.decode().splitlines(True), fromfile="a/" + name, tofile="b/" + name))
+        self.patch = self.source.parent / "arc-appearance-windows.patch"
+        self.patch.write_text("".join(sections))
+        self.output = self.source / "out/Default/retained.obj"
+        self.output.parent.mkdir(parents=True)
+        self.output.write_bytes(b"retained compiled output")
+        self.install_previous()
+
+    def install_previous(self, style="LF"):
+        for name in APPEARANCE_SNAPSHOT_SOURCES:
+            data = self.corrected[name].replace(SNAPSHOT_SIGNATURE, LEGACY_SNAPSHOT_SIGNATURE)
+            if style in ("CRLF", "mixed"):
+                data = data.replace(b"\n", b"\r\n")
+            if style == "mixed":
+                data = data.replace(b"// header\r\n", b"// header\n").replace(
+                    b"// implementation\r\n", b"// implementation\n")
+            if style == "no-eof": data = data.removesuffix(b"\n")
+            (self.source / name).write_bytes(data)
+
+    def snapshot(self):
+        return {path:(path.read_bytes(), path.stat().st_mtime_ns)
+                for path in self.source.rglob("*") if path.is_file()}
+
+    def test_previous_snapshot_pair_upgrades_without_touching_other_outputs(self):
+        for style in ("LF", "CRLF", "mixed", "no-eof"):
+            with self.subTest(style=style):
+                self.install_previous(style)
+                before = self.snapshot()
+                self.assertEqual(integrate(self.source, patch=self.patch), "UPDATE_AVAILABLE")
+                self.assertEqual(before, self.snapshot())
+                self.assertEqual(integrate(self.source, patch=self.patch, apply=True), "APPLIED")
+                for path, (data, stamp) in before.items():
+                    name = path.relative_to(self.source).as_posix()
+                    if name in APPEARANCE_SNAPSHOT_SOURCES:
+                        self.assertEqual(path.read_bytes(), data.replace(
+                            LEGACY_SNAPSHOT_SIGNATURE, SNAPSHOT_SIGNATURE))
+                    else:
+                        self.assertEqual((path.read_bytes(), path.stat().st_mtime_ns), (data, stamp))
+                after = self.snapshot()
+                integrate(self.source, patch=self.patch, apply=True)
+                self.assertEqual(after, self.snapshot())
+
+    def test_unknown_native_edit_rejects_both_signature_updates_atomically(self):
+        path = self.source / APPEARANCE_SNAPSHOT_SOURCES[1]
+        path.write_bytes(path.read_bytes().replace(b"return {};", b"return local_value;"))
+        before = self.snapshot()
+        with self.assertRaisesRegex(RuntimeError, "complete appearance catalog"):
+            integrate(self.source, patch=self.patch, apply=True)
+        self.assertEqual(before, self.snapshot())
+
+    def test_previous_snapshot_version_can_be_reverted(self):
+        self.assertEqual(integrate(self.source, patch=self.patch, revert=True), "READY")
+        for name, data in self.originals.items():
+            self.assertEqual((self.source / name).read_bytes(), data)
+        self.assertEqual(self.output.read_bytes(), b"retained compiled output")
 
 
 if __name__ == "__main__":
