@@ -32,13 +32,16 @@ async function checkLint({source, rulesDir, modules, program, files, typed = fal
         ts.transpileModule(text, {compilerOptions:{module:ts.ModuleKind.ESNext,
           target:ts.ScriptTarget.ES2022}}).outputText);
     }
-    const {defaultConfig} = await import(pathToFileURL(path.join(temporary, 'eslint_ts.config_base.js')).href);
+    const {defaultConfig, webComponentMissingDepsConfig, noExplicitAnyConfig} =
+      await import(pathToFileURL(path.join(temporary, 'eslint_ts.config_base.js')).href);
     const skipped = typed ? [] : [
       '@webui-eslint/lit-element-expressions', '@webui-eslint/lit-reactive-properties',
       '@webui-eslint/lit-property-accessor', '@webui-eslint/web-component-missing-deps',
       '@typescript-eslint/no-unnecessary-type-assertion', '@typescript-eslint/no-unnecessary-type-conversion',
     ];
-    const linter = new ESLint({cwd:source, overrideConfigFile:true, overrideConfig:[...defaultConfig,
+    // Match the two optional lint flags in the user's native Settings action.
+    const extraConfigs = typed ? [webComponentMissingDepsConfig, noExplicitAnyConfig] : [];
+    const linter = new ESLint({cwd:source, overrideConfigFile:true, overrideConfig:[...defaultConfig, ...extraConfigs,
       {languageOptions:{parserOptions:{programs:[program]}},
         rules:Object.fromEntries(skipped.map(rule => [rule, 'off']))}]});
     const results = await linter.lintFiles(files);
@@ -48,6 +51,7 @@ async function checkLint({source, rulesDir, modules, program, files, typed = fal
       [...expectedRules].sort(), diagnostics.join('\n'));
     return {status:expectedRules.length ? 'EXPECTED_LINT_FAILURE_REPRODUCED' : 'SCOPED_CHROMIUM_WEBUI_LINT_PASSED', files,
       typed_adapter:typed, skipped_rules:skipped, upstream_sha256:hashes,
+      optional_configs:typed ? ['web-component-missing-deps', 'no-explicit-any'] : [],
       chromium_transitive_graph_verified:false};
   } finally {fs.rmSync(temporary, {recursive:true, force:true});}
 }
