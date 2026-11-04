@@ -20,6 +20,11 @@ For the optional Windows workflow controls and reversible shortcut preset, see
 [Arc workflow on Windows](docs/arc-workflow-windows.md). The integration applies
 to an already prepared tree and requires an incremental browser build.
 
+For opt-in red/yellow/green controls at the top left, see
+[Mac-style window buttons](docs/mac-window-buttons.md). This separate frame
+style keeps Windows actions and requires an incremental build, then enabling
+its browser flag. Its native compilation and visible acceptance remain pending.
+
 For the optional Windows Arc sidebar importer and Space picker, see
 [Import from Arc on Windows](docs/arc-import-windows.md). It reuses Arcium's
 saved-Pins importer with corrected Windows discovery and additional sidebar

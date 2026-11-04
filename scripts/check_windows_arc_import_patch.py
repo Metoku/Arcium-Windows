@@ -32,6 +32,7 @@ from scripts.apply_windows_arc_workflow import (
 )
 from scripts.check_patch_overlaps import discover_patch_paths, download_original, select_patch_sections
 from scripts.windows_port import audit_staged, chromium_version, git, read_pin, read_series
+from scripts.check_windows_mac_buttons import MAC_PATCH, MAC_API_FILES, check_mac_buttons
 
 
 IMPORT_PATCH = ROOT / "patches/windows/arc-import-windows.patch"
@@ -143,6 +144,8 @@ def check(core: Path, platform: Path | None = None,
     # These are read-only checks, outside the catalogs' 43 write targets.
     replay_targets = targets | {
         GENERATED_RESOURCES_GRD, BROWSER_WINDOW_INTERFACE_HEADER, NATIVE_THEME_HEADER}
+    mac_targets = set(patch_targets(MAC_PATCH.read_text(encoding="utf-8")))
+    replay_targets |= mac_targets | set(MAC_API_FILES)
     _, created = discover_patch_paths(patches)
     original_hashes = {}
     with tempfile.TemporaryDirectory(prefix="arcium-arc-import-replay-") as temporary:
@@ -179,6 +182,7 @@ def check(core: Path, platform: Path | None = None,
             raise RuntimeError("Pinned NativeTheme API differs from the appearance compiler fixture")
         native_theme_sha256 = hashlib.sha256(native_theme_header.read_bytes()).hexdigest()
         originals = {target: (source / target).read_bytes() for target in targets}
+        mac_originals = {target:(source / target).read_bytes() for target in mac_targets}
         sentinel = source / "out/Default/retained.obj"
         sentinel.parent.mkdir(parents=True)
         sentinel.write_bytes(b"existing compiled output")
@@ -409,6 +413,10 @@ def check(core: Path, platform: Path | None = None,
                 checks.append({"source_endings": style,
                                "order": [p.name for p in order],
                                "applied_sha256": applied_hashes})
+        mac_report = check_mac_buttons(source, originals | mac_originals, catalogs)
+        if (sentinel.read_bytes() != b"existing compiled output" or
+                sentinel.stat().st_mtime_ns != sentinel_time):
+            raise RuntimeError("The Mac caption helper changed retained compilation output")
         return {"status": "PATCH_REPLAY_VERIFIED_NOT_COMPILED",
                 "arcium_core": expected, "chromium_version": chromium_version(),
                 "windows_platform_replayed": platform is not None,
@@ -422,6 +430,7 @@ def check(core: Path, platform: Path | None = None,
                 "build_output_preserved": True, "legacy_css_upgrade_verified": legacy_css_upgrade_checked,
                 "legacy_webui_upgrades": legacy_ui_upgrades,
                 "resource_bindings":resource_report, "browser_compiled": False,
+                "mac_window_buttons":mac_report,
                 "browser_launch_verified": False, "appearance_webui": webui_report}
 
 

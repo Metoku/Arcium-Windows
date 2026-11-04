@@ -482,7 +482,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-dir", type=Path,
                         default=ROOT / "work/windows-platform/build/src")
-    parser.add_argument("--feature", choices=("workflow", "arc-import", "passwords", "appearance", "all"),
+    parser.add_argument("--feature", choices=("workflow", "arc-import", "passwords", "appearance", "mac-buttons", "all"),
                         default="workflow", help="Optional Windows integration to apply")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--check", action="store_true", help="Read-only applicability check (default)")
@@ -495,6 +495,7 @@ def main() -> int:
             "arc-import": ROOT / "patches/windows/arc-import-windows.patch",
             "passwords": ROOT / "patches/windows/arc-password-import-windows.patch",
             "appearance": ROOT / "patches/windows/arc-appearance-windows.patch",
+            "mac-buttons": ROOT / "patches/windows/mac-window-buttons.patch",
         }
         if args.feature == "all":
             status = integrate_bundle(args.source_dir, apply=args.apply, revert=args.revert)
@@ -505,6 +506,7 @@ def main() -> int:
         parser.exit(1, f"{error}\n")
     marker = {"workflow": "ARC_WORKFLOW", "arc-import": "ARC_IMPORT",
               "passwords": "ARC_PASSWORDS", "appearance": "ARC_APPEARANCE",
+              "mac-buttons": "MAC_BUTTONS",
               "all": "ALL"}[args.feature]
     print(f"ARCIUM_WINDOWS_{marker}_{status}")
     if args.apply or args.revert:
