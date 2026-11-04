@@ -9,7 +9,9 @@ import subprocess
 import tempfile
 import unittest
 
-from scripts.apply_windows_arc_workflow import FRAME_GRADIENT, LEGACY_FRAME_GRADIENT, ROOT
+from scripts.apply_windows_arc_workflow import (
+    FRAME_GRADIENT, LEGACY_FRAME_GRADIENT, ROOT, LEGACY_WINDOW_TYPE_CHECK, WINDOW_TYPE_CHECK,
+)
 from scripts.check_patch_overlaps import select_patch_sections
 
 
@@ -247,6 +249,8 @@ int main(){
     def test_capture_uses_explicit_window_space_and_rejects_other_contexts(self):
         source = postimage('chrome/browser/ui/helium/arcium_settings_model.cc')
         actual = function(source, 'std::unique_ptr<ArciumSettingsModel> ArciumSettingsModel::CaptureForWebContents(')
+        interface = (ROOT / 'tests/fixtures/browser_window_interface_type.h').read_text()
+        interface = interface[interface.index('  enum Type {'):]
         prefix = r'''
 #include <cassert>
 #include <memory>
@@ -260,14 +264,24 @@ struct Profile {
  bool IsOffTheRecord(){return private_;}bool IsGuestSession(){return guest;}
  static Profile* FromBrowserContext(Profile* value){return value;}
 };
-struct Browser {Profile* profile=nullptr;bool normal=true;
- Profile* GetProfile(){return profile;}bool GetIsNormalType(){return normal;}};
-namespace content {struct WebContents {Profile* profile=nullptr;Browser* browser=nullptr;
+#define IS_ANDROID 0
+#define BUILDFLAG(flag) flag
+struct BrowserWindowInterface {
+''' + interface + r'''
+};
+struct Browser : BrowserWindowInterface {
+ Profile* profile=nullptr;Type type=TYPE_NORMAL;
+ explicit Browser(Profile* value):profile(value){}
+ Profile* GetProfile()override{return profile;}
+ const Profile* GetProfile()const override{return profile;}
+ Type GetType()const override{return type;}
+};
+namespace content {struct WebContents {Profile* profile=nullptr;BrowserWindowInterface* browser=nullptr;
  Profile* GetBrowserContext(){return profile;}};}
-namespace webui {Browser* GetBrowserWindowInterface(content::WebContents* value){return value->browser;}}
+namespace webui {BrowserWindowInterface* GetBrowserWindowInterface(content::WebContents* value){return value->browser;}}
 namespace helium {
 struct Service {std::string id="window-space";bool exists=true;
- std::string_view GetExplicitSpaceIdForBrowser(Browser*){return id;}
+ std::string_view GetExplicitSpaceIdForBrowser(BrowserWindowInterface*){return id;}
  Service* GetSpaceById(std::string_view value){return exists && value==id?this:nullptr;}};
 struct HeliumSpaceServiceFactory {static Service* GetForProfile(Profile* value){return value->service;}};
 }
@@ -282,7 +296,7 @@ struct ArciumSettingsModel {
         main = r'''
 int main(){
  helium::Service service;Profile profile;profile.service=&service;
- Browser browser{&profile,true};content::WebContents page{&profile,&browser};
+ Browser browser(&profile);content::WebContents page{&profile,&browser};
  auto capture=[&](){return ArciumSettingsModel::CaptureForWebContents(&page,{},{});};
  assert(capture() && capture()->selected=="window-space");
  service.id="other-assigned-space";assert(capture()->selected=="other-assigned-space");
@@ -291,13 +305,23 @@ int main(){
  profile.private_=true;assert(!capture());profile.private_=false;
  profile.guest=true;assert(!capture());profile.guest=false;
  Profile other;browser.profile=&other;assert(!capture());browser.profile=&profile;
- browser.normal=false;assert(!capture());browser.normal=true;
+ const BrowserWindowInterface::Type rejected_types[]={
+  BrowserWindowInterface::TYPE_POPUP,BrowserWindowInterface::TYPE_APP,
+  BrowserWindowInterface::TYPE_DEVTOOLS,BrowserWindowInterface::TYPE_APP_POPUP,
+  BrowserWindowInterface::TYPE_PICTURE_IN_PICTURE};
+ for(auto type:rejected_types){browser.type=type;assert(!capture());}
+ browser.type=BrowserWindowInterface::TYPE_NORMAL;assert(capture());
  page.browser=nullptr;assert(!capture());page.browser=&browser;
  profile.service=nullptr;assert(!capture());
  assert(!ArciumSettingsModel::CaptureForWebContents(nullptr,{},{}));
 }
 '''
-        self.compile_and_run(prefix + actual + main)
+        self.assertIn(WINDOW_TYPE_CHECK.decode(), actual)
+        old_body = actual.replace(WINDOW_TYPE_CHECK.decode(), LEGACY_WINDOW_TYPE_CHECK.decode())
+        self.assertNotEqual(actual, old_body)
+        self.compile_and_run(prefix + actual + main,
+                             rejected_source=prefix + old_body + main,
+                             rejected_diagnostic='GetIsNormalType')
 
     def test_actual_backdrop_controller_keeps_opaque_fallback_on_failure(self):
         source = postimage('chrome/browser/ui/views/frame/browser_desktop_window_tree_host_win.cc')

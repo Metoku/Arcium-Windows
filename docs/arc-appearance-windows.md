@@ -27,8 +27,9 @@ lint error can be upgraded by the existing helper.
 
 If an earlier appearance patch is already installed, the helper recognizes its
 exact CSS, WebUI handlers, surface-label expression, snapshot signatures,
-gradient color block and obsolete resource include. It reports `UPDATE_AVAILABLE`. Applying again upgrades those source files only after
-the complete corrected appearance catalog can be reversed. This covers all six
+gradient color block, obsolete resource include and window-type query. It reports
+`UPDATE_AVAILABLE`. Applying again upgrades those source files only after
+the complete corrected appearance catalog can be reversed. This covers all seven
 previous appearance versions. Unknown source edits inside the catalog's hunks
 or an incomplete catalog are rejected without source writes. Generated output
 is retained.
@@ -36,12 +37,24 @@ is retained.
 The Settings snapshot declaration and definition are non-const because they
 use Chromium's non-const `WebUIMessageHandler::web_ui()` accessor. The frame
 gradient uses `SkColor4f::FromColor` for its two stops, matching the pinned
-`PaintShader::MakeRadialGradient` API. Reapplying to the latest installed version
-removes the obsolete `chrome/grit/settings_strings.h` include and reuses the
-panel's existing `IDS_NTP_CLOSE` label. The Settings part is emitted by
+`PaintShader::MakeRadialGradient` API. The controller uses its existing resource
+header and the panel's existing `IDS_NTP_CLOSE` label. Its obsolete
+`chrome/grit/settings_strings.h` include is removed. The Settings part is emitted by
 `chrome/grit/generated_resources.h`, which the file already includes. It does
 not require reverting the integrations or cleaning `out/Default`. A stale
 include is detected even when it falls outside the current patch hunks.
+
+The window-to-Space capture checks `BrowserWindowInterface::GetType()` against
+`BrowserWindowInterface::Type::TYPE_NORMAL`. `GetIsNormalType()` belongs to
+`BrowserView`, and is retained only on callers with that receiver type. Applying
+to the latest installed version changes only the capture query. The compile
+host uses the actual pinned type enum, `GetType()` and both `GetProfile()`
+declarations, rather than exposing `BrowserView` methods on a browser interface.
+The effective pinned header, including shared/platform overlays, is compared
+with that API excerpt during source replay. The old call must fail compilation;
+the corrected capture accepts normal windows and rejects popup, app, app-popup,
+DevTools and picture-in-picture windows, alongside the existing profile/Space
+ownership checks.
 
 `--feature appearance` selects only this integration. `--feature all --revert`
 reverts all four optional source integrations; it does not undo user appearance
@@ -174,7 +187,7 @@ Negative controls must reproduce the two reported panel errors and the Settings
 lifecycle/assertion errors and the reported surface-label assertion before
 validation passes.
 
-Twenty-four installed-version upgrade replays cover all six earlier appearance catalogs
+Twenty-eight installed-version upgrade replays cover all seven earlier appearance catalogs
 with LF, CRLF, mixed endings and absent final newlines. They check exact source
 results, read-only detection, unchanged unrelated source and retained build output.
 

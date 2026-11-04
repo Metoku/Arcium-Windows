@@ -60,6 +60,9 @@ LEGACY_SETTINGS_STRINGS_INCLUDE = b'#include "chrome/grit/settings_strings.h"\n'
 GENERATED_RESOURCES_INCLUDE = b'#include "chrome/grit/generated_resources.h"\n'
 LEGACY_CLOSE_WORKSPACE_STRING = b'{"closeWorkspacePanel", IDS_CLOSE}'
 CLOSE_WORKSPACE_STRING = b'{"closeWorkspacePanel", IDS_NTP_CLOSE}'
+APPEARANCE_CAPTURE_SOURCE = "chrome/browser/ui/helium/arcium_settings_model.cc"
+LEGACY_WINDOW_TYPE_CHECK = b"      !browser->GetIsNormalType()) {"
+WINDOW_TYPE_CHECK = b"      browser->GetType() != BrowserWindowInterface::Type::TYPE_NORMAL) {"
 LEGACY_DISCONNECT = b"""  override disconnectedCallback() {
     ++this.workspaceGeneration_;
     super.disconnectedCallback();
@@ -352,6 +355,12 @@ def integrate(source: Path, *, apply: bool = False, revert: bool = False,
                     after = after.replace(LEGACY_CLOSE_WORKSPACE_STRING, CLOSE_WORKSPACE_STRING, 1)
                 if after != before:
                     path.write_bytes(after)
+                    staged_upgrade = True
+            if APPEARANCE_CAPTURE_SOURCE in targets:
+                path = staged_source / APPEARANCE_CAPTURE_SOURCE
+                before = path.read_bytes()
+                if before.count(LEGACY_WINDOW_TYPE_CHECK) == 1:
+                    path.write_bytes(before.replace(LEGACY_WINDOW_TYPE_CHECK, WINDOW_TYPE_CHECK, 1))
                     staged_upgrade = True
             if staged_upgrade:
                 corrected = git_apply(staged_source, staged_patch,

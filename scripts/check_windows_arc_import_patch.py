@@ -24,6 +24,7 @@ from scripts.apply_windows_arc_workflow import (
     APPEARANCE_FRAME_SOURCE, LEGACY_FRAME_GRADIENT, FRAME_GRADIENT,
     APPEARANCE_CUSTOMIZE_UI_SOURCE, LEGACY_SETTINGS_STRINGS_INCLUDE,
     GENERATED_RESOURCES_INCLUDE, LEGACY_CLOSE_WORKSPACE_STRING, CLOSE_WORKSPACE_STRING,
+    APPEARANCE_CAPTURE_SOURCE, LEGACY_WINDOW_TYPE_CHECK, WINDOW_TYPE_CHECK,
     LEGACY_APPEARANCE_CSS, LEGACY_DISCONNECT, PATCH, ROOT,
     appearance_css_addition, git_apply, integrate, integrate_bundle,
     patch_targets, preserve_line_endings,
@@ -36,6 +37,8 @@ IMPORT_PATCH = ROOT / "patches/windows/arc-import-windows.patch"
 PASSWORD_PATCH = ROOT / "patches/windows/arc-password-import-windows.patch"
 APPEARANCE_PATCH = ROOT / "patches/windows/arc-appearance-windows.patch"
 GENERATED_RESOURCES_GRD = "chrome/app/generated_resources.grd"
+BROWSER_WINDOW_INTERFACE_HEADER = (
+    "chrome/browser/ui/browser_window/public/browser_window_interface.h")
 ESLINT_ASSETS = """eslint_ts.config_base.ts inline_event_handler.ts
 lit_element_bindings.ts lit_element_invalid_interface.ts lit_element_structure.ts
 lit_element_template_structure.ts lit_property_accessor.ts lit_reactive_properties.ts
@@ -47,6 +50,20 @@ web_component_missing_deps.ts webui_eslint_plugin.ts""".split()
 def normalize_headers(diff: str) -> str:
     diff = re.sub(r"^--- (?:src\.orig|src|a)/", "--- a/", diff, flags=re.MULTILINE)
     return re.sub(r"^\+\+\+ (?:src|b)/", "+++ b/", diff, flags=re.MULTILINE)
+
+
+def browser_window_type_api(text: str) -> str:
+    """Extract the declarations compiled by the capture regression host."""
+    query = "  virtual Type GetType() const = 0;"
+    start = text.index("  enum Type {")
+    end = text.index(query, start) + len(query)
+    enum = "\n".join(line for line in text[start:end].splitlines()
+                     if not line.lstrip().startswith("//"))
+    profiles = re.findall(r'^  virtual (?:const )?Profile\* GetProfile\(\)(?: const)? = 0;',
+                          text, re.MULTILINE)
+    if len(profiles) != 2:
+        raise RuntimeError("Unexpected BrowserWindowInterface profile query declarations")
+    return enum + "\n" + "\n".join(profiles) + "\n"
 
 
 def verify_appearance_resources(source: Path, targets: set[str]) -> dict:
@@ -101,9 +118,9 @@ def check(core: Path, platform: Path | None = None,
         patches += read_series(platform / "patches/series")
     catalogs = (PATCH, IMPORT_PATCH, PASSWORD_PATCH, APPEARANCE_PATCH)
     targets = set().union(*(patch_targets(p.read_text(encoding="utf-8")) for p in catalogs))
-    # Reconstruct the resource owner too, including shared/platform overlays.
-    # It is read-only metadata, outside the optional catalogs' 43 write targets.
-    replay_targets = targets | {GENERATED_RESOURCES_GRD}
+    # Reconstruct the resource owner and browser API with shared/platform overlays.
+    # These are read-only checks, outside the catalogs' 43 write targets.
+    replay_targets = targets | {GENERATED_RESOURCES_GRD, BROWSER_WINDOW_INTERFACE_HEADER}
     _, created = discover_patch_paths(patches)
     original_hashes = {}
     with tempfile.TemporaryDirectory(prefix="arcium-arc-import-replay-") as temporary:
@@ -127,6 +144,12 @@ def check(core: Path, platform: Path | None = None,
             if result.returncode:
                 raise RuntimeError(f"Pinned source replay failed at {patch}:\n{result.stderr}")
             replayed.append(patch.name)
+        browser_header = source / BROWSER_WINDOW_INTERFACE_HEADER
+        browser_api_fixture = ROOT / "tests/fixtures/browser_window_interface_type.h"
+        if browser_window_type_api(browser_header.read_text(encoding="utf-8")) != browser_window_type_api(
+                browser_api_fixture.read_text(encoding="utf-8")):
+            raise RuntimeError("Pinned BrowserWindowInterface API differs from the capture compiler fixture")
+        browser_api_sha256 = hashlib.sha256(browser_header.read_bytes()).hexdigest()
         originals = {target: (source / target).read_bytes() for target in targets}
         sentinel = source / "out/Default/retained.obj"
         sentinel.parent.mkdir(parents=True)
@@ -201,9 +224,11 @@ def check(core: Path, platform: Path | None = None,
                     current = {target: (source / target).read_bytes() for target in targets}
                     allowed = {stem + suffix for stem in APPEARANCE_HANDLER_RENAMES
                                for suffix in (".ts", ".html.ts")} | set(APPEARANCE_SNAPSHOT_SOURCES) | {
-                                   APPEARANCE_FRAME_SOURCE, APPEARANCE_CUSTOMIZE_UI_SOURCE}
+                                   APPEARANCE_FRAME_SOURCE, APPEARANCE_CUSTOMIZE_UI_SOURCE,
+                                   APPEARANCE_CAPTURE_SOURCE}
                     for previous_version in ("original", "css-corrected", "handlers-corrected",
-                                             "surface-label-corrected", "snapshot-corrected", "gradient-corrected"):
+                                             "surface-label-corrected", "snapshot-corrected", "gradient-corrected",
+                                             "resources-corrected"):
                         compact_css = previous_version == "original"
                         old = dict(current)
                         if previous_version in ("original", "css-corrected"):
@@ -226,7 +251,7 @@ def check(core: Path, platform: Path | None = None,
                             raise RuntimeError("Expected exactly one corrected surface label")
                         if previous_version in ("original", "css-corrected", "handlers-corrected"):
                             old[name] = old[name].replace(SURFACE_LABEL, LEGACY_SURFACE_LABEL, 1)
-                        if previous_version not in ("snapshot-corrected", "gradient-corrected"):
+                        if previous_version not in ("snapshot-corrected", "gradient-corrected", "resources-corrected"):
                             for name in APPEARANCE_SNAPSHOT_SOURCES:
                                 if name.endswith(".h"):
                                     fixed = SNAPSHOT_SIGNATURE + b";"
@@ -237,22 +262,27 @@ def check(core: Path, platform: Path | None = None,
                                 if old[name].count(fixed) != 1:
                                     raise RuntimeError("Expected exactly one snapshot signature")
                                 old[name] = old[name].replace(fixed, legacy, 1)
-                        if previous_version != "gradient-corrected":
+                        if previous_version not in ("gradient-corrected", "resources-corrected"):
                             name = APPEARANCE_FRAME_SOURCE
                             normalized = old[name].replace(b"\r\n", b"\n")
                             if normalized.count(FRAME_GRADIENT) != 1:
                                 raise RuntimeError("Expected exactly one corrected frame gradient")
                             old[name] = preserve_line_endings(old[name], normalized.replace(
                                 FRAME_GRADIENT, LEGACY_FRAME_GRADIENT, 1))
-                        name = APPEARANCE_CUSTOMIZE_UI_SOURCE
-                        normalized = old[name].replace(b"\r\n", b"\n")
-                        if (normalized.count(GENERATED_RESOURCES_INCLUDE) != 1
-                                or normalized.count(CLOSE_WORKSPACE_STRING) != 1):
-                            raise RuntimeError("Expected corrected panel resource bindings")
-                        normalized = normalized.replace(GENERATED_RESOURCES_INCLUDE,
-                            GENERATED_RESOURCES_INCLUDE + LEGACY_SETTINGS_STRINGS_INCLUDE, 1).replace(
-                            CLOSE_WORKSPACE_STRING, LEGACY_CLOSE_WORKSPACE_STRING, 1)
-                        old[name] = preserve_line_endings(old[name], normalized)
+                        if previous_version != "resources-corrected":
+                            name = APPEARANCE_CUSTOMIZE_UI_SOURCE
+                            normalized = old[name].replace(b"\r\n", b"\n")
+                            if (normalized.count(GENERATED_RESOURCES_INCLUDE) != 1
+                                    or normalized.count(CLOSE_WORKSPACE_STRING) != 1):
+                                raise RuntimeError("Expected corrected panel resource bindings")
+                            normalized = normalized.replace(GENERATED_RESOURCES_INCLUDE,
+                                GENERATED_RESOURCES_INCLUDE + LEGACY_SETTINGS_STRINGS_INCLUDE, 1).replace(
+                                CLOSE_WORKSPACE_STRING, LEGACY_CLOSE_WORKSPACE_STRING, 1)
+                            old[name] = preserve_line_endings(old[name], normalized)
+                        name = APPEARANCE_CAPTURE_SOURCE
+                        if old[name].count(WINDOW_TYPE_CHECK) != 1:
+                            raise RuntimeError("Expected corrected capture window-type query")
+                        old[name] = old[name].replace(WINDOW_TYPE_CHECK, LEGACY_WINDOW_TYPE_CHECK, 1)
                         if compact_css:
                             name = APPEARANCE_CSS_SOURCE
                             normalized = old[name].replace(b"\r\n", b"\n")
@@ -349,6 +379,8 @@ def check(core: Path, platform: Path | None = None,
                 "targets": sorted(targets), "original_sha256": original_hashes,
                 "upstream_patch_sections": len(replayed), "checks": checks,
                 "paint_shader_api_sha256": paint_api_sha256, "paint_shader_radial_signature_verified": True,
+                "browser_window_api_sha256": browser_api_sha256,
+                "browser_window_type_api_verified": True,
                 "build_output_preserved": True, "legacy_css_upgrade_verified": legacy_css_upgrade_checked,
                 "legacy_webui_upgrades": legacy_ui_upgrades,
                 "resource_bindings":resource_report, "browser_compiled": False,

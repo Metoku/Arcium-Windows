@@ -657,7 +657,7 @@
 +  auto* browser = webui::GetBrowserWindowInterface(contents);
 +  if (!profile || profile->IsOffTheRecord() || profile->IsGuestSession() ||
 +      !browser || browser->GetProfile() != profile ||
-+      !browser->GetIsNormalType()) {
++      browser->GetType() != BrowserWindowInterface::Type::TYPE_NORMAL) {
 +    return nullptr;
 +  }
 +  auto* service = helium::HeliumSpaceServiceFactory::GetForProfile(profile);

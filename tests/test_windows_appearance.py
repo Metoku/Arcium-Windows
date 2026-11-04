@@ -12,6 +12,7 @@ from scripts.apply_windows_arc_workflow import (
     APPEARANCE_FRAME_SOURCE, LEGACY_FRAME_GRADIENT, FRAME_GRADIENT,
     APPEARANCE_CUSTOMIZE_UI_SOURCE, LEGACY_SETTINGS_STRINGS_INCLUDE,
     GENERATED_RESOURCES_INCLUDE, LEGACY_CLOSE_WORKSPACE_STRING, CLOSE_WORKSPACE_STRING,
+    APPEARANCE_CAPTURE_SOURCE, LEGACY_WINDOW_TYPE_CHECK, WINDOW_TYPE_CHECK,
     appearance_css_addition, git_apply, integrate, integrate_bundle,
 )
 
@@ -604,6 +605,80 @@ class AppearanceResourceUpgradeTests(unittest.TestCase):
         self.assertEqual(before, self.snapshot())
 
     def test_previous_resource_version_can_be_reverted(self):
+        self.assertEqual(integrate(self.source, patch=self.patch, revert=True), "READY")
+        for name, data in self.originals.items():
+            self.assertEqual((self.source / name).read_bytes(), data)
+        self.assertEqual(self.output.read_bytes(), b"retained object")
+
+
+class AppearanceWindowTypeUpgradeTests(unittest.TestCase):
+    def setUp(self):
+        import difflib
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.source = Path(self.temporary.name) / "src"
+        self.source.mkdir()
+        (self.source / "BUILD.gn").write_text("# fixture\n")
+        css = appearance_css_addition(
+            (ROOT / "patches/windows/arc-appearance-windows.patch").read_bytes())
+        self.originals = {APPEARANCE_CSS_SOURCE:b"/* existing */\n",
+                          APPEARANCE_CAPTURE_SOURCE:b"// original model\n"}
+        self.corrected = {APPEARANCE_CSS_SOURCE:self.originals[APPEARANCE_CSS_SOURCE] + css,
+                          APPEARANCE_CAPTURE_SOURCE:b"// model\n" + WINDOW_TYPE_CHECK + b"\n// footer\n"}
+        sections = []
+        for name, data in self.corrected.items():
+            path = self.source / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+            sections.extend(difflib.unified_diff(self.originals[name].decode().splitlines(True),
+                data.decode().splitlines(True), fromfile="a/" + name, tofile="b/" + name))
+        self.patch = self.source.parent / "arc-appearance-windows.patch"
+        self.patch.write_text("".join(sections), encoding="utf-8", newline="\n")
+        self.capture = self.source / APPEARANCE_CAPTURE_SOURCE
+        self.capture.write_bytes(self.corrected[APPEARANCE_CAPTURE_SOURCE].replace(
+            WINDOW_TYPE_CHECK, LEGACY_WINDOW_TYPE_CHECK))
+        self.output = self.source / "out/Default/retained.obj"
+        self.output.parent.mkdir(parents=True)
+        self.output.write_bytes(b"retained object")
+
+    def snapshot(self):
+        return {path:(path.read_bytes(), path.stat().st_mtime_ns)
+                for path in self.source.rglob("*") if path.is_file()}
+
+    def test_old_capture_query_upgrades_only_model_and_preserves_source_format(self):
+        for style in ("LF", "CRLF", "mixed", "no-eof"):
+            with self.subTest(style=style):
+                expected = self.corrected[APPEARANCE_CAPTURE_SOURCE]
+                old = expected.replace(WINDOW_TYPE_CHECK, LEGACY_WINDOW_TYPE_CHECK)
+                if style in ("CRLF", "mixed"):
+                    old = old.replace(b"\n", b"\r\n")
+                    expected = expected.replace(b"\n", b"\r\n")
+                if style == "mixed":
+                    old = old.replace(b"// model\r\n", b"// model\n")
+                    expected = expected.replace(b"// model\r\n", b"// model\n")
+                if style == "no-eof":
+                    old = old.removesuffix(b"\n")
+                    expected = expected.removesuffix(b"\n")
+                self.capture.write_bytes(old)
+                before = self.snapshot()
+                self.assertEqual(integrate(self.source, patch=self.patch), "UPDATE_AVAILABLE")
+                self.assertEqual(before, self.snapshot())
+                self.assertEqual(integrate(self.source, patch=self.patch, apply=True), "APPLIED")
+                self.assertEqual(self.capture.read_bytes(), expected)
+                after = self.snapshot()
+                for path in before:
+                    if path != self.capture: self.assertEqual(before[path], after[path])
+                integrate(self.source, patch=self.patch, apply=True)
+                self.assertEqual(after, self.snapshot())
+
+    def test_unknown_model_edit_is_rejected_without_writing_other_source(self):
+        self.capture.write_bytes(self.capture.read_bytes().replace(b"// footer", b"// local changes"))
+        before = self.snapshot()
+        with self.assertRaisesRegex(RuntimeError, "complete appearance catalog"):
+            integrate(self.source, patch=self.patch, apply=True)
+        self.assertEqual(before, self.snapshot())
+
+    def test_old_model_query_can_be_reverted(self):
         self.assertEqual(integrate(self.source, patch=self.patch, revert=True), "READY")
         for name, data in self.originals.items():
             self.assertEqual((self.source / name).read_bytes(), data)
