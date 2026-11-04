@@ -26,10 +26,9 @@ partly applied. Already applied catalogs are retained. The known old shortcut
 lint error can be upgraded by the existing helper.
 
 If an earlier appearance patch is already installed, the helper recognizes its
-exact CSS, WebUI handlers, surface-label expression, snapshot signatures and
-gradient color block and
-reports `UPDATE_AVAILABLE`. Applying again upgrades those source files only after
-the complete corrected appearance catalog can be reversed. This covers all five
+exact CSS, WebUI handlers, surface-label expression, snapshot signatures,
+gradient color block and obsolete resource include. It reports `UPDATE_AVAILABLE`. Applying again upgrades those source files only after
+the complete corrected appearance catalog can be reversed. This covers all six
 previous appearance versions. Unknown source edits inside the catalog's hunks
 or an incomplete catalog are rejected without source writes. Generated output
 is retained.
@@ -38,8 +37,11 @@ The Settings snapshot declaration and definition are non-const because they
 use Chromium's non-const `WebUIMessageHandler::web_ui()` accessor. The frame
 gradient uses `SkColor4f::FromColor` for its two stops, matching the pinned
 `PaintShader::MakeRadialGradient` API. Reapplying to the latest installed version
-changes only that gradient block. It does not require reverting the integrations
-or cleaning `out/Default`.
+removes the obsolete `chrome/grit/settings_strings.h` include and reuses the
+panel's existing `IDS_NTP_CLOSE` label. The Settings part is emitted by
+`chrome/grit/generated_resources.h`, which the file already includes. It does
+not require reverting the integrations or cleaning `out/Default`. A stale
+include is detected even when it falls outside the current patch hunks.
 
 `--feature appearance` selects only this integration. `--feature all --revert`
 reverts all four optional source integrations; it does not undo user appearance
@@ -172,9 +174,17 @@ Negative controls must reproduce the two reported panel errors and the Settings
 lifecycle/assertion errors and the reported surface-label assertion before
 validation passes.
 
-Twenty installed-version upgrade replays cover all five earlier appearance catalogs
+Twenty-four installed-version upgrade replays cover all six earlier appearance catalogs
 with LF, CRLF, mixed endings and absent final newlines. They check exact source
 results, read-only detection, unchanged unrelated source and retained build output.
+
+Resource checks reconstruct `chrome/app/generated_resources.grd` with the pinned
+shared/platform overlays. They verify that `settings_strings.grdp` belongs to
+`generated_resources.h`, that every Settings Arcium ID used by the integration
+is defined, and that both new panel labels resolve to that resource producer.
+The invalid header from the native build log must be rejected by a negative
+control. These checks verify metadata and bindings; they do not run GRIT or
+compile the full customization controller.
 
 Chromium's complete transitive TypeScript/Mojo/C++ build remains a separate gate.
 

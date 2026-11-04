@@ -1822,24 +1822,16 @@
    void SetBackgroundImage(const std::string& attribution_1,
 --- a/chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome_ui.cc
 +++ b/chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome_ui.cc
-@@ -28,6 +28,7 @@
- #include "chrome/common/webui_url_constants.h"
- #include "chrome/grit/branded_strings.h"
- #include "chrome/grit/generated_resources.h"
-+#include "chrome/grit/settings_strings.h"
- #include "chrome/grit/side_panel_customize_chrome_resources.h"
- #include "chrome/grit/side_panel_customize_chrome_resources_map.h"
- #include "chrome/grit/side_panel_shared_resources.h"
-@@ -112,6 +113,8 @@
+@@ -112,6 +112,8 @@
        {"backButton", IDS_ACCNAME_BACK},
        {"title", IDS_SIDE_PANEL_CUSTOMIZE_CHROME_TITLE},
        // Header strings.
-+      {"closeWorkspacePanel", IDS_CLOSE},
++      {"closeWorkspacePanel", IDS_NTP_CLOSE},
 +      {"workspaceAppearance", IDS_SETTINGS_ARCIUM_WORKSPACE_APPEARANCE},
        {"appearanceHeader", IDS_NTP_CUSTOMIZE_APPEARANCE_LABEL},
        {"cardsHeader", IDS_NTP_CUSTOMIZE_MENU_MODULES_LABEL},
        {"categoriesHeader", IDS_NTP_CUSTOMIZE_THEMES_HEADER},
-@@ -279,6 +282,7 @@
+@@ -279,6 +281,7 @@
        {"newBadgeLabel", IDS_NEW_BADGE},
    };
    source->AddLocalizedStrings(kLocalizedStrings);

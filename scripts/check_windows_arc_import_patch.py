@@ -22,6 +22,8 @@ from scripts.apply_windows_arc_workflow import (
     APPEARANCE_LAYOUT_TEMPLATE, LEGACY_SURFACE_LABEL, SURFACE_LABEL,
     APPEARANCE_SNAPSHOT_SOURCES, LEGACY_SNAPSHOT_SIGNATURE, SNAPSHOT_SIGNATURE,
     APPEARANCE_FRAME_SOURCE, LEGACY_FRAME_GRADIENT, FRAME_GRADIENT,
+    APPEARANCE_CUSTOMIZE_UI_SOURCE, LEGACY_SETTINGS_STRINGS_INCLUDE,
+    GENERATED_RESOURCES_INCLUDE, LEGACY_CLOSE_WORKSPACE_STRING, CLOSE_WORKSPACE_STRING,
     LEGACY_APPEARANCE_CSS, LEGACY_DISCONNECT, PATCH, ROOT,
     appearance_css_addition, git_apply, integrate, integrate_bundle,
     patch_targets, preserve_line_endings,
@@ -33,6 +35,7 @@ from scripts.windows_port import audit_staged, chromium_version, git, read_pin, 
 IMPORT_PATCH = ROOT / "patches/windows/arc-import-windows.patch"
 PASSWORD_PATCH = ROOT / "patches/windows/arc-password-import-windows.patch"
 APPEARANCE_PATCH = ROOT / "patches/windows/arc-appearance-windows.patch"
+GENERATED_RESOURCES_GRD = "chrome/app/generated_resources.grd"
 ESLINT_ASSETS = """eslint_ts.config_base.ts inline_event_handler.ts
 lit_element_bindings.ts lit_element_invalid_interface.ts lit_element_structure.ts
 lit_element_template_structure.ts lit_property_accessor.ts lit_reactive_properties.ts
@@ -46,6 +49,47 @@ def normalize_headers(diff: str) -> str:
     return re.sub(r"^\+\+\+ (?:src|b)/", "+++ b/", diff, flags=re.MULTILINE)
 
 
+def verify_appearance_resources(source: Path, targets: set[str]) -> dict:
+    """Check the string producer/header/consumer relationship without GRIT mocks."""
+    root = ET.parse(source / GENERATED_RESOURCES_GRD).getroot()
+    headers = [node.get("filename") for node in root.iter("output")
+               if node.get("type") == "rc_header"]
+    if headers != ["grit/generated_resources.h"]:
+        raise RuntimeError("Unexpected generated_resources GRIT header output")
+    if not any(node.get("file") == "settings_strings.grdp" for node in root.iter("part")):
+        raise RuntimeError("generated_resources.grd does not own settings_strings.grdp")
+    owner = "chrome/" + headers[0]
+    settings = ET.parse(source / "chrome/app/settings_strings.grdp").getroot()
+    ids = {node.get("name") for tree in (root, settings) for node in tree.iter("message")}
+    consumers = {}
+    for target in sorted(targets):
+        if not target.endswith((".cc", ".h")):
+            continue
+        text = (source / target).read_text(encoding="utf-8")
+        includes = set(re.findall(r'^#include "([^\"]+)"', text, re.MULTILINE))
+        if "chrome/grit/settings_strings.h" in includes:
+            raise RuntimeError(f"{target}: settings_strings.h is not generated; "
+                               f"settings_strings.grdp is owned by {owner}")
+        references = set(re.findall(r'\bIDS_SETTINGS_ARCIUM_[A-Z0-9_]+\b', text))
+        if references:
+            missing = references - ids
+            if missing:
+                raise RuntimeError(f"{target}: undefined Settings string IDs: {sorted(missing)}")
+            if owner not in includes:
+                raise RuntimeError(f"{target}: missing owning header {owner}")
+            consumers[target] = sorted(references)
+    panel = (source / APPEARANCE_CUSTOMIZE_UI_SOURCE).read_text(encoding="utf-8")
+    labels = {}
+    for key in ("workspaceAppearance", "closeWorkspacePanel"):
+        matches = re.findall(r'\{\s*"' + key + r'"\s*,\s*(IDS_[A-Z0-9_]+)\s*\}', panel)
+        if len(matches) != 1 or matches[0] not in ids:
+            raise RuntimeError(f"{APPEARANCE_CUSTOMIZE_UI_SOURCE}: unresolved panel label {key}")
+        labels[key] = matches[0]
+    return {"status":"GRIT_RESOURCE_OWNERSHIP_VERIFIED", "header":owner,
+            "part":"settings_strings.grdp", "panel_labels":labels,
+            "settings_consumers":consumers, "grit_generation_verified":False}
+
+
 def check(core: Path, platform: Path | None = None,
           typescript: Path | None = None) -> dict:
     expected = read_pin("arcium-core.sha")
@@ -57,6 +101,9 @@ def check(core: Path, platform: Path | None = None,
         patches += read_series(platform / "patches/series")
     catalogs = (PATCH, IMPORT_PATCH, PASSWORD_PATCH, APPEARANCE_PATCH)
     targets = set().union(*(patch_targets(p.read_text(encoding="utf-8")) for p in catalogs))
+    # Reconstruct the resource owner too, including shared/platform overlays.
+    # It is read-only metadata, outside the optional catalogs' 43 write targets.
+    replay_targets = targets | {GENERATED_RESOURCES_GRD}
     _, created = discover_patch_paths(patches)
     original_hashes = {}
     with tempfile.TemporaryDirectory(prefix="arcium-arc-import-replay-") as temporary:
@@ -66,13 +113,13 @@ def check(core: Path, platform: Path | None = None,
         # This marker satisfies the helper's source-root check; the fixture
         # contains only selected files and is deliberately not a build tree.
         (source / "BUILD.gn").write_text("# Partial patch replay fixture; not buildable.\n")
-        for target in sorted(targets - created):
+        for target in sorted(replay_targets - created):
             original_hashes[target] = download_original(
                 chromium_version(), target, source / target, mirror_first=True)
         replayed = []
         selected_patch = temporary / "selected.patch"
         for patch in patches:
-            selected = select_patch_sections(patch.read_text(encoding="utf-8"), targets)
+            selected = select_patch_sections(patch.read_text(encoding="utf-8"), replay_targets)
             if not selected:
                 continue
             selected_patch.write_text(normalize_headers(selected), encoding="utf-8", newline="\n")
@@ -87,6 +134,7 @@ def check(core: Path, platform: Path | None = None,
         sentinel_time = sentinel.stat().st_mtime_ns
         checks = []
         webui_report = None
+        resource_report = None
         legacy_css_upgrade_checked = False
         legacy_ui_upgrades = []
         paint_api = temporary / "paint_shader.h"
@@ -152,9 +200,10 @@ def check(core: Path, platform: Path | None = None,
                 if not any(entry["endings"] == style for entry in legacy_ui_upgrades):
                     current = {target: (source / target).read_bytes() for target in targets}
                     allowed = {stem + suffix for stem in APPEARANCE_HANDLER_RENAMES
-                               for suffix in (".ts", ".html.ts")} | set(APPEARANCE_SNAPSHOT_SOURCES) | {APPEARANCE_FRAME_SOURCE}
+                               for suffix in (".ts", ".html.ts")} | set(APPEARANCE_SNAPSHOT_SOURCES) | {
+                                   APPEARANCE_FRAME_SOURCE, APPEARANCE_CUSTOMIZE_UI_SOURCE}
                     for previous_version in ("original", "css-corrected", "handlers-corrected",
-                                             "surface-label-corrected", "snapshot-corrected"):
+                                             "surface-label-corrected", "snapshot-corrected", "gradient-corrected"):
                         compact_css = previous_version == "original"
                         old = dict(current)
                         if previous_version in ("original", "css-corrected"):
@@ -175,9 +224,9 @@ def check(core: Path, platform: Path | None = None,
                         name = APPEARANCE_LAYOUT_TEMPLATE
                         if old[name].count(SURFACE_LABEL) != 1:
                             raise RuntimeError("Expected exactly one corrected surface label")
-                        if previous_version not in ("surface-label-corrected", "snapshot-corrected"):
+                        if previous_version in ("original", "css-corrected", "handlers-corrected"):
                             old[name] = old[name].replace(SURFACE_LABEL, LEGACY_SURFACE_LABEL, 1)
-                        if previous_version != "snapshot-corrected":
+                        if previous_version not in ("snapshot-corrected", "gradient-corrected"):
                             for name in APPEARANCE_SNAPSHOT_SOURCES:
                                 if name.endswith(".h"):
                                     fixed = SNAPSHOT_SIGNATURE + b";"
@@ -188,12 +237,22 @@ def check(core: Path, platform: Path | None = None,
                                 if old[name].count(fixed) != 1:
                                     raise RuntimeError("Expected exactly one snapshot signature")
                                 old[name] = old[name].replace(fixed, legacy, 1)
-                        name = APPEARANCE_FRAME_SOURCE
+                        if previous_version != "gradient-corrected":
+                            name = APPEARANCE_FRAME_SOURCE
+                            normalized = old[name].replace(b"\r\n", b"\n")
+                            if normalized.count(FRAME_GRADIENT) != 1:
+                                raise RuntimeError("Expected exactly one corrected frame gradient")
+                            old[name] = preserve_line_endings(old[name], normalized.replace(
+                                FRAME_GRADIENT, LEGACY_FRAME_GRADIENT, 1))
+                        name = APPEARANCE_CUSTOMIZE_UI_SOURCE
                         normalized = old[name].replace(b"\r\n", b"\n")
-                        if normalized.count(FRAME_GRADIENT) != 1:
-                            raise RuntimeError("Expected exactly one corrected frame gradient")
-                        old[name] = preserve_line_endings(old[name], normalized.replace(
-                            FRAME_GRADIENT, LEGACY_FRAME_GRADIENT, 1))
+                        if (normalized.count(GENERATED_RESOURCES_INCLUDE) != 1
+                                or normalized.count(CLOSE_WORKSPACE_STRING) != 1):
+                            raise RuntimeError("Expected corrected panel resource bindings")
+                        normalized = normalized.replace(GENERATED_RESOURCES_INCLUDE,
+                            GENERATED_RESOURCES_INCLUDE + LEGACY_SETTINGS_STRINGS_INCLUDE, 1).replace(
+                            CLOSE_WORKSPACE_STRING, LEGACY_CLOSE_WORKSPACE_STRING, 1)
+                        old[name] = preserve_line_endings(old[name], normalized)
                         if compact_css:
                             name = APPEARANCE_CSS_SOURCE
                             normalized = old[name].replace(b"\r\n", b"\n")
@@ -220,6 +279,23 @@ def check(core: Path, platform: Path | None = None,
                             raise RuntimeError("WebUI upgrade rewrote unrelated source")
                         legacy_ui_upgrades.append({"endings":style, "previous_version":previous_version})
                 ET.parse(source / "chrome/app/settings_strings.grdp")
+                if resource_report is None:
+                    resource_report = verify_appearance_resources(source, targets)
+                    panel = source / APPEARANCE_CUSTOMIZE_UI_SOURCE
+                    corrected = panel.read_bytes()
+                    panel.write_bytes(corrected.replace(GENERATED_RESOURCES_INCLUDE,
+                        GENERATED_RESOURCES_INCLUDE + LEGACY_SETTINGS_STRINGS_INCLUDE, 1))
+                    try:
+                        try:
+                            verify_appearance_resources(source, targets)
+                        except RuntimeError as error:
+                            if "settings_strings.h is not generated" not in str(error):
+                                raise
+                        else:
+                            raise RuntimeError("Resource checker accepted the reported invalid include")
+                    finally:
+                        panel.write_bytes(corrected)
+                    resource_report["reported_invalid_include_rejected"] = True
                 if typescript is not None and webui_report is None:
                     result = subprocess.run(
                         ["node", str(ROOT / "scripts/check_windows_appearance_ui.cjs"),
@@ -275,7 +351,7 @@ def check(core: Path, platform: Path | None = None,
                 "paint_shader_api_sha256": paint_api_sha256, "paint_shader_radial_signature_verified": True,
                 "build_output_preserved": True, "legacy_css_upgrade_verified": legacy_css_upgrade_checked,
                 "legacy_webui_upgrades": legacy_ui_upgrades,
-                "browser_compiled": False,
+                "resource_bindings":resource_report, "browser_compiled": False,
                 "browser_launch_verified": False, "appearance_webui": webui_report}
 
 

@@ -10,7 +10,9 @@ from scripts.apply_windows_arc_workflow import (
     LEGACY_SURFACE_LABEL, SURFACE_LABEL,
     APPEARANCE_SNAPSHOT_SOURCES, LEGACY_SNAPSHOT_SIGNATURE, SNAPSHOT_SIGNATURE,
     APPEARANCE_FRAME_SOURCE, LEGACY_FRAME_GRADIENT, FRAME_GRADIENT,
-    appearance_css_addition, integrate, integrate_bundle,
+    APPEARANCE_CUSTOMIZE_UI_SOURCE, LEGACY_SETTINGS_STRINGS_INCLUDE,
+    GENERATED_RESOURCES_INCLUDE, LEGACY_CLOSE_WORKSPACE_STRING, CLOSE_WORKSPACE_STRING,
+    appearance_css_addition, git_apply, integrate, integrate_bundle,
 )
 
 
@@ -499,6 +501,107 @@ class AppearanceFrameUpgradeTests(unittest.TestCase):
         self.assertEqual(before, self.snapshot())
 
     def test_old_frame_version_can_be_reverted(self):
+        self.assertEqual(integrate(self.source, patch=self.patch, revert=True), "READY")
+        for name, data in self.originals.items():
+            self.assertEqual((self.source / name).read_bytes(), data)
+        self.assertEqual(self.output.read_bytes(), b"retained object")
+
+
+class AppearanceResourceUpgradeTests(unittest.TestCase):
+    def setUp(self):
+        import difflib
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.source = Path(self.temporary.name) / "src"
+        self.source.mkdir()
+        (self.source / "BUILD.gn").write_text("# fixture\n")
+        css = appearance_css_addition(
+            (ROOT / "patches/windows/arc-appearance-windows.patch").read_bytes())
+        # Keep the include outside the changed string hunk, as in the real file.
+        original_panel = GENERATED_RESOURCES_INCLUDE + b"// existing component\n" * 12
+        self.originals = {
+            APPEARANCE_CSS_SOURCE:b"/* existing */\n",
+            APPEARANCE_CUSTOMIZE_UI_SOURCE:original_panel,
+            "chrome/unrelated.cc":b"native before\n",
+        }
+        self.corrected = {
+            APPEARANCE_CSS_SOURCE:self.originals[APPEARANCE_CSS_SOURCE] + css,
+            APPEARANCE_CUSTOMIZE_UI_SOURCE:original_panel + CLOSE_WORKSPACE_STRING + b",\n",
+            "chrome/unrelated.cc":b"native after\n",
+        }
+        sections = []
+        for name, data in self.corrected.items():
+            path = self.source / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+            sections.extend(difflib.unified_diff(self.originals[name].decode().splitlines(True),
+                data.decode().splitlines(True), fromfile="a/" + name, tofile="b/" + name))
+        self.patch = self.source.parent / "arc-appearance-windows.patch"
+        self.patch.write_text("".join(sections))
+        self.panel = self.source / APPEARANCE_CUSTOMIZE_UI_SOURCE
+        self.output = self.source / "out/Default/retained.obj"
+        self.output.parent.mkdir(parents=True)
+        self.output.write_bytes(b"retained object")
+        self.install_previous()
+
+    def install_previous(self, style="LF", old_label=True):
+        old = self.corrected[APPEARANCE_CUSTOMIZE_UI_SOURCE].replace(
+            GENERATED_RESOURCES_INCLUDE, GENERATED_RESOURCES_INCLUDE + LEGACY_SETTINGS_STRINGS_INCLUDE)
+        if old_label: old = old.replace(CLOSE_WORKSPACE_STRING, LEGACY_CLOSE_WORKSPACE_STRING)
+        expected = self.corrected[APPEARANCE_CUSTOMIZE_UI_SOURCE]
+        if style in ("CRLF", "mixed"):
+            old = old.replace(b"\n", b"\r\n")
+            expected = expected.replace(b"\n", b"\r\n")
+        if style == "mixed":
+            old = old.replace(b"// existing component\r\n", b"// existing component\n", 1)
+            expected = expected.replace(b"// existing component\r\n", b"// existing component\n", 1)
+        if style == "no-eof":
+            old = old.removesuffix(b"\n")
+            expected = expected.removesuffix(b"\n")
+        self.panel.write_bytes(old)
+        return expected
+
+    def snapshot(self):
+        return {path:(path.read_bytes(), path.stat().st_mtime_ns)
+                for path in self.source.rglob("*") if path.is_file()}
+
+    def test_previous_panel_resources_upgrade_without_touching_other_outputs(self):
+        for style in ("LF", "CRLF", "mixed", "no-eof"):
+            with self.subTest(style=style):
+                expected = self.install_previous(style)
+                before = self.snapshot()
+                self.assertEqual(integrate(self.source, patch=self.patch), "UPDATE_AVAILABLE")
+                self.assertEqual(before, self.snapshot())
+                self.assertEqual(integrate(self.source, patch=self.patch, apply=True), "APPLIED")
+                self.assertEqual(self.panel.read_bytes(), expected)
+                after = self.snapshot()
+                for path in before:
+                    if path != self.panel: self.assertEqual(before[path], after[path])
+                integrate(self.source, patch=self.patch, apply=True)
+                self.assertEqual(after, self.snapshot())
+
+    def test_invalid_include_is_removed_even_outside_current_patch_hunks(self):
+        self.install_previous(old_label=False)
+        self.assertEqual(git_apply(self.source, self.patch, reverse=True, check=True).returncode, 0)
+        self.assertEqual(integrate(self.source, patch=self.patch), "UPDATE_AVAILABLE")
+        integrate(self.source, patch=self.patch, apply=True)
+        self.assertEqual(self.panel.read_bytes(), self.corrected[APPEARANCE_CUSTOMIZE_UI_SOURCE])
+
+    def test_duplicate_legacy_includes_are_rejected_without_writes(self):
+        self.panel.write_bytes(LEGACY_SETTINGS_STRINGS_INCLUDE + self.panel.read_bytes())
+        before = self.snapshot()
+        with self.assertRaisesRegex(RuntimeError, "Ambiguous legacy"):
+            integrate(self.source, patch=self.patch, apply=True)
+        self.assertEqual(before, self.snapshot())
+
+    def test_unknown_source_edit_rejects_resource_cleanup_atomically(self):
+        (self.source / "chrome/unrelated.cc").write_bytes(b"local native changes\n")
+        before = self.snapshot()
+        with self.assertRaisesRegex(RuntimeError, "complete appearance catalog"):
+            integrate(self.source, patch=self.patch, apply=True)
+        self.assertEqual(before, self.snapshot())
+
+    def test_previous_resource_version_can_be_reverted(self):
         self.assertEqual(integrate(self.source, patch=self.patch, revert=True), "READY")
         for name, data in self.originals.items():
             self.assertEqual((self.source / name).read_bytes(), data)

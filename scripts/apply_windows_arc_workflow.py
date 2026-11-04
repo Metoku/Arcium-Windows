@@ -54,6 +54,12 @@ LEGACY_FRAME_GRADIENT = b"      const SkColor colors[] = {color, SkColorSetA(col
 FRAME_GRADIENT = b"""      const SkColor4f colors[] = {SkColor4f::FromColor(color),
                                  SkColor4f::FromColor(SkColorSetA(color, 0))};
 """
+APPEARANCE_CUSTOMIZE_UI_SOURCE = (
+    "chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome_ui.cc")
+LEGACY_SETTINGS_STRINGS_INCLUDE = b'#include "chrome/grit/settings_strings.h"\n'
+GENERATED_RESOURCES_INCLUDE = b'#include "chrome/grit/generated_resources.h"\n'
+LEGACY_CLOSE_WORKSPACE_STRING = b'{"closeWorkspacePanel", IDS_CLOSE}'
+CLOSE_WORKSPACE_STRING = b'{"closeWorkspacePanel", IDS_NTP_CLOSE}'
 LEGACY_DISCONNECT = b"""  override disconnectedCallback() {
     ++this.workspaceGeneration_;
     super.disconnectedCallback();
@@ -267,7 +273,12 @@ def integrate(source: Path, *, apply: bool = False, revert: bool = False,
                 if corrected.returncode == 0:
                     backward = corrected
                     needs_upgrade = True
-        if (backward.returncode
+        stale_resource_include = (
+            patch.name == "arc-appearance-windows.patch"
+            and APPEARANCE_CUSTOMIZE_UI_SOURCE in targets
+            and LEGACY_SETTINGS_STRINGS_INCLUDE in
+                (staged_source / APPEARANCE_CUSTOMIZE_UI_SOURCE).read_bytes())
+        if ((backward.returncode or stale_resource_include)
                 and patch.name == "arc-appearance-windows.patch"
                 and APPEARANCE_CSS_SOURCE in targets):
             staged_upgrade = False
@@ -328,6 +339,19 @@ def integrate(source: Path, *, apply: bool = False, revert: bool = False,
                 before = path.read_bytes()
                 if before.count(LEGACY_FRAME_GRADIENT) == 1:
                     path.write_bytes(before.replace(LEGACY_FRAME_GRADIENT, FRAME_GRADIENT, 1))
+                    staged_upgrade = True
+            if APPEARANCE_CUSTOMIZE_UI_SOURCE in targets:
+                path = staged_source / APPEARANCE_CUSTOMIZE_UI_SOURCE
+                before = path.read_bytes()
+                after = before
+                if after.count(LEGACY_SETTINGS_STRINGS_INCLUDE) == 1:
+                    after = after.replace(LEGACY_SETTINGS_STRINGS_INCLUDE, b"", 1)
+                elif after.count(LEGACY_SETTINGS_STRINGS_INCLUDE) > 1:
+                    raise RuntimeError("Ambiguous legacy settings_strings.h includes. No changes made.")
+                if after.count(LEGACY_CLOSE_WORKSPACE_STRING) == 1:
+                    after = after.replace(LEGACY_CLOSE_WORKSPACE_STRING, CLOSE_WORKSPACE_STRING, 1)
+                if after != before:
+                    path.write_bytes(after)
                     staged_upgrade = True
             if staged_upgrade:
                 corrected = git_apply(staged_source, staged_patch,
