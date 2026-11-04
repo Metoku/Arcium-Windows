@@ -537,7 +537,8 @@ class AppearanceResourceUpgradeTests(unittest.TestCase):
             sections.extend(difflib.unified_diff(self.originals[name].decode().splitlines(True),
                 data.decode().splitlines(True), fromfile="a/" + name, tofile="b/" + name))
         self.patch = self.source.parent / "arc-appearance-windows.patch"
-        self.patch.write_text("".join(sections))
+        # This fixture also goes directly to git_apply(), which expects LF.
+        self.patch.write_text("".join(sections), encoding="utf-8", newline="\n")
         self.panel = self.source / APPEARANCE_CUSTOMIZE_UI_SOURCE
         self.output = self.source / "out/Default/retained.obj"
         self.output.parent.mkdir(parents=True)
@@ -582,7 +583,8 @@ class AppearanceResourceUpgradeTests(unittest.TestCase):
 
     def test_invalid_include_is_removed_even_outside_current_patch_hunks(self):
         self.install_previous(old_label=False)
-        self.assertEqual(git_apply(self.source, self.patch, reverse=True, check=True).returncode, 0)
+        check = git_apply(self.source, self.patch, reverse=True, check=True)
+        self.assertEqual(check.returncode, 0, check.stderr)
         self.assertEqual(integrate(self.source, patch=self.patch), "UPDATE_AVAILABLE")
         integrate(self.source, patch=self.patch, apply=True)
         self.assertEqual(self.panel.read_bytes(), self.corrected[APPEARANCE_CUSTOMIZE_UI_SOURCE])
