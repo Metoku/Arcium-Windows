@@ -10,10 +10,14 @@ import subprocess
 import tempfile
 import unittest
 
-from scripts.apply_windows_arc_workflow import ROOT
+from scripts.apply_windows_arc_workflow import (
+    ROOT, LEGACY_MAC_LAYOUT_INVALIDATION, MAC_LAYOUT_INVALIDATION,
+)
+from scripts.check_windows_mac_buttons import class_member_access
 
 FIXTURE = json.loads((ROOT / 'tests/fixtures/mac_window_functions.json').read_text())['files']
 API = json.loads((ROOT / 'tests/fixtures/mac_window_api.json').read_text())
+VIEW_ACCESS = json.loads((ROOT / 'tests/fixtures/mac_window_access.json').read_text())['ui/views/view.h']['View']
 FRAME = 'chrome/browser/ui/views/frame/browser_frame_view_win.cc'
 BUTTON = 'chrome/browser/ui/views/frame/windows_caption_button.cc'
 GROUP = 'chrome/browser/ui/views/frame/browser_caption_button_container_win.cc'
@@ -68,15 +72,41 @@ constexpr int HTNOWHERE=0,HTCLIENT=1,HTCAPTION=2,HTSYSMENU=3,HTMINBUTTON=8,HTMAX
 '''
 
 
+class ViewAccessContracts(unittest.TestCase):
+    def test_nested_public_labels_and_documentation_do_not_expose_protected_members(self):
+        source = '''
+class View;
+class VIEWS_EXPORT View : public Parent {
+ public:
+  class Child { public: void Nested(); };
+  void Public();
+ protected:
+  // public: a documentation example
+  struct Details { public: void NestedAgain(); };
+  static constexpr char note[] = "public: { }";
+  void Protected();
+};
+class Other { public: void Outside(); };
+'''
+        self.assertEqual(class_member_access(source, 'View', '  void Public();'), 'public')
+        self.assertEqual(class_member_access(source, 'View', '  void Protected();'), 'protected')
+        with self.assertRaisesRegex(RuntimeError, 'outside View'):
+            class_member_access(source, 'View', 'void Outside();')
+
+
 @unittest.skipUnless(shutil.which('g++') or shutil.which('c++'), 'C++ compiler required')
 class MacCaptionContracts(unittest.TestCase):
-    def compile_run(self, body):
+    def compile_run(self, body, expected_compile_error=None):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);cpp=root/'contract.cc';binary=root/'contract.exe'
             cpp.write_text(COMMON+body)
             result=subprocess.run([shutil.which('g++') or shutil.which('c++'),
                                    '-std=c++20','-Wall','-Wextra',str(cpp),'-o',str(binary)],
                                   capture_output=True,text=True)
+            if expected_compile_error is not None:
+                self.assertNotEqual(result.returncode,0,'Reported compiler error unexpectedly compiled')
+                self.assertIn(expected_compile_error,result.stderr)
+                return
             self.assertEqual(result.returncode,0,result.stdout+result.stderr)
             result=subprocess.run([str(binary)],capture_output=True,text=True)
             self.assertEqual(result.returncode,0,result.stdout+result.stderr)
@@ -179,28 +209,42 @@ int main(){Frame frame;WindowsCaptionButton button{&frame};
             'int WindowsCaptionButton::GetBetweenButtonSpacing() const')+main)
 
     def test_group_reorders_existing_controls_and_restores_native_order(self):
+        public = '\n'.join(declaration for declaration, access in VIEW_ACCESS.items() if access == 'public')
+        protected = '\n'.join(declaration for declaration, access in VIEW_ACCESS.items() if access == 'protected')
         prefix=r'''
-struct Button {int id;bool visible=true,enabled=true;int invalidations=0;
+namespace views {
+class View {
+ public:
+ int invalidations=0;
+''' + public + '\n protected:\n' + protected + r'''
+};
+void View::InvalidateLayout(bool) {++invalidations;}
+void View::PreferredSizeChanged() {InvalidateLayout();}
+}
+struct Button : views::View {
+ explicit Button(int value):id(value){}
+ int id;bool visible=true,enabled=true;
  void SetVisible(bool v){visible=v;}void SetEnabled(bool v){enabled=v;}
- void PreferredSizeChanged(){++invalidations;}};
+};
 template<typename T>struct Ptr {T* p;T* get()const{return p;}T* operator->()const{return p;}
  operator T*()const{return p;}};
 struct BrowserView {bool min=true,max=true;bool CanMinimize(){return min;}bool CanMaximize(){return max;}};
 struct Frame {bool mac=false,maximized=false;BrowserView view;
  bool CaptionButtonsOnLeadingEdge(){return mac;}bool IsMaximized(){return maximized;}
  BrowserView* GetBrowserView(){return &view;}};
-struct BrowserCaptionButtonContainer {
+struct BrowserCaptionButtonContainer : views::View {
  Frame* frame_view_;Ptr<Button> minimize_button_,maximize_button_,restore_button_,close_button_;
- bool mac_style_=false;int invalidations=0;std::vector<Button*> order;
+ bool mac_style_=false;std::vector<Button*> order;
  void ReorderChildView(Button* b,size_t index){auto it=std::find(order.begin(),order.end(),b);
   assert(it!=order.end());order.erase(it);order.insert(order.begin()+index,b);}
- void InvalidateLayout(){++invalidations;}
  void UpdateMacButtonStyle();void UpdateButtons();
 };
 '''
         main=r'''
 int main(){Frame frame;Button min{2},max{3},restore{4},close{1};
- BrowserCaptionButtonContainer c{&frame,{&min},{&max},{&restore},{&close},false,0,{&min,&max,&restore,&close}};
+ BrowserCaptionButtonContainer c;
+ c.frame_view_=&frame;c.minimize_button_={&min};c.maximize_button_={&max};
+ c.restore_button_={&restore};c.close_button_={&close};c.order={&min,&max,&restore,&close};
  c.UpdateButtons();assert(c.order[0]==&min&&max.visible&&!restore.visible);
  frame.mac=true;c.UpdateButtons();assert(c.order[0]==&close&&c.order[1]==&min&&c.order[2]==&max);
  assert(close.invalidations==1);c.UpdateButtons();assert(close.invalidations==1);
@@ -215,8 +259,14 @@ int main(){Frame frame;Button min{2},max{3},restore{4},close{1};
         declarations=API['chrome/browser/ui/views/frame/browser_caption_button_container_win.h']
         prefix=prefix.replace('void UpdateMacButtonStyle();',declarations[0]).replace(
             'bool mac_style_=false;',declarations[1])
-        self.compile_run(prefix+actual(GROUP,'void BrowserCaptionButtonContainer::UpdateMacButtonStyle()',
-                                      'void BrowserCaptionButtonContainer::UpdateButtons()')+main)
+        functions=actual(GROUP,'void BrowserCaptionButtonContainer::UpdateMacButtonStyle()',
+                          'void BrowserCaptionButtonContainer::UpdateButtons()')
+        self.compile_run(prefix+functions+main)
+        # Reproduce the actual clang-cl failure with the pinned access labels.
+        self.assertEqual(functions.count(MAC_LAYOUT_INVALIDATION.decode()), 1)
+        legacy=functions.replace(MAC_LAYOUT_INVALIDATION.decode(),
+                                 LEGACY_MAC_LAYOUT_INVALIDATION.decode(), 1)
+        self.compile_run(prefix+legacy+main, expected_compile_error='protected')
 
     def test_real_frame_layout_exclusions_hit_testing_reveal_and_resize(self):
         prefix=r'''

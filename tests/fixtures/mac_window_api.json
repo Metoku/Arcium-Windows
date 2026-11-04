@@ -1,6 +1,7 @@
 {
   "ui/views/view.h": [
     "  void ReorderChildView(View* view, size_t index);",
+    "  void InvalidateLayout(bool avoid_propagate_during_layout = false);",
     "  virtual void PreferredSizeChanged();"
   ],
   "ui/gfx/canvas.h": [

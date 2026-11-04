@@ -30,6 +30,12 @@ Source and compiled output are retained. This is a separate opt-in style;
 onboarding/profile identity. The caption style can be applied before or after
 that bundle.
 
+The helper recognizes the earlier caption patch that called
+`button->PreferredSizeChanged()`. That method is protected in Chromium 156.
+Applying again replaces only that call with the public `InvalidateLayout()`
+after verifying the complete corrected caption catalog. A read-only check
+reports `UPDATE_AVAILABLE`; unknown partial edits remain rejected.
+
 Launch the freshly built browser and open
 `helium://flags/#arcium-mac-window-buttons`. Enable **Mac-style window buttons**
 and relaunch. Keep **Hide window buttons** disabled. Once the new style is
@@ -58,7 +64,11 @@ reversion and retained build output. Compiler contracts exercise the actual
 patched eligibility, painting, button ordering, layout/exclusion and frame-hit
 functions, with each function excerpt verified against reconstructed pinned
 source. New Canvas/View API declarations are checked against their effective
-pinned headers. These checks do not establish full Chromium compilation or
+pinned headers, including public/protected access. The caption group contract
+derives both controls and their container from a View model with the verified
+access labels. It compiles the corrected call and requires the reported old
+call to fail compilation. Four source-format cases upgrade the earlier caption
+catalog without rewriting unrelated files. These checks do not establish full Chromium compilation or
 native Windows rendering for this new style.
 
 Before accepting it, check all three actions, green maximize/restore after

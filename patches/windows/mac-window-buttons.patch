@@ -41,7 +41,7 @@
 +  }
 +  for (auto* button : {close_button_.get(), minimize_button_.get(),
 +                       maximize_button_.get(), restore_button_.get()}) {
-+    button->PreferredSizeChanged();
++    button->InvalidateLayout();
 +  }
 +  InvalidateLayout();
  }

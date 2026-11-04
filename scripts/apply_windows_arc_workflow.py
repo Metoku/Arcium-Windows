@@ -21,6 +21,9 @@ ROOT = Path(__file__).resolve().parents[1]
 PATCH = ROOT / "patches" / "windows" / "arc-workflow-settings.patch"
 ONBOARDING_PATCH = ROOT / "patches/windows/onboarding-windows.patch"
 PASSWORD_PATCH = ROOT / "patches/windows/arc-password-import-windows.patch"
+MAC_CAPTION_SOURCE = "chrome/browser/ui/views/frame/browser_caption_button_container_win.cc"
+LEGACY_MAC_LAYOUT_INVALIDATION = b"    button->PreferredSizeChanged();"
+MAC_LAYOUT_INVALIDATION = b"    button->InvalidateLayout();"
 EXTERNAL_EXTENSION_SOURCE = "chrome/browser/extensions/external_registry_loader_win.cc"
 LEGACY_EXTERNAL_EXTENSION_REGISTRY = (
     b'const wchar_t kRegistryExtensions[] = L"Software\\\\Google\\\\Chrome\\\\Extensions";')
@@ -282,6 +285,20 @@ def integrate(source: Path, *, apply: bool = False, revert: bool = False,
         forward = git_apply(staged_source, staged_patch, reverse=False, check=True)
         backward = git_apply(staged_source, staged_patch, reverse=True, check=True)
         needs_upgrade = False
+        if (forward.returncode and backward.returncode
+                and patch.name == "mac-window-buttons.patch"
+                and MAC_CAPTION_SOURCE in targets):
+            path = staged_source / MAC_CAPTION_SOURCE
+            before = path.read_bytes()
+            if before.count(LEGACY_MAC_LAYOUT_INVALIDATION) == 1:
+                path.write_bytes(before.replace(
+                    LEGACY_MAC_LAYOUT_INVALIDATION, MAC_LAYOUT_INVALIDATION, 1))
+                corrected = git_apply(staged_source, staged_patch, reverse=True, check=True)
+                # Recognize only the fully applied earlier caption catalog.
+                # A matching line in an unknown/partial tree authorizes no writes.
+                if corrected.returncode == 0:
+                    backward = corrected
+                    needs_upgrade = True
         if (forward.returncode and backward.returncode
                 and patch.name == ONBOARDING_PATCH.name
                 and EXTERNAL_EXTENSION_SOURCE in targets):
