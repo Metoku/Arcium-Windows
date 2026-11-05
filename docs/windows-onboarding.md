@@ -36,7 +36,7 @@ registry key only after the complete current catalog reverse-checks. Unknown
 partial edits remain rejected without writes.
 
 New `scripts/browser_only_build.py` builds apply onboarding, the independent
-identity and native password support after the shared/Windows patch stages and before GN. An existing build
+identity, native password support and services-review route after the shared/Windows patch stages and before GN. An existing build
 should use the source application and resume commands above; do not restage or
 clean its output. A shared install header changes, so the incremental rebuild
 can include more native files than a WebUI-only change.
@@ -73,6 +73,10 @@ on ordinary startup; private/guest windows and `--no-first-run` retain the
 existing exclusions. Later imports are available in `helium://settings/importData`
 and the Arc-specific route `helium://setup/?import=arc`.
 
+Later service consent is available independently at
+`helium://setup/?services=1`. See [extension download recovery](windows-extension-services.md)
+if the download history reports **Extension downloads are disabled** after setup.
+
 `--feature onboarding --revert` restores the earlier source identity. It does
 not move or delete either profile directory; a rebuilt reverted browser would
 use the earlier Helium default again. Use the focused feature selector when
@@ -84,7 +88,7 @@ The pinned Windows replay reconstructs the actual onboarding release from the
 core's SHA256-verified dependency. It applies all shared and Windows overlays,
 checks both onboarding/catalog orders with LF, CRLF, mixed and absent-final-
 newline files, verifies idempotence and exact reversion, and retains output and
-an existing-profile sentinel. The default five-catalog bundle is exercised next
+an existing-profile sentinel. The default six-catalog bundle is exercised next
 to the optional Mac captions.
 
 Two isolated C++ contracts compile the real install constants/declaration,
@@ -94,7 +98,7 @@ against pinned Chromium/core/Windows source. It also checks the startup route
 and separate policy root. These contracts do not constitute a Chromium link.
 
 The actual onboarding frontend passes generated localization, Svelte/TypeScript
-checking, its 124 existing interaction tests, Vite production build and GRD
+checking, its existing interaction tests plus services-review regression tests, Vite production build and GRD
 generation. Chromium's separate Settings lint remains scoped to Chrome WebUI
 resources. Full native compilation, fresh/second-launch behavior, simultaneous
 Helium/Arcium use, taskbar/default-browser integration, real imports and password
