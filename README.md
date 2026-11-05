@@ -10,6 +10,12 @@ Unofficial experimental Windows platform project for [Arcium](https://github.com
 
 ## Automation
 
+To copy your existing browser runtime into a test ZIP, see
+[Windows portable packaging](docs/windows-portable-package.md).
+`.\scripts\package_windows_portable.ps1` creates a staged folder, ZIP and SHA256
+checksum under `dist` while retaining the existing build output. It requires
+no browser rebuild; the extracted package still needs a standalone launch test.
+
 For synchronized Space colors, Windows Mica/Acrylic, rounded-frame and sidebar
 controls, see [Windows workspace appearance](docs/arc-appearance-windows.md).
 `--feature all --apply` validates and applies all five integrations as
