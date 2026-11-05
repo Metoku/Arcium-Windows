@@ -1,6 +1,6 @@
 # Arcium-Windows
 
-> **Status: experimental Windows port. A local browser build has been reported working; automated UI validation and release packaging remain unfinished.**
+> **Status: experimental Windows port. The first portable alpha is published; native build and runtime acceptance are user reports. Installer candidates receive separate Windows validation.**
 
 Unofficial experimental Windows platform project for [Arcium](https://github.com/dr-baker/Arcium), a Chromium/Helium-based browser. This project is independent of, and not endorsed by, the upstream maintainers.
 
@@ -9,6 +9,12 @@ Unofficial experimental Windows platform project for [Arcium](https://github.com
 [dr-baker/Arcium](https://github.com/dr-baker/Arcium) owns shared browser behavior and Chromium patches. [dr-baker/Arcium-macOS](https://github.com/dr-baker/Arcium-macOS) is a macOS reference, not a Windows build source. This repository will own Windows platform integration, build scripts, testing and packaging.
 
 ## Automation
+
+For a per-user installer and an on-demand update checker, see
+[Windows installer and updates](docs/windows-installer-updates.md).
+The GitHub installer workflow reuses a published portable ZIP, validates
+installation/upgrades/uninstall and creates an installer candidate without
+rebuilding Chromium. Installed users get a **Check for Arcium updates** shortcut.
 
 To copy your existing browser runtime into a test ZIP, see
 [Windows portable packaging](docs/windows-portable-package.md).
