@@ -24,11 +24,13 @@ The monitor does not approve or merge PRs, publish packages, install updates or 
 
 ## One repository setting for automatic PRs
 
-The latest observed monitor run was blocked by **GitHub Actions is not permitted to create or approve pull requests**. This is a repository administration setting, separate from the scoped token permissions already declared in the workflow.
+The initial monitor run was blocked by **GitHub Actions is not permitted to create or approve pull requests**. This is a repository administration setting, separate from the scoped token permissions already declared in the workflow.
+
+On 2026-11-05, [the live monitor](https://github.com/Metoku/Arcium-Windows/actions/runs/42059498295) successfully created [draft PR #41](https://github.com/Metoku/Arcium-Windows/pull/41) as `github-actions[bot]`. This verified automatic PR creation and resolved [issue #28](https://github.com/Metoku/Arcium-Windows/issues/28). The steps below apply if the setting is disabled again.
 
 Open [Settings > Actions > General](https://github.com/Metoku/Arcium-Windows/settings/actions). Under **Workflow permissions**, enable **Allow GitHub Actions to create and approve pull requests**, then **Save**. The workflow creates draft proposals; it contains no approval or merge operation. Keeping manual PR creation is also supported through the summary's compare link.
 
-Run **Actions > Monitor Arcium upstream > Run workflow** on main afterward. An actual Actions-created draft PR verifies that the permission is enabled. Keep [issue #28](https://github.com/Metoku/Arcium-Windows/issues/28) open until that succeeds. The connected GitHub app used for project maintenance cannot change repository administration settings.
+Run **Actions > Monitor Arcium upstream > Run workflow** on main afterward. An actual Actions-created draft PR verifies that the permission is enabled. Keep any new permission diagnostic open until that succeeds. The connected GitHub app used for project maintenance cannot change repository administration settings.
 
 Workflow permissions remain scoped to the operations needed by the monitor. Other validation jobs retain read-only contents access. This change does not require a broader default token setting, personal access token or automatic merge rule.
 

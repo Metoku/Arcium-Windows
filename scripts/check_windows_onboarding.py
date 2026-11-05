@@ -16,9 +16,10 @@ import subprocess
 import sys
 import tarfile
 import urllib.request
+import xml.etree.ElementTree as ET
 
 from scripts.apply_windows_arc_workflow import (
-    ROOT, ONBOARDING_PATCH, integrate, integrate_bundle,
+    ROOT, ONBOARDING_PATCH, SERVICES_PATCH, integrate, integrate_bundle,
     EXTERNAL_EXTENSION_SOURCE, LEGACY_EXTERNAL_EXTENSION_REGISTRY,
     EXTERNAL_EXTENSION_REGISTRY,
 )
@@ -99,9 +100,19 @@ def verify_native_sources(source: Path) -> dict:
     build = (source / ONBOARDING_ROOT / 'BUILD.gn').read_text(encoding='utf-8')
     build_action = build.split('action("build") {', 1)[1].split('action("grit")', 1)[0]
     for name in ('helium_onboarding_strings.grdp', 'src/pages/Welcome.svelte',
-                 'src/pages/DataImport.svelte'):
+                 'src/pages/DataImport.svelte', 'src/pages/HeliumServices.svelte',
+                 'src/lib/onboarding-flow.ts', 'src/components/PageNavigation.svelte'):
         if '"' + name + '"' not in build_action:
             raise RuntimeError(f'Onboarding incremental build input is missing: {name}')
+    services = (source / 'chrome/browser/resources/settings/privacy_page/services_page.ts').read_text(
+        encoding='utf-8')
+    if "window.open('chrome://setup/?services=1', '_blank');" not in services:
+        raise RuntimeError('Services settings does not open the dedicated consent route')
+    strings = ET.parse(source / 'chrome/app/settings_strings.grdp').getroot()
+    review_button = next(node for node in strings.iter('message')
+                         if node.get('name') == 'IDS_SETTINGS_HELIUM_SERVICES_SETUP_PENDING_BUTTON')
+    if ''.join(review_button.itertext()).strip() != 'Review services':
+        raise RuntimeError('Services settings still directs completed profiles to first-run setup')
     if not (shutil.which('g++') or shutil.which('c++')):
         raise RuntimeError('A C++ compiler is required for onboarding path contracts')
     result = subprocess.run([sys.executable, '-m', 'unittest',
@@ -113,6 +124,7 @@ def verify_native_sources(source: Path) -> dict:
             'function_bodies_verified':count, 'cpp_contracts_passed':True,
             'first_run_route_verified':True, 'policy_root_verified':True,
             'extension_registry_root_verified':True,
+            'services_review_entry_verified':True,
             'incremental_asset_inputs_verified':True}
 
 
@@ -174,7 +186,8 @@ def check_onboarding(source: Path, originals: dict[str, bytes],
             baseline[name] = data
             (source / name).write_bytes(data)
         others = (*catalogs, MAC_PATCH)
-        for order in ((ONBOARDING_PATCH, *others), (*others, ONBOARDING_PATCH)):
+        for order in ((ONBOARDING_PATCH, SERVICES_PATCH, *others),
+                      (*others, SERVICES_PATCH, ONBOARDING_PATCH)):
             for patch in order:
                 times = {name:(source / name).stat().st_mtime_ns for name in originals}
                 if integrate(source, patch=patch) != 'READY':
