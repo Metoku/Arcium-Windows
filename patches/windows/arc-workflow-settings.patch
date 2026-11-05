@@ -1,0 +1,571 @@
+--- a/chrome/app/settings_strings.grdp
++++ b/chrome/app/settings_strings.grdp
+@@ -280,6 +280,68 @@
+     <message name="IDS_SETTINGS_ROUNDED_FRAME" desc="Label for the toggle which enables or disables a rounded frame around web contents.">
+       Show a rounded frame around web contents
+     </message>
++    <if expr="is_win">
++      <message name="IDS_SETTINGS_ARCIUM_WORKFLOW_TITLE" desc="Arcium Windows workflow settings: arciumWorkflowTitle.">
++        Arc workflow
++      </message>
++      <message name="IDS_SETTINGS_ARCIUM_SIDEBAR_NAVIGATION" desc="Arcium Windows workflow settings: arciumSidebarNavigation.">
++        Keep navigation and the address bar in the sidebar
++      </message>
++      <message name="IDS_SETTINGS_ARCIUM_SIDEBAR_NAVIGATION_DESCRIPTION" desc="Arcium Windows workflow settings: arciumSidebarNavigationDescription.">
++        Available with left-side Vertical layout outside full screen.
++      </message>
++      <message name="IDS_SETTINGS_ARCIUM_SIDEBAR_EXTENSIONS" desc="Arcium Windows workflow settings: arciumSidebarExtensions.">
++        Show Extensions in sidebar navigation
++      </message>
++      <message name="IDS_SETTINGS_ARCIUM_PEEK" desc="Arcium Windows workflow settings: arciumPeek.">
++        Enable Peek link previews
++      </message>
++      <message name="IDS_SETTINGS_ARCIUM_PEEK_DESCRIPTION" desc="Arcium Windows workflow settings: arciumPeekDescription.">
++        Right-click a webpage link and choose Open Link in Peek.
++      </message>
++      <message name="IDS_SETTINGS_ARCIUM_PERSISTENT_SUGGESTIONS" desc="Arcium Windows workflow settings: arciumPersistentSuggestions.">
++        Suggest Favorites and Pins in the command bar
++      </message>
++      <message name="IDS_SETTINGS_ARCIUM_RECENT_TABS_DESCRIPTION" desc="Arcium Windows workflow settings: arciumRecentTabsDescription.">
++        Hold Ctrl and press Tab to preview recent tabs; release Ctrl to switch.
++      </message>
++      <message name="IDS_SETTINGS_ARCIUM_INTERFACE_SIZE" desc="Arcium Windows workflow settings: arciumInterfaceSize.">
++        Browser interface size
++      </message>
++      <message name="IDS_SETTINGS_ARCIUM_ARC_SHORTCUTS_TITLE" desc="Arcium Windows workflow settings: arciumArcShortcutsTitle.">
++        Arc-style shortcuts for Windows
++      </message>
++      <message name="IDS_SETTINGS_ARCIUM_ARC_SHORTCUTS_DESCRIPTION" desc="Arcium Windows workflow settings: arciumArcShortcutsDescription.">
++        Use familiar shortcuts for the sidebar, Pins, Spaces and recent tabs. Review the mappings before applying.
++      </message>
++      <message name="IDS_SETTINGS_ARCIUM_ARC_SHORTCUTS_APPLY" desc="Arcium Windows workflow settings: arciumArcShortcutsApply.">
++        Review Arc shortcuts
++      </message>
++      <message name="IDS_SETTINGS_ARCIUM_ARC_SHORTCUTS_CONFIRM" desc="Arcium Windows workflow settings: arciumArcShortcutsConfirm.">
++        Apply shortcuts
++      </message>
++      <message name="IDS_SETTINGS_ARCIUM_ARC_SHORTCUTS_RESTORE" desc="Arcium Windows workflow settings: arciumArcShortcutsRestore.">
++        Restore previous shortcuts
++      </message>
++      <message name="IDS_SETTINGS_ARCIUM_ARC_SHORTCUTS_CONFIRM_DESCRIPTION" desc="Arcium Windows workflow settings: arciumArcShortcutsConfirmDescription.">
++        These mappings replace bindings for the listed commands and may take shortcuts from other commands. Your current shortcut configuration is saved so you can restore it. Other browser preferences are unchanged.
++      </message>
++      <message name="IDS_SETTINGS_ARCIUM_ARC_SHORTCUTS_RESTORE_DESCRIPTION" desc="Arcium Windows workflow settings: arciumArcShortcutsRestoreDescription.">
++        Restore the shortcut configuration saved before the preset was first applied. Shortcut edits made since then will be replaced.
++      </message>
++      <message name="IDS_SETTINGS_ARCIUM_ARC_SHORTCUTS_UNAVAILABLE" desc="Arcium Windows workflow settings: arciumArcShortcutsUnavailable.">
++        Unavailable shortcuts
++      </message>
++      <message name="IDS_SETTINGS_ARCIUM_ARC_SHORTCUTS_FAILED" desc="Arcium Windows workflow settings: arciumArcShortcutsFailed.">
++        The shortcuts could not be changed. Check for managed settings or reserved keys.
++      </message>
++      <message name="IDS_SETTINGS_ARCIUM_ARC_SHORTCUTS_APPLIED" desc="Arcium Windows workflow settings: arciumArcShortcutsApplied.">
++        Arc-style shortcuts applied.
++      </message>
++      <message name="IDS_SETTINGS_ARCIUM_ARC_SHORTCUTS_RESTORED" desc="Arcium Windows workflow settings: arciumArcShortcutsRestored.">
++        Previous shortcuts restored.
++      </message>
++    </if>
+     <message name="IDS_SETTINGS_LAYOUT" desc="Title of the settings section which controls how the browser UI is laid out.">
+       Layout
+     </message>
+--- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
++++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+@@ -218,6 +218,16 @@
+   }
+   s_allowlist = new PrefsUtil::TypedPrefMap();
+ 
++#if BUILDFLAG(IS_WIN)
++  // Windows exposes shared Arcium controls through Chromium Settings.
++  (*s_allowlist)["arcium.appearance.sidebar_navigation"] =
++      settings_api::PrefType::kBoolean;
++  (*s_allowlist)["arcium.appearance.sidebar_extensions_drawer"] =
++      settings_api::PrefType::kBoolean;
++  (*s_allowlist)["arcium.appearance.chrome_ui_scale"] =
++      settings_api::PrefType::kNumber;
++#endif
++
+   // Helium layout
+   (*s_allowlist)[::prefs::kHeliumLayout] = settings_api::PrefType::kNumber;
+   (*s_allowlist)[::prefs::kHeliumVerticalRightAligned] =
+--- a/chrome/browser/resources/settings/appearance_page/appearance_layout_page.html.ts
++++ b/chrome/browser/resources/settings/appearance_page/appearance_layout_page.html.ts
+@@ -75,6 +75,49 @@
+     </settings-toggle-button>
+   </div>
+ </settings-section>
++<if expr="is_win">
++<settings-section page-title="$i18n{arciumWorkflowTitle}">
++  <settings-toggle-button id="arciumSidebarNavigation"
++      ?hidden="${!this.showVerticalSettings_()}"
++      pref-key="arcium.appearance.sidebar_navigation"
++      label="$i18n{arciumSidebarNavigation}"
++      sub-label="$i18n{arciumSidebarNavigationDescription}">
++  </settings-toggle-button>
++  <settings-toggle-button id="arciumSidebarExtensions" class="hr"
++      ?hidden="${!this.showVerticalSettings_()}"
++      pref-key="arcium.appearance.sidebar_extensions_drawer"
++      label="$i18n{arciumSidebarExtensions}">
++  </settings-toggle-button>
++  <settings-toggle-button id="arciumPeek" class="hr"
++      pref-key="helium.browser.peek_enabled"
++      label="$i18n{arciumPeek}"
++      sub-label="$i18n{arciumPeekDescription}">
++  </settings-toggle-button>
++  <settings-toggle-button id="arciumPersistentSuggestions" class="hr"
++      pref-key="helium.omnibox.persistent_items_enabled"
++      label="$i18n{arciumPersistentSuggestions}">
++  </settings-toggle-button>
++  <settings-toggle-button id="arciumRecentTabs" class="hr"
++      pref-key="helium.browser.mru_tab_cycling"
++      label="$i18n{cycleTabsInMRUOrder}"
++      sub-label="$i18n{arciumRecentTabsDescription}">
++  </settings-toggle-button>
++  <settings-toggle-button id="arciumLittleArc" class="hr"
++      pref-key="helium.little_arc.external_links"
++      label="$i18n{littleArcExternalLinks}"
++      sub-label="$i18n{littleArcExternalLinksDescription}">
++  </settings-toggle-button>
++  <div class="cr-row">
++    <div class="flex cr-padded-text" aria-hidden="true">$i18n{arciumInterfaceSize}</div>
++    <settings-dropdown-menu pref-key="arcium.appearance.chrome_ui_scale"
++        label="$i18n{arciumInterfaceSize}"
++        .menuOptions="${[{value: 80, name: '80%'}, {value: 90, name: '90%'},
++                        {value: 100, name: '100%'}, {value: 110, name: '110%'},
++                        {value: 125, name: '125%'}]}">
++    </settings-dropdown-menu>
++  </div>
++</settings-section>
++</if>
+ <!--_html_template_end_-->`;
+   // clang-format on
+ }
+--- a/chrome/browser/resources/settings/appearance_page/appearance_layout_page.ts
++++ b/chrome/browser/resources/settings/appearance_page/appearance_layout_page.ts
+@@ -3,6 +3,7 @@
+ // the terms of the GPL-3.0 license that can be found in the LICENSE file.
+ 
+ import '../controls/controlled_radio_button.js';
++import '../controls/settings_dropdown_menu.js';
+ import '../controls/settings_radio_group.js';
+ import '../controls/settings_toggle_button.js';
+ import '../settings_page/settings_section.js';
+--- a/chrome/browser/resources/settings/system_page/browser_shortcuts_page.html
++++ b/chrome/browser/resources/settings/system_page/browser_shortcuts_page.html
+@@ -164,6 +164,55 @@
+       on-click="onResetAllClick_">
+     $i18n{shortcutsResetAll}
+   </cr-button>
++
++  <if expr="is_win">
++    <div class="cr-row command-row">
++      <div class="command-details cr-padded-text">
++        <div>$i18n{arciumArcShortcutsTitle}</div>
++        <div class="secondary">$i18n{arciumArcShortcutsDescription}</div>
++      </div>
++      <div class="actions">
++        <cr-button id="arcPresetButton"
++            disabled="[[!canApplyArcPreset_(arcPreset_, arcPresetBusy_)]]"
++            on-click="onArcPresetClick_">$i18n{arciumArcShortcutsApply}</cr-button>
++        <cr-button id="arcRestoreButton"
++            disabled="[[!canRestoreArcPreset_(arcPreset_, arcPresetBusy_)]]"
++            on-click="onArcRestoreClick_">$i18n{arciumArcShortcutsRestore}</cr-button>
++      </div>
++    </div>
++    <div class="cr-row secondary" role="status" aria-live="polite"
++        hidden$="[[!arcPresetStatus_]]">[[arcPresetStatus_]]</div>
++    <template is="dom-if" if="[[showArcPresetDialog_]]" restamp>
++      <cr-dialog id="arcPresetDialog" show-on-attach
++          on-close="onArcPresetDialogClose_" on-cancel="onArcPresetCancel_">
++        <div slot="title">[[arcPresetTitle_(arcPresetRestore_)]]</div>
++        <div slot="body">
++          <p>[[arcPresetDescription_(arcPresetRestore_)]]</p>
++          <template is="dom-if" if="[[!arcPresetRestore_]]">
++            <template is="dom-repeat" items="[[arcPreset_.supported]]">
++              <div class="cr-row"><span class="flex">[[item.name]]</span>
++                <span>[[item.displayText]]</span></div>
++            </template>
++            <template is="dom-if" if="[[arcPreset_.unavailable.length]]">
++              <h3>$i18n{arciumArcShortcutsUnavailable}</h3>
++              <template is="dom-repeat" items="[[arcPreset_.unavailable]]">
++                <p>[[item.name]]: [[item.reason]]</p>
++              </template>
++            </template>
++          </template>
++          <div role="alert">[[arcPresetStatus_]]</div>
++        </div>
++        <div slot="button-container">
++          <cr-button class="cancel-button" disabled="[[arcPresetBusy_]]"
++              on-click="onArcPresetDialogClose_">$i18n{cancel}</cr-button>
++          <cr-button class="action-button" disabled="[[arcPresetBusy_]]"
++              on-click="onArcPresetConfirm_">
++            [[arcPresetConfirmLabel_(arcPresetRestore_)]]
++          </cr-button>
++        </div>
++      </cr-dialog>
++    </template>
++  </if>
+ 
+   <if expr="is_macosx">
+     <div id="macSystemShortcutsNotice" class="secondary">
+--- a/chrome/browser/resources/settings/system_page/browser_shortcuts_page.ts
++++ b/chrome/browser/resources/settings/system_page/browser_shortcuts_page.ts
+@@ -13,7 +13,7 @@
+ import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+ 
+ import {BrowserShortcutAssignmentResult, BrowserShortcutsHandlerFactory, BrowserShortcutsHandlerRemote, BrowserShortcutsPageCallbackRouter} from '../browser_shortcuts.mojom-webui.js';
+-import type {BrowserShortcutCommand} from '../browser_shortcuts.mojom-webui.js';
++import type {BrowserArcShortcutPreset, BrowserShortcutCommand} from '../browser_shortcuts.mojom-webui.js';
+ import {loadTimeData} from '../i18n_setup.js';
+ 
+ import {getTemplate} from './browser_shortcuts_page.html.js';
+@@ -42,6 +42,11 @@
+   static get properties() {
+     return {
+       routePath: String,
++      arcPreset_: {type: Object, value: null},
++      arcPresetBusy_: {type: Boolean, value: false},
++      arcPresetRestore_: {type: Boolean, value: false},
++      arcPresetStatus_: {type: String, value: ''},
++      showArcPresetDialog_: {type: Boolean, value: false},
+       commands_: {
+         type: Array,
+         value: () => [],
+@@ -86,6 +91,11 @@
+   }
+ 
+   declare routePath: string;
++  declare private arcPreset_: BrowserArcShortcutPreset|null;
++  declare private arcPresetBusy_: boolean;
++  declare private arcPresetRestore_: boolean;
++  declare private arcPresetStatus_: string;
++  declare private showArcPresetDialog_: boolean;
+   declare private commands_: Command[];
+   declare private filteredCommands_: Command[];
+   declare private commandsLoaded_: boolean;
+@@ -121,12 +131,105 @@
+             this.commands_.filter(command => command.commandId !== commandId);
+       });
+       this.sortAndFilter_();
++      this.refreshArcPreset_();
+     });
++    this.refreshArcPreset_();
+     this.handler_.getCommands().then(({commands}) => {
+       this.commands_ = commands;
+       this.commandsLoaded_ = true;
+       this.sortAndFilter_();
+     });
++  }
++
++  private async refreshArcPreset_() {
++    try {
++      const {preset} = await this.handler_.getArcPreset();
++      this.arcPreset_ = preset;
++    } catch {
++      this.arcPreset_ = null;
++    }
++  }
++
++  private canApplyArcPreset_(preset: BrowserArcShortcutPreset|null,
++                            busy: boolean): boolean {
++    return !busy && !!preset?.canModify && preset.supported.length > 0;
++  }
++
++  private canRestoreArcPreset_(preset: BrowserArcShortcutPreset|null,
++                              busy: boolean): boolean {
++    return !busy && !!preset?.canModify && preset.hasPrevious;
++  }
++
++  private async onArcPresetClick_() {
++    await this.refreshArcPreset_();
++    if (!this.canApplyArcPreset_(this.arcPreset_, this.arcPresetBusy_)) {
++      return;
++    }
++    this.arcPresetRestore_ = false;
++    this.arcPresetStatus_ = '';
++    this.showArcPresetDialog_ = true;
++  }
++
++  private onArcRestoreClick_() {
++    if (!this.canRestoreArcPreset_(this.arcPreset_, this.arcPresetBusy_)) {
++      return;
++    }
++    this.arcPresetRestore_ = true;
++    this.arcPresetStatus_ = '';
++    this.showArcPresetDialog_ = true;
++  }
++
++  private onArcPresetCancel_(event: Event) {
++    if (this.arcPresetBusy_) {
++      event.preventDefault();
++    }
++  }
++
++  private onArcPresetDialogClose_() {
++    if (!this.arcPresetBusy_) {
++      this.showArcPresetDialog_ = false;
++    }
++  }
++
++  private arcPresetTitle_(restore: boolean): string {
++    return loadTimeData.getString(
++        restore ? 'arciumArcShortcutsRestore' : 'arciumArcShortcutsTitle');
++  }
++
++  private arcPresetDescription_(restore: boolean): string {
++    return loadTimeData.getString(restore ?
++        'arciumArcShortcutsRestoreDescription' :
++        'arciumArcShortcutsConfirmDescription');
++  }
++
++  private arcPresetConfirmLabel_(restore: boolean): string {
++    return loadTimeData.getString(
++        restore ? 'arciumArcShortcutsRestore' : 'arciumArcShortcutsConfirm');
++  }
++
++  private async onArcPresetConfirm_() {
++    if (this.arcPresetBusy_) {
++      return;
++    }
++    this.arcPresetBusy_ = true;
++    this.arcPresetStatus_ = '';
++    try {
++      const {success} = this.arcPresetRestore_ ?
++          await this.handler_.restoreArcPreset() :
++          await this.handler_.applyArcPreset();
++      this.arcPresetStatus_ = loadTimeData.getString(success ?
++          (this.arcPresetRestore_ ? 'arciumArcShortcutsRestored' :
++                                   'arciumArcShortcutsApplied') :
++          'arciumArcShortcutsFailed');
++      if (success) {
++        this.showArcPresetDialog_ = false;
++      }
++    } catch {
++      this.arcPresetStatus_ = loadTimeData.getString('arciumArcShortcutsFailed');
++    } finally {
++      this.arcPresetBusy_ = false;
++      await this.refreshArcPreset_();
++    }
+   }
+ 
+   private upsertCommand_(command: Command) {
+--- a/chrome/browser/ui/webui/settings/browser_shortcuts.mojom
++++ b/chrome/browser/ui/webui/settings/browser_shortcuts.mojom
+@@ -35,11 +35,29 @@
+   string conflicting_command_name;
+ };
+ 
++// Preview the exact supported bindings before a user applies the preset.
++struct BrowserArcShortcutPresetEntry {
++  string name;
++  string accelerator;
++  string display_text;
++  string reason;
++};
++
++struct BrowserArcShortcutPreset {
++  bool can_modify;
++  bool has_previous;
++  array<BrowserArcShortcutPresetEntry> supported;
++  array<BrowserArcShortcutPresetEntry> unavailable;
++};
++
+ interface BrowserShortcutsPage {
+   Changed(BrowserShortcutsEvent event);
+ };
+ 
+ interface BrowserShortcutsHandler {
++  GetArcPreset() => (BrowserArcShortcutPreset preset);
++  ApplyArcPreset() => (bool success);
++  RestoreArcPreset() => (bool success);
+   GetCommands() => (array<BrowserShortcutCommand> commands);
+   AssignAcceleratorToCommand(int32 command_id, string serialized_accelerator) =>
+       (BrowserShortcutAssignmentResponse response);
+--- a/chrome/browser/ui/webui/settings/browser_shortcuts_handler.cc
++++ b/chrome/browser/ui/webui/settings/browser_shortcuts_handler.cc
+@@ -8,9 +8,11 @@
+ #include <optional>
+ #include <string>
+ #include <utility>
++#include <vector>
+ 
+ #include "base/strings/utf_string_conversions.h"
+ #include "build/build_config.h"
++#include "chrome/app/chrome_command_ids.h"
+ #include "chrome/browser/ui/browser_shortcuts/browser_shortcut_serialization.h"
+ 
+ namespace settings {
+@@ -39,6 +41,87 @@
+   return it == commands.end() ? std::string() : base::UTF16ToUTF8(it->name);
+ }
+ 
++#if BUILDFLAG(IS_WIN)
++struct ArcWindowsShortcut {
++  int command_id;
++  const char* accelerator;
++};
++
++// Windows adaptation of the shared Arc workflow. Standard browser shortcuts
++// such as Ctrl+T and Ctrl+L already have Windows defaults and stay as configured.
++constexpr ArcWindowsShortcut kArcWindowsShortcuts[] = {
++    {IDC_ARCIUM_TOGGLE_SPACE_PIN, "Control+KeyD"},
++    {IDC_TOGGLE_VERTICAL_TABS_COLLAPSE, "Control+KeyS"},
++    {IDC_SAVE_PAGE, "Control+Shift+KeyS"},
++    {IDC_COPY_URL, "Control+Shift+KeyC"},
++    {IDC_ARCIUM_COPY_MARKDOWN, "Control+Shift+Alt+KeyC"},
++    {IDC_ARCIUM_CLEAR_UNPINNED, "Control+Shift+KeyK"},
++    {IDC_ARCIUM_SELECT_RECENT_TAB, "Control+Tab"},
++    {IDC_ARCIUM_SELECT_PREVIOUS_RECENT_TAB, "Control+Shift+Tab"},
++    {IDC_ARCIUM_PREVIOUS_SPACE, "Control+Alt+ArrowLeft"},
++    {IDC_ARCIUM_NEXT_SPACE, "Control+Alt+ArrowRight"},
++    {IDC_ARCIUM_SELECT_SPACE_1, "Alt+Digit1"},
++    {IDC_ARCIUM_SELECT_SPACE_2, "Alt+Digit2"},
++    {IDC_ARCIUM_SELECT_SPACE_3, "Alt+Digit3"},
++    {IDC_ARCIUM_SELECT_SPACE_4, "Alt+Digit4"},
++    {IDC_ARCIUM_SELECT_SPACE_5, "Alt+Digit5"},
++    {IDC_ARCIUM_SELECT_SPACE_6, "Alt+Digit6"},
++    {IDC_ARCIUM_SELECT_SPACE_7, "Alt+Digit7"},
++    {IDC_ARCIUM_SELECT_SPACE_8, "Alt+Digit8"},
++    {IDC_ARCIUM_SELECT_SPACE_9, "Alt+Digit9"},
++    {IDC_ARCIUM_SELECT_NEXT_TAB, "Control+PageDown"},
++    {IDC_ARCIUM_SELECT_PREVIOUS_TAB, "Control+PageUp"},
++    {IDC_NEW_SPLIT_TAB, "Alt+Shift+Equal"},
++    {IDC_ARCIUM_CLOSE_SPLIT, "Alt+Shift+Minus"},
++    {IDC_ARCIUM_FOCUS_SPLIT_1, "Alt+Shift+Digit1"},
++    {IDC_ARCIUM_FOCUS_SPLIT_2, "Alt+Shift+Digit2"},
++};
++#endif
++
++mojom::BrowserArcShortcutPresetPtr MakeArcPreset(
++    const browser_shortcuts::BrowserShortcutService& service) {
++  auto preset = mojom::BrowserArcShortcutPreset::New();
++#if BUILDFLAG(IS_WIN)
++  preset->can_modify = service.CanModifyConfiguration();
++  preset->has_previous = service.HasPreviousConfiguration();
++  for (const auto& definition : kArcWindowsShortcuts) {
++    auto entry = mojom::BrowserArcShortcutPresetEntry::New();
++    entry->name = GetCommandName(service.GetCommands(), definition.command_id);
++    entry->accelerator = definition.accelerator;
++    auto accelerator = browser_shortcuts::AcceleratorFromString(
++        definition.accelerator);
++    if (!service.HasCommand(definition.command_id)) {
++      entry->reason = "This browser action is unavailable in this build.";
++    } else if (!accelerator || service.IsAcceleratorLocked(
++                                   definition.accelerator,
++                                   definition.command_id)) {
++      entry->reason = "This shortcut is reserved by the browser.";
++    }
++    if (accelerator) {
++      entry->display_text = base::UTF16ToUTF8(
++          browser_shortcuts::AcceleratorToDisplayString(*accelerator));
++    }
++    if (entry->reason.empty()) {
++      preset->supported.push_back(std::move(entry));
++    } else {
++      // A missing command has no localized label; show its key with the reason.
++      if (entry->name.empty()) {
++        entry->name = entry->display_text;
++      }
++      preset->unavailable.push_back(std::move(entry));
++    }
++  }
++#endif
++  return preset;
++}
++
++#if BUILDFLAG(IS_WIN)
++bool PresetSucceeded(browser_shortcuts::ConfigurationResult result) {
++  return result == browser_shortcuts::ConfigurationResult::kSuccess ||
++         result == browser_shortcuts::ConfigurationResult::kNoChange;
++}
++#endif
++
+ }  // namespace
+ 
+ BrowserShortcutsHandler::BrowserShortcutsHandler(
+@@ -53,6 +136,42 @@
+ 
+ BrowserShortcutsHandler::~BrowserShortcutsHandler() {
+   service_->RemoveObserver(this);
++}
++
++void BrowserShortcutsHandler::GetArcPreset(GetArcPresetCallback callback) {
++  std::move(callback).Run(MakeArcPreset(*service_));
++}
++
++void BrowserShortcutsHandler::ApplyArcPreset(ApplyArcPresetCallback callback) {
++  bool success = false;
++#if BUILDFLAG(IS_WIN)
++  const auto preset = MakeArcPreset(*service_);
++  if (preset->can_modify && !preset->supported.empty()) {
++    std::vector<browser_shortcuts::CommandAcceleratorConfiguration> configuration;
++    for (const auto& definition : kArcWindowsShortcuts) {
++      if (std::ranges::any_of(preset->supported, [&](const auto& entry) {
++            return entry->accelerator == definition.accelerator;
++          })) {
++        configuration.push_back(
++            {definition.command_id, {definition.accelerator}});
++      }
++    }
++    // The service validates the complete request before writing and saves the
++    // original custom bindings. Do not rewrite any browser preference here.
++    success = PresetSucceeded(service_->ApplyConfiguration(configuration));
++  }
++#endif
++  std::move(callback).Run(success);
++}
++
++void BrowserShortcutsHandler::RestoreArcPreset(RestoreArcPresetCallback callback) {
++  bool success = false;
++#if BUILDFLAG(IS_WIN)
++  if (service_->CanModifyConfiguration() && service_->HasPreviousConfiguration()) {
++    success = PresetSucceeded(service_->RestorePreviousConfiguration());
++  }
++#endif
++  std::move(callback).Run(success);
+ }
+ 
+ void BrowserShortcutsHandler::GetCommands(GetCommandsCallback callback) {
+--- a/chrome/browser/ui/webui/settings/browser_shortcuts_handler.h
++++ b/chrome/browser/ui/webui/settings/browser_shortcuts_handler.h
+@@ -25,6 +25,9 @@
+   ~BrowserShortcutsHandler() override;
+ 
+   // mojom::BrowserShortcutsHandler:
++  void GetArcPreset(GetArcPresetCallback callback) override;
++  void ApplyArcPreset(ApplyArcPresetCallback callback) override;
++  void RestoreArcPreset(RestoreArcPresetCallback callback) override;
+   void GetCommands(GetCommandsCallback callback) override;
+   void AssignAcceleratorToCommand(
+       int32_t command_id,
+--- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
++++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
+@@ -608,6 +608,28 @@
+       {"openNewTabNextToActive", IDS_SETTINGS_NEW_TAB_NEXT_TO_ACTIVE_BUTTON},
+       {"cycleTabsInMRUOrder", IDS_SETTINGS_CYCLE_TABS_IN_MRU_ORDER},
+       {"roundedFrame", IDS_SETTINGS_ROUNDED_FRAME},
++#if BUILDFLAG(IS_WIN)
++      {"arciumWorkflowTitle", IDS_SETTINGS_ARCIUM_WORKFLOW_TITLE},
++      {"arciumSidebarNavigation", IDS_SETTINGS_ARCIUM_SIDEBAR_NAVIGATION},
++      {"arciumSidebarNavigationDescription", IDS_SETTINGS_ARCIUM_SIDEBAR_NAVIGATION_DESCRIPTION},
++      {"arciumSidebarExtensions", IDS_SETTINGS_ARCIUM_SIDEBAR_EXTENSIONS},
++      {"arciumPeek", IDS_SETTINGS_ARCIUM_PEEK},
++      {"arciumPeekDescription", IDS_SETTINGS_ARCIUM_PEEK_DESCRIPTION},
++      {"arciumPersistentSuggestions", IDS_SETTINGS_ARCIUM_PERSISTENT_SUGGESTIONS},
++      {"arciumRecentTabsDescription", IDS_SETTINGS_ARCIUM_RECENT_TABS_DESCRIPTION},
++      {"arciumInterfaceSize", IDS_SETTINGS_ARCIUM_INTERFACE_SIZE},
++      {"arciumArcShortcutsTitle", IDS_SETTINGS_ARCIUM_ARC_SHORTCUTS_TITLE},
++      {"arciumArcShortcutsDescription", IDS_SETTINGS_ARCIUM_ARC_SHORTCUTS_DESCRIPTION},
++      {"arciumArcShortcutsApply", IDS_SETTINGS_ARCIUM_ARC_SHORTCUTS_APPLY},
++      {"arciumArcShortcutsConfirm", IDS_SETTINGS_ARCIUM_ARC_SHORTCUTS_CONFIRM},
++      {"arciumArcShortcutsRestore", IDS_SETTINGS_ARCIUM_ARC_SHORTCUTS_RESTORE},
++      {"arciumArcShortcutsConfirmDescription", IDS_SETTINGS_ARCIUM_ARC_SHORTCUTS_CONFIRM_DESCRIPTION},
++      {"arciumArcShortcutsRestoreDescription", IDS_SETTINGS_ARCIUM_ARC_SHORTCUTS_RESTORE_DESCRIPTION},
++      {"arciumArcShortcutsUnavailable", IDS_SETTINGS_ARCIUM_ARC_SHORTCUTS_UNAVAILABLE},
++      {"arciumArcShortcutsFailed", IDS_SETTINGS_ARCIUM_ARC_SHORTCUTS_FAILED},
++      {"arciumArcShortcutsApplied", IDS_SETTINGS_ARCIUM_ARC_SHORTCUTS_APPLIED},
++      {"arciumArcShortcutsRestored", IDS_SETTINGS_ARCIUM_ARC_SHORTCUTS_RESTORED},
++#endif
+       {"layoutPageTitle", IDS_SETTINGS_LAYOUT},
+       {"browserLayout", IDS_SETTINGS_BROWSER_LAYOUT},
+       {"browserLayoutClassic", IDS_SETTINGS_BROWSER_LAYOUT_CLASSIC},

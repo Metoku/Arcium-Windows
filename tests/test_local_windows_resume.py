@@ -4,6 +4,8 @@ These checks deliberately do NOT download Chromium or compile anything.
 """
 
 from pathlib import Path
+import shutil
+import subprocess
 import unittest
 
 
@@ -13,6 +15,17 @@ GUIDE = ROOT / "docs" / "local-windows-incremental-build.md"
 
 
 class LocalIncrementalBuildTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which('pwsh') or shutil.which('powershell'), 'PowerShell required')
+    def test_real_powershell_parser_accepts_resume_script(self):
+        shell = shutil.which('pwsh') or shutil.which('powershell')
+        script = "$tokens=$null; $errors=$null; " + (
+            "[System.Management.Automation.Language.Parser]::ParseFile('" +
+            str(SCRIPT).replace("'", "''") + "',[ref]$tokens,[ref]$errors) | Out-Null; "
+            "if ($errors.Count) { $errors | Out-String | Write-Error; exit 1 }")
+        result = subprocess.run([shell, '-NoProfile', '-NonInteractive', '-Command', script],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_script_preserves_existing_compilation_outputs(self):
         source = SCRIPT.read_text(encoding="utf-8")
         self.assertIn("out\\Default\\build.ninja", source)

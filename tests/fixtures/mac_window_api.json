@@ -1,0 +1,19 @@
+{
+  "ui/views/view.h": [
+    "  void ReorderChildView(View* view, size_t index);",
+    "  void InvalidateLayout(bool avoid_propagate_during_layout = false);",
+    "  virtual void PreferredSizeChanged();"
+  ],
+  "ui/gfx/canvas.h": [
+    "  void DrawCircle(const PointF& center_point,\n                  float radius,\n                  const cc::PaintFlags& flags);",
+    "  void DrawLine(const PointF& p1,\n                const PointF& p2,\n                const cc::PaintFlags& flags);",
+    "  void DrawRect(const RectF& rect, const cc::PaintFlags& flags);"
+  ],
+  "chrome/browser/ui/views/frame/windows_caption_button.h": [
+    "  void PaintMacSymbol(gfx::Canvas* canvas);"
+  ],
+  "chrome/browser/ui/views/frame/browser_caption_button_container_win.h": [
+    "  void UpdateMacButtonStyle();",
+    "  bool mac_style_ = false;"
+  ]
+}

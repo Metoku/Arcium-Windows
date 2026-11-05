@@ -1,0 +1,587 @@
+--- a/chrome/app/settings_strings.grdp
++++ b/chrome/app/settings_strings.grdp
+@@ -4071,6 +4071,12 @@
+       </message>
+       <message name="IDS_SETTINGS_IMPORT_AUTOFILL_FORM_DATA_CHECKBOX" desc="Checkbox for importing form data for autofill">
+         Autofill form data
++      </message>
++      <message name="IDS_SETTINGS_ARCIUM_IMPORT_ARC" desc="Windows Settings entry that opens the Arc sidebar import picker.">
++        Import from Arc
++      </message>
++      <message name="IDS_SETTINGS_ARCIUM_IMPORT_ARC_DESCRIPTION" desc="Description of the Windows Arc sidebar import picker.">
++        Choose Spaces, Pins, folders, and Favorites to bring into Arcium.
+       </message>
+       <message name="IDS_SETTINGS_IMPORT_ARC_AS_PINS" desc="Toggle for importing an Arc sidebar into Arcium Pins instead of normal tabs">
+         Import sidebar as Pins
+--- a/chrome/browser/importer/arcium_arc_spaces_import_unittest.cc
++++ b/chrome/browser/importer/arcium_arc_spaces_import_unittest.cc
+@@ -14,6 +14,12 @@
+ #include "chrome/utility/importer/arc_sidebar_snapshot.h"
+ #include "content/public/test/browser_task_environment.h"
+ #include "testing/gtest/include/gtest/gtest.h"
++
++#if BUILDFLAG(IS_WIN)
++#include "base/base_paths.h"
++#include "base/test/scoped_path_override.h"
++#include "chrome/common/importer/chrome_importer_utils.h"
++#endif
+ 
+ namespace arcium {
+ 
+@@ -445,5 +451,44 @@
+   EXPECT_EQ(0, result.FindDict("availability")->FindInt("foreignFavorites"));
+ }
+ 
++#if BUILDFLAG(IS_WIN)
++TEST(ArcWindowsDiscoveryTest,
++     FindsPackagedAndUnpackagedRootsWithVariedSuffixes) {
++  base::ScopedTempDir temp;
++  ASSERT_TRUE(temp.CreateUniqueTempDir());
++  base::ScopedPathOverride local(base::DIR_LOCAL_APP_DATA, temp.GetPath());
++  const auto direct =
++      temp.GetPath().AppendASCII("Arc").AppendASCII("User Data");
++  const auto package =
++      temp.GetPath()
++          .AppendASCII("Packages")
++          .AppendASCII("TheBrowserCompany.Arc_differentpublisher")
++          .AppendASCII("LocalCache")
++          .AppendASCII("Local")
++          .AppendASCII("Arc")
++          .AppendASCII("User Data");
++  for (const auto& folder : {direct, package}) {
++    ASSERT_TRUE(base::CreateDirectory(folder.AppendASCII("Default")));
++    ASSERT_TRUE(base::WriteFile(folder.AppendASCII("Local State"), "{}"));
++  }
++  // Matching packages without Arc data and unrelated applications are ignored.
++  ASSERT_TRUE(
++      base::CreateDirectory(temp.GetPath()
++                                .AppendASCII("Packages")
++                                .AppendASCII("TheBrowserCompany.Arc_aaaa")));
++  ASSERT_TRUE(base::CreateDirectory(temp.GetPath()
++                                        .AppendASCII("Packages")
++                                        .AppendASCII("Other.App_abc")
++                                        .AppendASCII("LocalCache")
++                                        .AppendASCII("Local")
++                                        .AppendASCII("Arc")
++                                        .AppendASCII("User Data")));
++  const auto found = GetArcUserDataFolders();
++  EXPECT_EQ((std::set<base::FilePath>(found.begin(), found.end())),
++            (std::set<base::FilePath>{direct, package}));
++  EXPECT_FALSE(GetArcUserDataFolder().empty());
++}
++#endif
++
+ }  // namespace
+ }  // namespace arcium
+--- a/chrome/browser/importer/chrome_importer_list.cc
++++ b/chrome/browser/importer/chrome_importer_list.cc
+@@ -5,8 +5,11 @@
+ 
+ #include "chrome/browser/importer/importer_list.h"
+ 
++#include <utility>
++
+ #include "base/check.h"
+ #include "base/files/file_path.h"
++#include "base/files/file_util.h"
+ #include "base/strings/strcat.h"
+ #include "base/strings/utf_string_conversions.h"
+ #include "base/threading/scoped_blocking_call.h"
+@@ -81,11 +84,39 @@
+       GetCanaryUserDataFolder(), kGoogleChromeBrowserCanary,
+       user_data_importer::TYPE_CHROME);
+ 
++#if BUILDFLAG(IS_WIN)
++  for (const auto& folder : GetArcUserDataFolders()) {
++    auto detected = GetChromeSourceProfiles(folder.AppendASCII("Local State"));
++    base::ListValue valid_profiles;
++    for (const auto& value : detected) {
++      const auto* profile = value.GetIfDict();
++      const auto* id = profile ? profile->FindString("id") : nullptr;
++      const auto* name = profile ? profile->FindString("name") : nullptr;
++      if (!id || !name)
++        continue;
++      // Chromium's generic fallback has an empty ID. Arc's sidebar identifies
++      // the actual Default directory, never the parent User Data directory.
++      const auto directory =
++          base::FilePath::FromUTF8Unsafe(id->empty() ? "Default" : *id);
++      if (directory.IsAbsolute() || directory.ReferencesParent() ||
++          directory.BaseName() != directory ||
++          directory.value() == FILE_PATH_LITERAL(".") ||
++          !base::DirectoryExists(folder.Append(directory)))
++        continue;
++      valid_profiles.Append(base::DictValue()
++                                .Set("id", directory.AsUTF8Unsafe())
++                                .Set("name", *name));
++    }
++    AddChromeToProfiles(profiles, std::move(valid_profiles), folder,
++                        kArcBrowser, user_data_importer::TYPE_ARC);
++  }
++#else
+   AddChromeToProfiles(
+       profiles,
+       GetChromeSourceProfiles(GetArcUserDataFolder().Append(
+           base::FilePath::StringType(FILE_PATH_LITERAL("Local State")))),
+       GetArcUserDataFolder(), kArcBrowser, user_data_importer::TYPE_ARC);
++#endif
+ #endif
+ #if BUILDFLAG(IS_MAC)
+   AddChromeToProfiles(
+--- a/chrome/browser/resources/settings/appearance_page/appearance_behavior_page.html
++++ b/chrome/browser/resources/settings/appearance_page/appearance_behavior_page.html
+@@ -1,5 +1,12 @@
+ <style include="cr-shared-style settings-shared"></style>
+ <settings-section page-title="$i18n{behaviorPageTitle}">
++
++  <if expr="is_win">
++    <cr-link-row id="importFromArc" label="$i18n{arciumImportArc}"
++        sub-label="$i18n{arciumImportArcDescription}"
++        on-click="onImportArcClick_" external>
++    </cr-link-row>
++  </if>
+ 
+   <settings-toggle-button id="newTabNextToActive"
+       pref-key="helium.browser.new_tab_next_to_active"
+--- a/chrome/browser/resources/settings/appearance_page/appearance_behavior_page.ts
++++ b/chrome/browser/resources/settings/appearance_page/appearance_behavior_page.ts
+@@ -2,6 +2,7 @@
+ // You can use, redistribute, and/or modify this source code under
+ // the terms of the GPL-3.0 license that can be found in the LICENSE file.
+ 
++import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
+ import '../controls/settings_toggle_button.js';
+ import '../settings_page/settings_section.js';
+ 
+@@ -17,6 +18,10 @@
+   static get template() {
+     return getTemplate();
+   }
++
++  private onImportArcClick_() {
++    window.location.assign('chrome://setup/?import=arc');
++  }
+ }
+ 
+ declare global {
+--- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
++++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
+@@ -1297,6 +1297,9 @@
+       {"importSearch", IDS_SETTINGS_IMPORT_SEARCH_ENGINES_CHECKBOX},
+       {"importAutofillFormData",
+        IDS_SETTINGS_IMPORT_AUTOFILL_FORM_DATA_CHECKBOX},
++      {"arciumImportArc", IDS_SETTINGS_ARCIUM_IMPORT_ARC},
++      {"arciumImportArcDescription",
++       IDS_SETTINGS_ARCIUM_IMPORT_ARC_DESCRIPTION},
+       {"importArcAsPins", IDS_SETTINGS_IMPORT_ARC_AS_PINS},
+       {"importArcAsPinsDescription",
+        IDS_SETTINGS_IMPORT_ARC_AS_PINS_DESCRIPTION},
+--- a/chrome/common/importer/chrome_importer_utils.h
++++ b/chrome/common/importer/chrome_importer_utils.h
+@@ -35,6 +35,12 @@
+ base::FilePath GetCometUserDataFolder();
+ #endif
+ 
++#if BUILDFLAG(IS_WIN)
++// Existing Arc installations belonging to the current Windows user. Includes
++// packaged installations with varying publisher suffixes and unpackaged Arc.
++std::vector<base::FilePath> GetArcUserDataFolders();
++#endif
++
+ #if BUILDFLAG(IS_MAC)
+ // Reads Arc's explicit local machine identity from the current user's
+ // preferences plist. Blocking read-only I/O; call on a worker thread. Missing,
+--- a/chrome/common/importer/chrome_importer_utils_win.cc
++++ b/chrome/common/importer/chrome_importer_utils_win.cc
+@@ -5,6 +5,9 @@
+ 
+ #include "chrome/common/importer/chrome_importer_utils.h"
+ 
++#include <algorithm>
++
++#include "base/files/file_enumerator.h"
+ #include "base/files/file_util.h"
+ #include "base/path_service.h"
+ 
+@@ -122,16 +125,42 @@
+       .AppendASCII("User Data");
+ }
+ 
+-base::FilePath GetArcUserDataFolder() {
++std::vector<base::FilePath> GetArcUserDataFolders() {
+   base::FilePath result;
+   if (!base::PathService::Get(base::DIR_LOCAL_APP_DATA, &result))
+-    return base::FilePath();
++    return {};
+ 
+-  return result.AppendASCII("Packages")
+-      .AppendASCII("TheBrowserCompany.Arc_ttt1ap7aakyb4")
+-      .AppendASCII("LocalCache")
+-      .AppendASCII("Local")
+-      .AppendASCII("User Data");
++  std::vector<base::FilePath> candidates;
++  candidates.push_back(result.AppendASCII("Arc").AppendASCII("User Data"));
++  base::FileEnumerator packages(result.AppendASCII("Packages"), false,
++                                base::FileEnumerator::DIRECTORIES,
++                                FILE_PATH_LITERAL("TheBrowserCompany.Arc_*"));
++  for (auto package = packages.Next(); !package.empty();
++       package = packages.Next()) {
++    const auto local = package.AppendASCII("LocalCache").AppendASCII("Local");
++    candidates.push_back(local.AppendASCII("Arc").AppendASCII("User Data"));
++    // Retain older layouts only when they really contain Arc's sidebar.
++    const auto legacy = local.AppendASCII("User Data");
++    if (base::PathExists(local.AppendASCII("StorableSidebar.json")))
++      candidates.push_back(legacy);
++  }
++  std::sort(candidates.begin(), candidates.end());
++  candidates.erase(std::unique(candidates.begin(), candidates.end()),
++                   candidates.end());
++  std::vector<base::FilePath> found;
++  for (const auto& candidate : candidates) {
++    if (base::DirectoryExists(candidate) &&
++        (base::PathExists(candidate.AppendASCII("Local State")) ||
++         base::PathExists(
++             candidate.DirName().AppendASCII("StorableSidebar.json"))))
++      found.push_back(candidate);
++  }
++  return found;
++}
++
++base::FilePath GetArcUserDataFolder() {
++  const auto folders = GetArcUserDataFolders();
++  return folders.empty() ? base::FilePath() : folders.front();
+ }
+ 
+ base::FilePath GetCometUserDataFolder() {
+--- a/chrome/utility/importer/arc_sidebar_snapshot.cc
++++ b/chrome/utility/importer/arc_sidebar_snapshot.cc
+@@ -44,6 +44,99 @@
+   kFavorites,
+   kPins,
+ };
++
++// Windows Arc snapshots can store named records as objects with explicit IDs
++// and use Swift's enum-key encoding for section IDs. Canonicalize those forms
++// before the existing profile-scoped parser runs. Never infer a profile from
++// a display name or merge two conflicting records.
++std::optional<base::DictValue> NormalizeSidebarData(
++    const base::DictValue& original) {
++  base::DictValue data = original.Clone();
++  for (const char* key : {"items", "spaces"}) {
++    const auto* values = data.FindList(key);
++    if (!values || values->empty() || values->front().is_string())
++      continue;
++    base::ListValue normalized;
++    std::map<std::string, const base::DictValue*> seen;
++    for (const auto& value : *values) {
++      const auto* record = value.GetIfDict();
++      const auto* id = record ? record->FindString("id") : nullptr;
++      if (!id || id->empty())
++        return std::nullopt;
++      auto [previous, inserted] = seen.emplace(*id, record);
++      if (!inserted) {
++        if (*previous->second != *record)
++          return std::nullopt;
++        continue;
++      }
++      normalized.Append(*id);
++      normalized.Append(record->Clone());
++    }
++    data.Set(key, std::move(normalized));
++  }
++  if (auto* spaces = data.FindList("spaces")) {
++    for (size_t i = 0; i + 1 < spaces->size(); i += 2) {
++      auto* space = (*spaces)[i + 1].GetIfDict();
++      if (!space)
++        continue;
++      const auto* newer = space->FindList("newContainerIDs");
++      if (!newer)
++        continue;
++      if (newer->size() % 2u != 0u)
++        return std::nullopt;
++      base::ListValue converted;
++      for (size_t j = 0; j < newer->size(); j += 2) {
++        const auto* kind = (*newer)[j].GetIfDict();
++        const auto* id = (*newer)[j + 1].GetIfString();
++        if (!kind || kind->size() != 1u || !id || id->empty())
++          return std::nullopt;
++        if (kind->contains("pinned"))
++          converted.Append("pinned");
++        else if (kind->contains("unpinned"))
++          converted.Append("unpinned");
++        else
++          return std::nullopt;
++        converted.Append(*id);
++      }
++      if (const auto* older = space->FindList("containerIDs");
++          older && *older != converted)
++        return std::nullopt;
++      space->Set("containerIDs", std::move(converted));
++    }
++  }
++  // An explicit childrenIds list, including an empty one, is authoritative.
++  // Older Windows records omit it; retain their parent-linked array order.
++  if (auto* items = data.FindList("items")) {
++    std::map<std::string, std::vector<std::string>> children;
++    for (size_t i = 0; i + 1 < items->size(); i += 2) {
++      const auto* id = (*items)[i].GetIfString();
++      const auto* item = (*items)[i + 1].GetIfDict();
++      const auto* parent = item ? item->FindString("parentID") : nullptr;
++      if (id && parent && !parent->empty())
++        children[*parent].push_back(*id);
++    }
++    for (size_t i = 0; i + 1 < items->size(); i += 2) {
++      const auto* id = (*items)[i].GetIfString();
++      auto* item = (*items)[i + 1].GetIfDict();
++      if (!id || !item || item->contains("childrenIds"))
++        continue;
++      const auto found = children.find(*id);
++      if (found == children.end())
++        continue;
++      base::ListValue ordered;
++      for (const auto& child : found->second)
++        ordered.Append(child);
++      item->Set("childrenIds", std::move(ordered));
++    }
++  }
++  return data;
++}
++
++bool IsDefaultProfile(const base::DictValue* profile) {
++  const auto* value = profile ? profile->Find("default") : nullptr;
++  return value && ((value->is_bool() && value->GetBool()) ||
++                   (value->is_dict() && value->GetDict().empty()));
++}
+ 
+ std::optional<bool> FindCollapsed(const base::DictValue& item,
+                                   const base::DictValue* kind_data) {
+@@ -143,7 +236,7 @@
+ }
+ 
+ std::string ProfileDirectory(const base::DictValue* profile) {
+-  if (profile && profile->FindBool("default").value_or(false)) {
++  if (IsDefaultProfile(profile)) {
+     return "Default";
+   }
+   const base::DictValue* payload = CustomProfilePayload(profile);
+@@ -154,7 +247,7 @@
+ 
+ std::optional<ProfileIdentity> ParseProfileIdentity(
+     const base::DictValue* profile) {
+-  if (profile && profile->FindBool("default").value_or(false)) {
++  if (IsDefaultProfile(profile)) {
+     return ProfileIdentity{.directory = "Default", .is_default = true};
+   }
+   const base::DictValue* payload = CustomProfilePayload(profile);
+@@ -243,6 +336,31 @@
+   if (!containers) {
+     return nullptr;
+   }
++
++  // Some Windows snapshots use unkeyed payloads and empty placeholders. Only
++  // accept one saved collection; a Little Arc scope or conflicting payload
++  // must never be selected by size or by its position in the array.
++  const base::DictValue* unkeyed = nullptr;
++  bool only_unkeyed = true;
++  for (const auto& value : *containers) {
++    if (value.is_none())
++      continue;
++    const auto* payload = value.GetIfDict();
++    if (!payload || payload->contains("global") ||
++        payload->contains("littleBrowser")) {
++      only_unkeyed = false;
++      break;
++    }
++    if (payload->empty())
++      continue;
++    if (!payload->FindList("items") || !payload->FindList("spaces") || unkeyed) {
++      only_unkeyed = false;
++      break;
++    }
++    unkeyed = payload;
++  }
++  if (only_unkeyed && unkeyed)
++    return unkeyed;
+ 
+   // Older snapshots can contain a single unkeyed data object, optionally
+   // preceded by a null placeholder. Keep only these unambiguous legacy forms.
+@@ -264,6 +382,15 @@
+   }
+   const base::DictValue* global = nullptr;
+   for (size_t i = 0; i < containers->size(); i += 2u) {
++    if (const auto* scope_name = (*containers)[i].GetIfString()) {
++      if (*scope_name != "global")
++        continue;
++      const auto* data = (*containers)[i + 1u].GetIfDict();
++      if (!data || !data->FindList("items") || (global && *global != *data))
++        return nullptr;
++      global = data;
++      continue;
++    }
+     const base::DictValue* scope = (*containers)[i].GetIfDict();
+     if (!scope || scope->size() != 1u) {
+       return nullptr;
+@@ -533,6 +660,10 @@
+   if (!sidebar_data) {
+     return std::nullopt;
+   }
++  auto normalized = NormalizeSidebarData(*sidebar_data);
++  if (!normalized)
++    return std::nullopt;
++  sidebar_data = &*normalized;
+ 
+   const base::ListValue* item_values = sidebar_data->FindList("items");
+   if (!item_values) {
+--- a/chrome/utility/importer/arc_sidebar_snapshot_unittest.cc
++++ b/chrome/utility/importer/arc_sidebar_snapshot_unittest.cc
+@@ -848,5 +848,151 @@
+   check(base::DictValue(), "");
+ }
+ 
++// Windows and newer Swift serialization: explicit record IDs, enum section
++// markers, parent-linked children and an explicit Default profile identity.
++std::optional<base::DictValue> ParseWindowsFixture() {
++  return base::JSONReader::ReadDict(R"json({"sidebar":{"containers":[{}, {
++    "spaces":[{"id":"win-space","title":"Windows Work",
++      "profile":{"default":{}},
++      "newContainerIDs":[{"unpinned":{"_0":{"shared":{}}}},"today",
++                         {"pinned":{}},"pins"]}],
++    "topAppsContainerIDs":[{"default":{}},"favorites"],
++    "items":[
++      {"id":"pins","data":{"itemContainer":{}}},
++      {"id":"folder","parentID":"pins","title":"Research",
++       "isCollapsed":true,"data":{"list":{}}},
++      {"id":"nested","parentID":"folder","title":"Nested",
++       "data":{"list":{}}},
++      {"id":"saved","parentID":"nested","title":"Saved",
++       "data":{"tab":{"savedURL":"https://saved.example/"}}},
++      {"id":"empty","parentID":"pins","title":"Empty folder",
++       "childrenIds":[],"data":{"list":{}}},
++      {"id":"split","parentID":"pins","data":{"splitView":{}}},
++      {"id":"left","parentID":"split",
++       "data":{"tab":{"savedURL":"https://left.example/"}}},
++      {"id":"right","parentID":"split",
++       "data":{"tab":{"savedURL":"https://right.example/"}}},
++      {"id":"today","childrenIds":["temporary"],"data":{"itemContainer":{}}},
++      {"id":"temporary","data":{"tab":{"savedURL":"https://today.example/"}}},
++      {"id":"favorites","childrenIds":["favorite"],"data":{"itemContainer":{}}},
++      {"id":"favorite","title":"Favorite",
++       "data":{"tab":{"savedURL":"https://favorite.example/"}}}
++    ]}]}})json");
++}
++
++TEST(ArcSidebarSnapshotTest, WindowsRecordsPreserveFoldersFavoritesAndOrder) {
++  auto root = ParseWindowsFixture();
++  ASSERT_TRUE(root);
++  const auto before = root->Clone();
++  auto snapshot = ParseArcSidebarSnapshot(*root, "Default");
++  ASSERT_TRUE(snapshot);
++  EXPECT_EQ(*root, before);  // The source is always read-only.
++  ASSERT_EQ(snapshot->spaces.size(), 1u);
++  EXPECT_EQ(snapshot->spaces[0].name, "Windows Work");
++  const auto& pins = snapshot->spaces[0].pins;
++  ASSERT_EQ(pins.size(), 4u);
++  EXPECT_EQ(pins[0].type, ArcSidebarNode::Type::kFolder);
++  EXPECT_EQ(pins[0].title, "Research");
++  EXPECT_TRUE(pins[0].collapsed);
++  ASSERT_EQ(pins[0].children.size(), 1u);
++  ASSERT_EQ(pins[0].children[0].children.size(), 1u);
++  EXPECT_EQ(pins[0].children[0].children[0].url, "https://saved.example/");
++  EXPECT_EQ(pins[1].title, "Empty folder");
++  EXPECT_TRUE(pins[1].children.empty());
++  EXPECT_EQ(pins[2].url, "https://left.example/");
++  EXPECT_EQ(pins[3].url, "https://right.example/");
++  ASSERT_EQ(snapshot->favorites.size(), 1u);
++  EXPECT_EQ(snapshot->favorites[0].url, "https://favorite.example/");
++  const auto other = ParseArcSidebarSnapshot(*root, "Profile 1");
++  ASSERT_TRUE(other);
++  EXPECT_TRUE(other->spaces.empty());
++  EXPECT_TRUE(other->favorites.empty());
++}
++
++TEST(ArcSidebarSnapshotTest, WindowsExplicitEmptyChildrenAreAuthoritative) {
++  auto root = ParseWindowsFixture();
++  ASSERT_TRUE(root);
++  auto& data =
++      (*root->FindDict("sidebar")->FindList("containers"))[1].GetDict();
++  data.FindList("items")->front().GetDict().Set("childrenIds",
++                                                base::ListValue());
++  const auto snapshot = ParseArcSidebarSnapshot(*root, "Default");
++  ASSERT_TRUE(snapshot);
++  ASSERT_EQ(snapshot->spaces.size(), 1u);
++  EXPECT_TRUE(snapshot->spaces[0].pins.empty());
++}
++
++TEST(ArcSidebarSnapshotTest, WindowsConflictingIdsAndCollectionsFailClosed) {
++  auto root = ParseWindowsFixture();
++  ASSERT_TRUE(root);
++  auto& data =
++      (*root->FindDict("sidebar")->FindList("containers"))[1].GetDict();
++  auto duplicate = data.FindList("items")->front().Clone();
++  duplicate.GetDict().Set("title", "conflicting root");
++  data.FindList("items")->Append(std::move(duplicate));
++  EXPECT_FALSE(ParseArcSidebarSnapshot(*root, "Default"));
++  root = ParseWindowsFixture();
++  auto& containers = *root->FindDict("sidebar")->FindList("containers");
++  auto second = containers[1].Clone();
++  second.GetDict().Set("topAppsContainerIDs", base::ListValue());
++  containers.Append(std::move(second));
++  EXPECT_FALSE(ParseArcSidebarSnapshot(*root, "Default"));
++}
++
++TEST(ArcSidebarSnapshotTest, WindowsSectionConflictAndLittleArcFailClosed) {
++  auto root = ParseWindowsFixture();
++  ASSERT_TRUE(root);
++  auto& data =
++      (*root->FindDict("sidebar")->FindList("containers"))[1].GetDict();
++  data.FindList("spaces")->front().GetDict().Set(
++      "containerIDs", base::ListValue().Append("pinned").Append("different"));
++  EXPECT_FALSE(ParseArcSidebarSnapshot(*root, "Default"));
++  root = ParseWindowsFixture();
++  auto& containers = *root->FindDict("sidebar")->FindList("containers");
++  containers[0] =
++      base::Value(base::DictValue().Set("littleBrowser", base::DictValue()));
++  EXPECT_FALSE(ParseArcSidebarSnapshot(*root, "Default"));
++}
++
++TEST(ArcSidebarSnapshotTest, WindowsMachineTaggedProfilesRemainScoped) {
++  auto root = ParseWindowsFixture();
++  ASSERT_TRUE(root);
++  auto& data =
++      (*root->FindDict("sidebar")->FindList("containers"))[1].GetDict();
++  auto identity = base::DictValue().Set(
++      "custom",
++      base::DictValue().Set("_0", base::DictValue()
++                                      .Set("directoryBasename", "Profile 1")
++                                      .Set("machineID", "explicit-local-id")));
++  data.FindList("spaces")->front().GetDict().Set("profile", identity.Clone());
++  (*data.FindList("topAppsContainerIDs"))[0] = base::Value(std::move(identity));
++  EXPECT_FALSE(ParseArcSidebarSnapshot(*root, "Profile 1"));
++  EXPECT_FALSE(ParseArcSidebarSnapshot(*root, "Profile 1", "another-machine"));
++  const auto matched =
++      ParseArcSidebarSnapshot(*root, "Profile 1", "explicit-local-id");
++  ASSERT_TRUE(matched);
++  EXPECT_EQ(matched->spaces.size(), 1u);
++  EXPECT_EQ(matched->favorites.size(), 1u);
++}
++
++TEST(ArcSidebarSnapshotTest, WindowsStringScopesIgnoreLittleArc) {
++  auto root = ParseWindowsFixture();
++  ASSERT_TRUE(root);
++  auto& containers = *root->FindDict("sidebar")->FindList("containers");
++  auto saved = containers[1].Clone();
++  auto transient = saved.Clone();
++  transient.GetDict().FindList("spaces")->front().GetDict().Set("title",
++                                                                "Little Arc");
++  containers = base::ListValue()
++                   .Append("littleBrowser")
++                   .Append(std::move(transient))
++                   .Append("global")
++                   .Append(std::move(saved));
++  const auto snapshot = ParseArcSidebarSnapshot(*root, "Default");
++  ASSERT_TRUE(snapshot);
++  ASSERT_EQ(snapshot->spaces.size(), 1u);
++  EXPECT_EQ(snapshot->spaces[0].name, "Windows Work");
++}
++
+ }  // namespace
+ }  // namespace arcium

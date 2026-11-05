@@ -2,8 +2,8 @@
 """Opt-in native Windows Chromium *browser-only* compilation experiment.
 
 Never invoke the inherited Helium installer targets, code signing, updates,
-installation or distribution. The output (if any) is strictly an unbranded
-technical prototype; do not install it on a normal Helium/Chrome profile.
+installation or distribution. The output (if any) is a technical prototype.
+Arcium's separate Windows identity and first-run integration are applied before GN.
 """
 
 from __future__ import annotations
@@ -34,6 +34,13 @@ ORIGINAL_RELEASE_TARGETS = (
     "    ninja_commandline.extend(['chrome', 'chromedriver', 'setup', 'mini_installer'])"
 )
 BROWSER_ONLY_TARGETS = "    ninja_commandline.append('chrome')"
+ONBOARDING_ANCHOR = "    # Enter source tree to run build commands\n"
+ONBOARDING_STEP = (
+    "    # Keep first-run/profile identity separate from installed Helium.\n"
+    "    from scripts.apply_windows_arc_workflow import (\n"
+    "        ONBOARDING_PATCH, PASSWORD_PATCH, integrate_bundle)\n"
+    "    integrate_bundle(source_tree, catalogs=(PASSWORD_PATCH, ONBOARDING_PATCH), apply=True)\n\n"
+)
 
 
 # The pinned upstream builder automatically inserts `cc_wrapper = "sccache"`
@@ -133,11 +140,15 @@ def make_browser_only_builder(upstream: str) -> str:
         raise ValueError("Unknown pinned Windows patch-stage entry")
     if upstream.count(ORIGINAL_RELEASE_TARGETS) != 1:
         raise ValueError("Unknown Windows Ninja target list; no installer may run")
+    if upstream.count(ONBOARDING_ANCHOR) != 1:
+        raise ValueError("Unknown Windows pre-GN onboarding entry")
     builder = adapt_builder_version_api(upstream)
     builder = adapt_windows_vcvars(builder)
     builder = inject_chromium_sdk_pin(builder)
     builder = builder.replace(RESTORE_ANCHOR, RESTORE_STEP, 1)
     builder = builder.replace(ORIGINAL_RELEASE_TARGETS, BROWSER_ONLY_TARGETS, 1)
+    builder = builder.replace(ONBOARDING_ANCHOR,
+                              ONBOARDING_STEP + ONBOARDING_ANCHOR, 1)
     if "ninja_commandline.extend(['chrome', 'chromedriver', 'setup', 'mini_installer'])" in builder:
         raise AssertionError("Installer command remains in generated builder")
     compile(builder, "arcium_browser_only_builder.py", "exec")
@@ -160,9 +171,9 @@ def run_experiment(
         "browser_launched": False,
         "browser_distributed": False,
         "danger": (
-            "Prototype may retain inherited Helium identity. Never install or "
-            "distribute without distinct application IDs, profile isolation "
-            "and runtime testing."
+            "Browser-only prototype. The separate Arcium identity is applied "
+            "before GN; native isolation and release packaging still need "
+            "runtime acceptance."
         ),
     }
 

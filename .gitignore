@@ -1,4 +1,5 @@
 # Local build products
+dist/
 out/
 build-cache/
 chromium-src/
