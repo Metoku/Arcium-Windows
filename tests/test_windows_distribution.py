@@ -9,6 +9,7 @@ import tempfile
 import time
 import unittest
 import zipfile
+from windows_icon_resources import icon_sizes, pe_icon_groups, verify_installed_icons
 
 ROOT = Path(__file__).resolve().parents[1]
 COMMON = ROOT / 'installer/windows/Distribution.ps1'
@@ -57,6 +58,20 @@ def make_zip(parent, entries=None, browser=b'fake'):
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     Path(str(archive) + '.sha256').write_text(digest + '  ' + archive.name + '\n')
     return archive
+
+
+class ArciumIconContracts(unittest.TestCase):
+    def test_original_upstream_artwork_and_full_size_icon_are_preserved(self):
+        assets = ROOT/'installer/windows/assets'
+        metadata = json.loads((assets/'source.json').read_text())
+        artwork = (assets/'arcium-app-1024.png').read_bytes()
+        self.assertEqual(hashlib.sha256(artwork).hexdigest(), metadata['sha256'])
+        blob = hashlib.sha1(b'blob ' + str(len(artwork)).encode() + b'\0' + artwork).hexdigest()
+        self.assertEqual(blob, metadata['git_blob'])
+        import struct
+        self.assertEqual(struct.unpack_from('>II', artwork, 16), (1024, 1024))
+        self.assertEqual(icon_sizes((assets/'Arcium.ico').read_bytes()),
+                         {(16,16),(20,20),(24,24),(32,32),(40,40),(48,48),(64,64),(128,128),(256,256)})
 
 
 @unittest.skipUnless(SHELLS, 'PowerShell is required')
@@ -292,6 +307,9 @@ class WindowsInstallerLifecycle(unittest.TestCase):
                 ], capture_output=True, text=True, timeout=180)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 installers.append(output/f'Arcium-Windows-{version}-Setup.exe')
+                groups=pe_icon_groups(installers[-1].read_bytes())
+                self.assertTrue(any((256,256) in sizes for sizes in groups.values()),
+                                'Setup must embed the 256px artwork')
             # Only this CI-owned sentinel is removed. Real browser data is never
             # read or deleted by installation or these tests.
             profile = Path(os.environ['LOCALAPPDATA'])/'Arcium/User Data'
@@ -303,6 +321,7 @@ class WindowsInstallerLifecycle(unittest.TestCase):
                     result = subprocess.run([str(setup), '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART',
                                              '/TASKS=previewupdates', '/DIR='+str(installed)], timeout=120)
                     self.assertEqual(result.returncode, 0)
+                    verify_installed_icons(installed, setup, ROOT/'installer/windows/assets/Arcium.ico')
                     args = ['', 'https://example.invalid/a?q="quoted"&x=1', 'space value', 'trailing\\', '"']
                     env = os.environ.copy()
                     env['ARCIUM_FAKE_ARGS'] = str(root/'args.txt'); env['ARCIUM_FAKE_PATH'] = str(root/'path.txt')

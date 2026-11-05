@@ -20,7 +20,7 @@ AppMutex=Local\Arcium.Windows.Running
 SetupMutex=Local\Arcium.Windows.Setup
 CloseApplications=no
 RestartApplications=no
-UninstallDisplayIcon={app}\Arcium.exe
+UninstallDisplayIcon={app}\icons\{#IconFilename}
 SetupIconFile={#Stage}\Arcium.ico
 LicenseFile={#Stage}\payload\LICENSE.Arcium.txt
 OutputDir={#Output}
@@ -44,7 +44,9 @@ Name: previewupdates; Description: "Include alpha, beta and other preview update
 [Files]
 Source: "{#Stage}\payload\*"; DestDir: "{app}\versions\{#PackageVersion}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#Stage}\Arcium.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#Stage}\Arcium.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#Stage}\Arcium.ico"; DestDir: "{app}\icons"; DestName: "{#IconFilename}"; Flags: ignoreversion
+Source: "{#Distribution}\assets\source.json"; DestDir: "{app}\icons"; Flags: ignoreversion
+Source: "{#Distribution}\assets\README.md"; DestDir: "{app}\icons"; DestName: "Arcium-icon-source.md"; Flags: ignoreversion
 Source: "{#Stage}\provenance.json"; DestDir: "{app}\versions\{#PackageVersion}"; Flags: ignoreversion
 Source: "{#Distribution}\Distribution.ps1"; DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "{#Distribution}\Update-Arcium.ps1"; DestDir: "{app}\tools"; Flags: ignoreversion
@@ -54,27 +56,28 @@ Filename: "{app}\arcium-install.ini"; Section: Install; Key: Schema; String: "1"
 Filename: "{app}\arcium-install.ini"; Section: Install; Key: Repository; String: "Metoku/Arcium-Windows"
 Filename: "{app}\arcium-install.ini"; Section: Install; Key: Version; String: "{#PackageVersion}"
 Filename: "{app}\arcium-install.ini"; Section: Install; Key: RuntimeVersion; String: "{#RuntimeVersion}"
+Filename: "{app}\arcium-install.ini"; Section: Install; Key: IconFile; String: "icons\{#IconFilename}"
 Filename: "{app}\arcium-install.ini"; Section: Install; Key: Channel; String: "{code:UpdateChannel}"
 
 [Icons]
-Name: "{group}\Arcium"; Filename: "{app}\Arcium.exe"; IconFilename: "{app}\Arcium.ico"
-Name: "{group}\Check for Arcium updates"; Filename: "{app}\Arcium.exe"; Parameters: "--check-for-updates"; IconFilename: "{app}\Arcium.ico"
-Name: "{autodesktop}\Arcium"; Filename: "{app}\Arcium.exe"; IconFilename: "{app}\Arcium.ico"; Tasks: desktopicon
+Name: "{group}\Arcium"; Filename: "{app}\Arcium.exe"; IconFilename: "{app}\icons\{#IconFilename}"
+Name: "{group}\Check for Arcium updates"; Filename: "{app}\Arcium.exe"; Parameters: "--check-for-updates"; IconFilename: "{app}\icons\{#IconFilename}"
+Name: "{autodesktop}\Arcium"; Filename: "{app}\Arcium.exe"; IconFilename: "{app}\icons\{#IconFilename}"; Tasks: desktopicon
 
 [Registry]
 Root: HKCU; Subkey: "Software\RegisteredApplications"; ValueType: string; ValueName: "Arcium.Windows"; ValueData: "Software\Clients\StartMenuInternet\Arcium.Windows\Capabilities"; Flags: uninsdeletevalue
 Root: HKCU; Subkey: "Software\Clients\StartMenuInternet\Arcium.Windows"; ValueType: string; ValueData: "Arcium"; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Clients\StartMenuInternet\Arcium.Windows\DefaultIcon"; ValueType: string; ValueData: "{app}\Arcium.ico"
+Root: HKCU; Subkey: "Software\Clients\StartMenuInternet\Arcium.Windows\DefaultIcon"; ValueType: string; ValueData: "{app}\icons\{#IconFilename}"
 Root: HKCU; Subkey: "Software\Clients\StartMenuInternet\Arcium.Windows\shell\open\command"; ValueType: string; ValueData: """{app}\Arcium.exe"""
 Root: HKCU; Subkey: "Software\Clients\StartMenuInternet\Arcium.Windows\Capabilities"; ValueType: string; ValueName: ApplicationName; ValueData: "Arcium"
 Root: HKCU; Subkey: "Software\Clients\StartMenuInternet\Arcium.Windows\Capabilities"; ValueType: string; ValueName: ApplicationDescription; ValueData: "Arcium web browser"
-Root: HKCU; Subkey: "Software\Clients\StartMenuInternet\Arcium.Windows\Capabilities"; ValueType: string; ValueName: ApplicationIcon; ValueData: "{app}\Arcium.ico"
+Root: HKCU; Subkey: "Software\Clients\StartMenuInternet\Arcium.Windows\Capabilities"; ValueType: string; ValueName: ApplicationIcon; ValueData: "{app}\icons\{#IconFilename}"
 Root: HKCU; Subkey: "Software\Clients\StartMenuInternet\Arcium.Windows\Capabilities\URLAssociations"; ValueType: string; ValueName: http; ValueData: "Arcium.WindowsHTML"
 Root: HKCU; Subkey: "Software\Clients\StartMenuInternet\Arcium.Windows\Capabilities\URLAssociations"; ValueType: string; ValueName: https; ValueData: "Arcium.WindowsHTML"
 Root: HKCU; Subkey: "Software\Clients\StartMenuInternet\Arcium.Windows\Capabilities\FileAssociations"; ValueType: string; ValueName: ".htm"; ValueData: "Arcium.WindowsHTML"
 Root: HKCU; Subkey: "Software\Clients\StartMenuInternet\Arcium.Windows\Capabilities\FileAssociations"; ValueType: string; ValueName: ".html"; ValueData: "Arcium.WindowsHTML"
 Root: HKCU; Subkey: "Software\Classes\Arcium.WindowsHTML"; ValueType: string; ValueData: "Arcium HTML Document"; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Classes\Arcium.WindowsHTML\DefaultIcon"; ValueType: string; ValueData: "{app}\Arcium.ico"
+Root: HKCU; Subkey: "Software\Classes\Arcium.WindowsHTML\DefaultIcon"; ValueType: string; ValueData: "{app}\icons\{#IconFilename}"
 Root: HKCU; Subkey: "Software\Classes\Arcium.WindowsHTML\shell\open\command"; ValueType: string; ValueData: """{app}\Arcium.exe"" ""%1"""
 
 [Run]
@@ -84,6 +87,7 @@ Filename: "{app}\Arcium.exe"; Description: "Open Arcium"; Flags: nowait postinst
 Type: files; Name: "{app}\arcium-install.ini"
 Type: filesandordirs; Name: "{app}\versions"
 Type: dirifempty; Name: "{app}\tools"
+Type: dirifempty; Name: "{app}\icons"
 Type: dirifempty; Name: "{app}"
 
 [Code]

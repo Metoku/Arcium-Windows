@@ -46,6 +46,12 @@ and **Check for Arcium updates**. A desktop shortcut is optional. The launcher
 forwards URLs and browser arguments directly without a command shell.
 Windows can offer Arcium in Default Apps; setup does not force the default.
 
+Setup, the launcher and shortcuts use the original 1024px Arcium application
+artwork as a Windows ICO with 16–256px representations. The source artwork,
+revision and license attribution are retained in the repository and installer.
+The installed icon filename includes its digest so upgrades can replace an
+earlier cached low-resolution icon without clearing Windows' global icon cache.
+
 Browser files live under `versions\<package-version>`. Setup records
 the active version after deploying files and retains the previous version.
 Lower package versions are refused. A running launcher mutex makes setup and

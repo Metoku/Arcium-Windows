@@ -51,26 +51,27 @@ try {
     if ($extractedVersion -cne $runtimeVersion) { throw 'Portable version changed during extraction.' }
     if ((Get-ArciumSha256 $zip) -cne $hash) { throw 'Portable ZIP changed during packaging.' }
     Assert-ArciumX64Executable (Join-Path $payload 'chrome.exe')
-    Add-Type -AssemblyName System.Drawing
-    $icon=[Drawing.Icon]::ExtractAssociatedIcon((Join-Path $payload 'chrome.exe'))
-    if ($null -eq $icon) { $icon=[Drawing.SystemIcons]::Application.Clone() }
-    try {
-        $stream=[IO.File]::Create((Join-Path $stage 'Arcium.ico'))
-        try { $icon.Save($stream) } finally { $stream.Dispose() }
-    }
-    finally { $icon.Dispose() }
+    # Use the complete upstream-derived icon. ExtractAssociatedIcon returns a
+    # single small HICON and discards the large/high-DPI representations.
+    $iconSource=Join-Path $distribution 'assets/Arcium.ico'
+    $iconHash=Get-ArciumSha256 $iconSource
+    $iconFilename='Arcium-'+$iconHash.Substring(0,16)+'.ico'
+    [IO.File]::Copy($iconSource,(Join-Path $stage 'Arcium.ico'),$false)
+    $iconProvenance=ConvertFrom-Json ([IO.File]::ReadAllText((Join-Path $distribution 'assets/source.json')))
     & $csc /nologo /target:winexe /platform:x64 /reference:System.Windows.Forms.dll ("/win32icon:"+(Join-Path $stage 'Arcium.ico')) ("/out:"+(Join-Path $stage 'Arcium.exe')) (Join-Path $distribution 'Launcher.cs')
     if ($LASTEXITCODE -ne 0) { throw 'Arcium launcher compilation failed.' }
     $provenance=[ordered]@{
         Schema=1; PackageVersion=$Version; RuntimeVersion=$runtimeVersion
         PortableFile=[IO.Path]::GetFileName($zip); PortableSha256=$hash
         DistributionCommit=$env:GITHUB_SHA; Repository='Metoku/Arcium-Windows'
+        IconSha256=$iconHash; IconFile=$iconFilename
+        IconSourceRevision=$iconProvenance.revision
     }
     [IO.File]::WriteAllText((Join-Path $stage 'provenance.json'),($provenance|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
     $null=[IO.Directory]::CreateDirectory($output)
     $preview='no'; if ($parsed.Pre.Count -gt 0) { $preview='yes' }
     $numeric=($parsed.Numbers -join '.')+'.0'
-    & $InnoCompiler /Qp "/DPackageVersion=$Version" "/DRuntimeVersion=$runtimeVersion" "/DNumericVersion=$numeric" "/DPreviewDefault=$preview" "/DStage=$stage" "/DDistribution=$distribution" "/DOutput=$output" (Join-Path $distribution 'Arcium.iss')
+    & $InnoCompiler /Qp "/DPackageVersion=$Version" "/DRuntimeVersion=$runtimeVersion" "/DNumericVersion=$numeric" "/DPreviewDefault=$preview" "/DIconFilename=$iconFilename" "/DStage=$stage" "/DDistribution=$distribution" "/DOutput=$output" (Join-Path $distribution 'Arcium.iss')
     if ($LASTEXITCODE -ne 0) { throw 'Inno Setup compilation failed.' }
     $setup=Join-Path $output $name
     $setupHash=Get-ArciumSha256 $setup

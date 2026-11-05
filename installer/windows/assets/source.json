@@ -1,0 +1,11 @@
+{
+  "repository": "dr-baker/Arcium",
+  "revision": "4e8f8e2bd3cdcab014ae9663907db93e915cb850",
+  "path": "resources/branding/app_icon/raw.png",
+  "url": "https://github.com/dr-baker/Arcium/blob/4e8f8e2bd3cdcab014ae9663907db93e915cb850/resources/branding/app_icon/raw.png",
+  "git_blob": "ae9ef1cb8bc3cb19e93d1196fca248e845ce6c05",
+  "sha256": "757f00b34f506cc7419437f62951dad7419e7270ae99658f7b554ba3a39f9edd",
+  "dimensions": [1024, 1024],
+  "license": "GPL-3.0",
+  "ico_sizes": [16, 20, 24, 32, 40, 48, 64, 128, 256]
+}

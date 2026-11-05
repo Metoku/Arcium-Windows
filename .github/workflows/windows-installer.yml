@@ -7,6 +7,7 @@ on:
       - "scripts/package_windows_installer.ps1"
       - "scripts/fetch_windows_portable.ps1"
       - "tests/test_windows_distribution.py"
+      - "tests/windows_icon_resources.py"
       - ".github/workflows/windows-installer.yml"
   workflow_dispatch:
     inputs:
@@ -81,6 +82,8 @@ jobs:
           try {
             $p = Start-Process -FilePath $setup -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',('/DIR="' + $root + '"')) -Wait -PassThru
             if ($p.ExitCode -ne 0) { throw "Candidate installation failed: $($p.ExitCode)" }
+            python ./tests/windows_icon_resources.py --installed-root $root --setup $setup --report ./dist/installed-icon-report.json
+            if ($LASTEXITCODE -ne 0) { throw 'Installed icons lost high-DPI representations.' }
             $checker = Join-Path $root 'tools/Update-Arcium.ps1'
             $legacy = Join-Path $env:WINDIR 'System32/WindowsPowerShell/v1.0/powershell.exe'
             & $legacy -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $checker -CheckOnly
@@ -105,6 +108,7 @@ jobs:
             dist/*-Setup.exe.sha256
             dist/*-Setup.exe.json
             dist/installed-browser-smoke.json
+            dist/installed-icon-report.json
           if-no-files-found: warn
           compression-level: 0
           retention-days: 14
