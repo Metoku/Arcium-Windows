@@ -1,0 +1,129 @@
+name: Native Windows Chrome-only build (cached, high-capacity)
+# Manual only: avoid expensive automatic full Chromium rebuilds.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: arcium-native-cached-chrome
+  cancel-in-progress: false
+jobs:
+  chrome-only:
+    name: Compile chrome with SDK 28000 and reusable sccache
+    runs-on: ${{ vars.ARCIUM_NATIVE_WINDOWS_RUNNER || 'windows-2025' }}
+    timeout-minutes: 340
+    env:
+      SCCACHE_GHA_ENABLED: "on"
+      SCCACHE_GHA_VERSION: "chromium-156-windows-sdk28000-v1"
+      NINJA_SUMMARIZE_BUILD: "1"
+    steps:
+      - name: Checkout pinned integration
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check CPU, RAM and disk before expensive operations
+        shell: pwsh
+        run: |
+          $logical = [Environment]::ProcessorCount
+          $ramGiB = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 1)
+          $drive = [System.IO.Path]::GetPathRoot($env:GITHUB_WORKSPACE)
+          $availableGiB = [math]::Round(([System.IO.DriveInfo]::new($drive)).AvailableFreeSpace / 1GB, 1)
+          Write-Host "Runner: $logical logical CPUs, $ramGiB GiB RAM, $availableGiB GiB free"
+          # Previous 4-core/16-GiB runner reached only 22,400/81,338 build steps
+          # in 310 minutes. Refuse it instead of repeating a costly timeout.
+          if ($logical -lt 16 -or $ramGiB -lt 56 -or $availableGiB -lt 145) {
+            throw "Underpowered native Chromium runner. Configure ARCIUM_NATIVE_WINDOWS_RUNNER to a Windows runner with >=16 logical CPUs, >=64 GiB RAM and >=150 GiB free SSD."
+          }
+          $jobs = [Math]::Min(32, [Math]::Min($logical, [int][Math]::Floor($ramGiB / 3.5)))
+          "ARCIUM_NATIVE_JOBS=$jobs" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "Safe parallel compile jobs: $jobs"
+      - name: Confirm Visual Studio desktop C++ build tools exist
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ([Environment]::GetFolderPath('ProgramFilesX86')) 'Microsoft Visual Studio/Installer/vswhere.exe'
+          if (!(Test-Path -LiteralPath $vswhere)) {
+            throw "Visual Studio Build Tools are missing. Install a supported Visual Studio with the Desktop development with C++ workload before running this workflow."
+          }
+          $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if ($LASTEXITCODE -ne 0 -or !$vs) {
+            throw "Missing MSVC x64 toolchain. Install the Visual Studio Desktop development with C++ workload on this Windows runner."
+          }
+          Write-Host "Detected Visual Studio C++ toolchain: $vs"
+      - name: Test browser-only, SDK and isolated smoke guardrails
+        shell: pwsh
+        run: |
+          python -m unittest discover -s tests -p test_browser_only_build.py -v
+          python -m unittest discover -s tests -p test_chromium_sdk_pin.py -v
+          python -m unittest discover -s tests -p test_windows_sdk_compat.py -v
+          python -m unittest discover -s tests -p test_windows_browser_smoke.py -v
+      - name: Install persistent compiler cache
+        uses: mozilla-actions/sccache-action@v0.0.11
+        with:
+          version: "v0.16.0"
+      - name: Expose GitHub Actions cache token to sccache
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_RESULTS_URL', process.env.ACTIONS_RESULTS_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+      - name: Verify the compiler cache exists
+        shell: pwsh
+        run: |
+          $exe = Get-Command sccache -ErrorAction Stop
+          Write-Host "Compiler cache executable: $($exe.Source)"
+          sccache --version
+      - name: Install official Microsoft-signed SDK 28000
+        shell: pwsh
+        run: ./scripts/provision_chromium_sdk.ps1 -Install
+      - name: Confirm Chromium-required SDK is complete
+        shell: pwsh
+        run: |
+          ./scripts/provision_chromium_sdk.ps1
+          $header = 'C:\Program Files (x86)\Windows Kits\10\Include\10.0.28000.0\shared\sdkddkver.h'
+          if (!(Select-String -LiteralPath $header -Pattern '^\s*#\s*define\s+NTDDI_WIN11_BR\b' -Quiet)) {
+            throw "Required NTDDI_WIN11_BR is absent"
+          }
+      - name: Stage pinned Helium-Windows and Arcium patches
+        shell: pwsh
+        run: python scripts/windows_port.py stage
+      - name: Validate browser-only builder with no source download
+        shell: pwsh
+        run: python scripts/browser_only_build.py --validate
+      - name: Install source preparation dependencies
+        shell: pwsh
+        run: python -m pip install requests Pillow
+      - name: Compile native chrome with sccache and hardware-aware parallelism
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python scripts/browser_only_build.py --execute --require-cache --jobs $env:ARCIUM_NATIVE_JOBS --max-minutes 310
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Headless launch with disposable user-data directory
+        shell: pwsh
+        run: python scripts/windows_browser_smoke.py --timeout 60
+      - name: Show sccache hits and misses
+        if: always()
+        shell: pwsh
+        run: |
+          if (Get-Command sccache -ErrorAction SilentlyContinue) {
+            sccache --show-stats
+          }
+      - name: Upload diagnostics only (never browser binaries)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arcium-cached-windows-chrome-diagnostics
+          path: |
+            work/browser-only-build.json
+            work/browser-only-build.log
+            work/browser-launch-smoke.json
+            work/windows-audit.json
+          if-no-files-found: warn
+          retention-days: 7
+# Never compile setup/mini_installer; never sign, install, upload browser
+# binaries, trigger auto-update, or share an existing browser profile.

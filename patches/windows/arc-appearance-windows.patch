@@ -1,0 +1,1845 @@
+--- a/chrome/app/settings_strings.grdp
++++ b/chrome/app/settings_strings.grdp
+@@ -4872,4 +4872,66 @@
+   <message name="IDS_SETTINGS_DICTATION_SHORTCUT_CLEAR_LABEL" translateable="false" desc="Accessibility label for the clear keyboard shortcut button icon.">
+     Clear keyboard shortcut
+   </message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_APPEARANCE" desc="Windows workspace appearance control: workspaceAppearance.">Workspace appearance</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_DESCRIPTION" desc="Windows workspace appearance control: workspaceDescription.">Space colors also apply to the sidebar, browser controls and floating panels. Layout and material choices are shared within this browser profile.</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_UNAVAILABLE" desc="Windows workspace appearance control: workspaceUnavailable.">Appearance is unavailable for this window, or controlled by your administrator.</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_PRESET" desc="Windows workspace appearance control: workspacePreset.">Apply Arc + Xelium layout</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_PRESET_DESCRIPTION" desc="Windows workspace appearance control: workspacePresetDescription.">Left vertical sidebar, navigation in the sidebar, rounded frame, 220 px sidebar and 110% interface size.</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_ERROR" desc="Windows workspace appearance control: workspaceError.">The change could not be saved. Refresh the page and check whether the Space still exists or the setting is managed.</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_SAVED" desc="Windows workspace appearance control: workspaceSaved.">Appearance saved</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_SPACE" desc="Windows workspace appearance control: workspaceSpace.">Space</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_BROWSER_MODE" desc="Windows workspace appearance control: workspaceBrowserMode.">Browser appearance</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_PAGE_MODE" desc="Windows workspace appearance control: workspacePageMode.">Page appearance</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_SYSTEM" desc="Windows workspace appearance control: workspaceSystem.">System</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_LIGHT" desc="Windows workspace appearance control: workspaceLight.">Light</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_DARK" desc="Windows workspace appearance control: workspaceDark.">Dark</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_COLOR_EFFECT" desc="Windows workspace appearance control: workspaceColorEffect.">Color effect</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_TINT" desc="Windows workspace appearance control: workspaceTint.">Tint</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_GLOWS" desc="Windows workspace appearance control: workspaceGlows.">Gradient glows</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_NONE" desc="Windows workspace appearance control: workspaceNone.">None</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_COLOR" desc="Windows workspace appearance control: workspaceColor.">Base color</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_GLOW_STRENGTH" desc="Windows workspace appearance control: workspaceGlowStrength.">Glow strength</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_ADD_GLOW" desc="Windows workspace appearance control: workspaceAddGlow.">Add glow</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_REMOVE_GLOW" desc="Windows workspace appearance control: workspaceRemoveGlow.">Remove glow</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_GLOW" desc="Windows workspace appearance control: workspaceGlow.">Glow</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_X" desc="Windows workspace appearance control: workspaceX.">Horizontal position</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_Y" desc="Windows workspace appearance control: workspaceY.">Vertical position</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_RADIUS" desc="Windows workspace appearance control: workspaceRadius.">Radius</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_OPACITY" desc="Windows workspace appearance control: workspaceOpacity.">Opacity</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_CONTROLS_CHROMA" desc="Windows workspace appearance control: workspaceControlsChroma.">Controls color intensity</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_PANELS_CHROMA" desc="Windows workspace appearance control: workspacePanelsChroma.">Panel color intensity</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_SURFACES" desc="Windows workspace appearance control: workspaceSurfaces.">Floating panel material</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_GLASS" desc="Windows workspace appearance control: workspaceGlass.">Glass</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_REFRACTIVE" desc="Windows workspace appearance control: workspaceRefractive.">Refractive</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_QUIET" desc="Windows workspace appearance control: workspaceQuiet.">Quiet</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_SOLID" desc="Windows workspace appearance control: workspaceSolid.">Solid</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_CUSTOM" desc="Windows workspace appearance control: workspaceCustom.">Custom</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_TEXT_OPACITY" desc="Windows workspace appearance control: workspaceTextOpacity.">Command bar backing opacity</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_PANEL_OPACITY" desc="Windows workspace appearance control: workspacePanelOpacity.">Preview panel backing opacity</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_TEXT_TINT" desc="Windows workspace appearance control: workspaceTextTint.">Command bar tint intensity</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_PANEL_TINT" desc="Windows workspace appearance control: workspacePanelTint.">Preview panel tint intensity</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_FRAME_WIDTH" desc="Windows workspace appearance control: workspaceFrameWidth.">Frame inset (px)</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_SIDEBAR_WIDTH" desc="Windows workspace appearance control: workspaceSidebarWidth.">Sidebar width (px)</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_SCALE" desc="Windows workspace appearance control: workspaceScale.">Interface size (%)</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_COLLAPSE" desc="Windows workspace appearance control: workspaceCollapse.">Collapsed sidebar style</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_RAIL" desc="Windows workspace appearance control: workspaceRail.">Icon rail</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_HIDDEN" desc="Windows workspace appearance control: workspaceHidden.">Fully hidden</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_ROUNDED" desc="Windows workspace appearance control: workspaceRounded.">Rounded content frame</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_NAVIGATION" desc="Windows workspace appearance control: workspaceNavigation.">Navigation in the sidebar</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_SHADOW" desc="Windows workspace appearance control: workspaceShadow.">Content shadow</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_DEFAULT" desc="Windows workspace appearance control: workspaceDefault.">Default</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_SHADOW_BLUR" desc="Windows workspace appearance control: workspaceShadowBlur.">Shadow blur (px)</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_SHADOW_OPACITY" desc="Windows workspace appearance control: workspaceShadowOpacity.">Shadow opacity (%)</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_CONTENT_BORDER" desc="Windows workspace appearance control: workspaceContentBorder.">Content border (px)</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_GLASS_SUPPORT" desc="Windows workspace appearance control: workspaceGlassSupport.">Windows 11 build 22621 or later supports Mica and Acrylic window materials. Unsupported systems and disabled transparency use a solid fallback. Floating panels use Chromium glass.</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_MANAGE_SPACE" desc="Windows workspace appearance control: workspaceManageSpace.">Edit Space names, icons, Pins and Favorites from the sidebar.</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_WINDOW_EFFECTS" desc="Windows workspace appearance: workspaceWindowEffects.">Window effects</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_WINDOW_MATERIAL" desc="Windows workspace appearance: workspaceWindowMaterial.">Window material</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_MICA" desc="Windows workspace appearance: workspaceMica.">Mica (Windows)</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_ACRYLIC" desc="Windows workspace appearance: workspaceAcrylic.">Frosted / Acrylic (Windows)</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_WINDOW_OPACITY" desc="Windows workspace appearance: workspaceWindowOpacity.">Window tint opacity</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_GLASS_ACTIVE" desc="Windows workspace appearance: workspaceGlassActive.">Windows window material is active.</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_GLASS_FALLBACK" desc="Windows workspace appearance: workspaceGlassFallback.">The window uses a solid background. Glass may be disabled, unsupported, or unavailable with the current accessibility or system settings.</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_RESET_PALETTE" desc="Windows workspace control: workspaceResetPalette.">Reset this Space’s colors</message>
++  <message name="IDS_SETTINGS_ARCIUM_WORKSPACE_FOLLOW_BROWSER" desc="Windows workspace control: workspaceFollowBrowser.">Follow browser</message>
+ </grit-part>
+--- a/chrome/browser/resources/settings/appearance_page/appearance_layout_page.css
++++ b/chrome/browser/resources/settings/appearance_page/appearance_layout_page.css
+@@ -121,3 +121,72 @@
+ .indented-toggles settings-toggle-button {
+   padding-inline-start: 0;
+ }
++
++.workspace-description {
++  color: var(--cr-secondary-text-color);
++  padding: 0 20px;
++}
++
++fieldset {
++  border: 0;
++  margin: 0;
++  min-width: 0;
++  padding: 0;
++}
++
++.workspace-row {
++  align-items: center;
++  border-top: var(--cr-separator-line);
++  display: flex;
++  gap: 20px;
++  justify-content: space-between;
++  min-height: 48px;
++  padding: 8px 20px;
++}
++
++.workspace-row > span {
++  flex: 1;
++}
++
++.workspace-row select {
++  max-width: 55%;
++}
++
++.workspace-row input[type=number] {
++  width: 80px;
++}
++
++.workspace-row input[type=range] {
++  max-width: 45%;
++  width: 160px;
++}
++
++.workspace-glow {
++  border-top: var(--cr-separator-line);
++  padding: 12px 20px;
++}
++
++.workspace-glow summary {
++  cursor: pointer;
++}
++
++button,
++select,
++input[type=number] {
++  background: var(--cr-card-background-color);
++  border: 1px solid var(--cr-separator-color);
++  border-radius: 6px;
++  color: var(--cr-primary-text-color);
++  font: inherit;
++  padding: 8px;
++}
++
++button {
++  cursor: pointer;
++}
++
++button:focus-visible,
++select:focus-visible,
++input:focus-visible {
++  outline: 2px solid var(--cr-focus-outline-color);
++}
+--- a/chrome/browser/resources/settings/appearance_page/appearance_layout_page.html.ts
++++ b/chrome/browser/resources/settings/appearance_page/appearance_layout_page.html.ts
+@@ -2,6 +2,8 @@
+ // You can use, redistribute, and/or modify this source code under
+ // the terms of the GPL-3.0 license that can be found in the LICENSE file.
+ 
++import {loadTimeData} from '../i18n_setup.js';
++
+ import {html} from '//resources/lit/v3_0/lit.rollup.js';
+ 
+ import type {SettingsAppearanceLayoutPageElement} from './appearance_layout_page.js';
+@@ -9,6 +11,154 @@
+ export function getHtml(this: SettingsAppearanceLayoutPageElement) {
+   // clang-format off
+   return html`<!--_html_template_start_-->
++${loadTimeData.getBoolean('isWindowsWorkspaceAppearance') ? html`
++<settings-section page-title="$i18n{workspaceAppearance}">
++  <p class="workspace-description">$i18n{workspaceDescription}</p>
++  <p class="workspace-description">$i18n{workspaceManageSpace}</p>
++  <p class="workspace-description" ?hidden="${!!this.workspace_?.available}">
++    $i18n{workspaceUnavailable}
++  </p>
++  ${this.workspace_?.spaceId ? html`
++  <label class="workspace-row">
++    <span>$i18n{workspaceSpace}</span>
++    <select id="appearanceSpace" data-action="space" @change="${this.onWorkspaceChange_}"
++        .value="${this.workspace_.spaceId}" ?disabled="${this.workspaceBusy_}">
++      ${this.workspace_.spaces.map(space => html`
++        <option value="${space.id}">${space.name}</option>`)}
++    </select>
++  </label>
++  <fieldset ?disabled="${this.workspaceBusy_ || !this.workspace_.available}">
++    <div class="workspace-row">
++      <span>$i18n{workspacePresetDescription}</span>
++      <button id="workspacePreset" @click="${this.onWorkspacePresetClick_}">$i18n{workspacePreset}</button>
++    </div>
++    ${['mode', 'webMode'].map(action => html`
++    <label class="workspace-row">
++      <span>${this.workspaceLabel_(action === 'mode' ? 'workspaceBrowserMode' : 'workspacePageMode')}</span>
++      <select data-action="${action}" data-kind="number" @change="${this.onWorkspaceChange_}"
++          .value="${String(this.workspace_![action as 'mode'|'webMode'])}">
++        <option value="0">${this.workspaceLabel_(action === 'mode' ? 'workspaceSystem' : 'workspaceFollowBrowser')}</option>
++        <option value="1">$i18n{workspaceLight}</option>
++        <option value="2">$i18n{workspaceDark}</option>
++      </select>
++    </label>`)}
++    <label class="workspace-row"><span>$i18n{workspaceWindowEffects}</span>
++      <input type="checkbox" data-action="chrome" data-key="enabled" data-kind="boolean"
++          ?checked="${this.workspace_.chrome.enabled}" @change="${this.onWorkspaceChange_}">
++    </label>
++    <label class="workspace-row"><span>$i18n{workspaceWindowMaterial}</span>
++      <select data-action="chrome" data-key="material" .value="${this.workspace_.chrome.material}"
++          @change="${this.onWorkspaceChange_}">
++        <option value="auto">$i18n{workspaceMica}</option>
++        <option value="frosted">$i18n{workspaceAcrylic}</option>
++        <option value="solid">$i18n{workspaceSolid}</option>
++        ${this.workspace_.chrome.material === 'liquidGlass' ? html`
++          <option value="liquidGlass">$i18n{workspaceAcrylic}</option>` : ''}
++      </select>
++    </label>
++    <label class="workspace-row"><span>$i18n{workspaceWindowOpacity}</span>
++      <input type="range" min="0.35" max="1" step="0.01" data-action="chrome"
++          data-key="materialOpacity" data-kind="number" @change="${this.onWorkspaceChange_}"
++          .value="${String(this.workspace_.chrome.materialOpacity)}">
++    </label>
++    <p class="workspace-description" role="status">
++      ${this.workspaceLabel_(this.workspace_.windowGlassActive ? 'workspaceGlassActive' : 'workspaceGlassFallback')}
++    </p>
++    <button id="resetWorkspacePalette" @click="${this.onResetWorkspacePaletteClick_}">$i18n{workspaceResetPalette}</button>
++    <label class="workspace-row"><span>$i18n{workspaceColorEffect}</span>
++      <select data-action="chrome" data-key="colorEffect" @change="${this.onWorkspaceChange_}"
++          .value="${this.workspace_.chrome.colorEffect}">
++        <option value="tint">$i18n{workspaceTint}</option>
++        <option value="glows">$i18n{workspaceGlows}</option>
++        <option value="none">$i18n{workspaceNone}</option>
++      </select>
++    </label>
++    <label class="workspace-row"><span>$i18n{workspaceColor}</span>
++      <input id="workspaceColor" type="color" data-action="chrome" data-key="tintColor"
++          .value="${this.workspace_.chrome.tintColor ?? '#a8baff'}"
++          @change="${this.onWorkspaceChange_}">
++    </label>
++    <label class="workspace-row"><span>$i18n{workspaceGlowStrength}</span>
++      <input type="range" min="0" max="1" step="0.01" data-action="chrome"
++          data-key="tintStrength" data-kind="number" @change="${this.onWorkspaceChange_}"
++          .value="${String(this.workspace_.chrome.tintStrength)}">
++    </label>
++    ${this.workspace_.chrome.points.map((point, index) => html`
++      <details class="workspace-glow"><summary>$i18n{workspaceGlow} ${index + 1}</summary>
++        <label class="workspace-row"><span>$i18n{workspaceColor}</span>
++          <input type="color" .value="${point.color}" data-index="${index}" data-key="color"
++              @change="${this.onWorkspaceGlowChange_}">
++        </label>
++        ${this.workspaceGlowControls_.map(control => html`
++          <label class="workspace-row"><span>${this.workspaceLabel_(control.label)}</span>
++            <input type="range" min="${control.min}" max="${control.max}" step="0.01"
++                .value="${String(point[control.key])}" data-index="${index}" data-key="${control.key}"
++                @change="${this.onWorkspaceGlowChange_}">
++          </label>`)}
++        <button data-index="${index}" @click="${this.onRemoveWorkspaceGlowClick_}">$i18n{workspaceRemoveGlow}</button>
++      </details>`)}
++    <button ?disabled="${this.workspace_.chrome.points.length >= 4}"
++        @click="${this.onAddWorkspaceGlowClick_}">$i18n{workspaceAddGlow}</button>
++    ${['controlsChroma', 'panelsChroma'].map(key => html`
++    <label class="workspace-row"><span>${this.workspaceLabel_(key === 'controlsChroma' ? 'workspaceControlsChroma' : 'workspacePanelsChroma')}</span>
++      <input type="range" min="0" max="2" step="0.01" data-action="chroma" data-key="${key}"
++          data-kind="number" @change="${this.onWorkspaceChange_}"
++          .value="${String(this.workspace_!.palette[key as 'controlsChroma'|'panelsChroma'])}">
++    </label>`)}
++    <label class="workspace-row"><span>$i18n{workspaceSurfaces}</span>
++      <select data-action="surface" .value="${this.workspace_.surface}" @change="${this.onWorkspaceChange_}">
++        ${['glass', 'refractive', 'quiet', 'solid', 'custom'].map(value => html`
++          <option value="${value}">${this.workspaceLabel_('workspace' + value.charAt(0).toUpperCase() + value.slice(1))}</option>`)}
++      </select>
++    </label>
++    ${this.workspaceTuningControls_.map(control => html`
++      <label class="workspace-row"><span>${this.workspaceLabel_(control.label)}</span>
++        <input type="range" min="0" max="1" step="0.01" data-action="tuning" data-key="${control.key}"
++            data-kind="number" .value="${String(this.workspace_!.tuning[control.key])}"
++            @change="${this.onWorkspaceChange_}">
++      </label>`)}
++    ${this.workspacePreferenceControls_.map(control => html`
++      <label class="workspace-row"><span>${this.workspaceLabel_(control.label)}</span>
++        <input type="number" min="${control.min}" max="${control.max}" step="1"
++            ?disabled="${!this.workspace_!.preferences[control.key]?.editable}"
++            data-action="pref" data-key="${control.key}" data-kind="number"
++            .value="${String(this.workspace_!.preferences[control.key]?.value ?? control.min)}"
++            @change="${this.onWorkspaceChange_}">
++      </label>`)}
++    ${[{key: 'roundedFrame', label: 'workspaceRounded'}, {key: 'sidebarNavigation', label: 'workspaceNavigation'}].map(control => html`
++      <label class="workspace-row"><span>${this.workspaceLabel_(control.label)}</span>
++        <input type="checkbox" ?checked="${this.workspace_!.preferences[control.key]?.value === true}"
++            ?disabled="${!this.workspace_!.preferences[control.key]?.editable}"
++            data-action="pref" data-key="${control.key}" data-kind="boolean" @change="${this.onWorkspaceChange_}">
++      </label>`)}
++    <label class="workspace-row"><span>$i18n{workspaceCollapse}</span>
++      <select data-action="pref" data-key="collapseStyle" data-kind="number"
++          ?disabled="${!this.workspace_.preferences['collapseStyle']?.editable}"
++          .value="${String(this.workspace_.preferences['collapseStyle']?.value)}"
++          @change="${this.onWorkspaceChange_}">
++        <option value="0">$i18n{workspaceRail}</option>
++        <option value="1">$i18n{workspaceHidden}</option>
++      </select>
++    </label>
++    <label class="workspace-row"><span>$i18n{workspaceShadow}</span>
++      <select data-action="frame" data-key="shadowMode" .value="${String(this.workspace_.frame['shadowMode'])}"
++          @change="${this.onWorkspaceChange_}">
++        <option value="default">$i18n{workspaceDefault}</option>
++        <option value="none">$i18n{workspaceNone}</option>
++        <option value="custom">$i18n{workspaceCustom}</option>
++      </select>
++    </label>
++    ${[{key: 'borderWidth', label: 'workspaceContentBorder', max: 6}, {key: 'blur', label: 'workspaceShadowBlur', max: 48}, {key: 'opacity', label: 'workspaceShadowOpacity', max: 100}].map(control => html`
++      <label class="workspace-row"><span>${this.workspaceLabel_(control.label)}</span>
++        <input type="range" min="0" max="${control.max}" step="1" data-action="frame"
++            data-key="${control.key}" data-kind="number" @change="${this.onWorkspaceChange_}"
++            .value="${String(this.workspace_!.frame[control.key])}">
++      </label>`)}
++  </fieldset>` : ''}
++  <p class="workspace-description">$i18n{workspaceGlassSupport}</p>
++  <p role="status" aria-live="polite" class="workspace-description">${this.workspaceStatus_}</p>
++</settings-section>
++` : ''}
+ <settings-section page-title="$i18n{layoutPageTitle}">
+   <settings-radio-group id="browserLayout" is-horizontal
+       pref-key="helium.browser.layout"
+--- a/chrome/browser/resources/settings/appearance_page/appearance_layout_page.ts
++++ b/chrome/browser/resources/settings/appearance_page/appearance_layout_page.ts
+@@ -8,12 +8,34 @@
+ import '../settings_page/settings_section.js';
+ 
+ import {PrefServiceObserverMixinLit} from '/shared/settings/prefs2/pref_service_observer_mixin_lit.js';
++import {WebUiListenerMixinLit} from 'chrome://resources/cr_elements/web_ui_listener_mixin_lit.js';
++import {sendWithPromise} from 'chrome://resources/js/cr.js';
+ import {CrLitElement} from 'chrome://resources/lit/v3_0/lit.rollup.js';
+ 
+ import {loadTimeData} from '../i18n_setup.js';
+ 
+ import {getCss} from './appearance_layout_page.css.js';
+ import {getHtml} from './appearance_layout_page.html.js';
++
++interface WorkspaceGlow {
++  id: string; color: string; x: number; y: number; radius: number; opacity: number;
++}
++interface WorkspaceAppearance {
++  available: boolean;
++  windowGlassActive: boolean;
++  windowGlassSupported: boolean;
++  spaceId: string;
++  spaces: Array<{id: string, name: string}>;
++  chrome: {enabled: boolean, material: string, materialOpacity: number, colorEffect: string, tintColor?: string,
++           tintStrength: number, points: WorkspaceGlow[]};
++  palette: {controlsChroma: number, panelsChroma: number};
++  mode: number;
++  webMode: number;
++  surface: string;
++  tuning: Record<string, number|string|boolean>;
++  frame: Record<string, number|string>;
++  preferences: Record<string, {value: number|boolean, editable: boolean}>;
++}
+ 
+ type PrefObject<T> = chrome.settingsPrivate.PrefObject<T>;
+ 
+@@ -33,7 +55,7 @@
+ }
+ 
+ const SettingsAppearanceLayoutPageElementBase =
+-    PrefServiceObserverMixinLit(CrLitElement);
++    WebUiListenerMixinLit(PrefServiceObserverMixinLit(CrLitElement));
+ 
+ export class SettingsAppearanceLayoutPageElement extends
+     SettingsAppearanceLayoutPageElementBase {
+@@ -51,6 +73,9 @@
+ 
+   static override get properties() {
+     return {
++      workspace_: {type: Object},
++      workspaceBusy_: {type: Boolean},
++      workspaceStatus_: {type: String},
+       browserLayoutPref_: {type: Object},
+       browserLayoutOptions_: {type: Array},
+       showVerticalTabsExpandOnHoverEnabled_: {type: Boolean},
+@@ -58,6 +83,128 @@
+       zenModeSidebarPinnedPref_: {type: Object},
+       forcedExpandOnHoverPref_: {type: Object},
+     };
++  }
++
++  protected accessor workspace_: WorkspaceAppearance|null = null;
++  protected accessor workspaceBusy_: boolean = false;
++  protected accessor workspaceStatus_: string = '';
++  private workspaceGeneration_: number = 0;
++
++  protected readonly workspacePreferenceControls_ = [
++    {key: 'frameWidth', label: 'workspaceFrameWidth', min: 0, max: 24},
++    {key: 'sidebarWidth', label: 'workspaceSidebarWidth', min: 160, max: 400},
++    {key: 'scale', label: 'workspaceScale', min: 80, max: 125},
++  ];
++  protected readonly workspaceTuningControls_ = [
++    {key: 'textOpacity', label: 'workspaceTextOpacity'},
++    {key: 'textTint', label: 'workspaceTextTint'},
++    {key: 'panelOpacity', label: 'workspacePanelOpacity'},
++    {key: 'panelTint', label: 'workspacePanelTint'},
++  ];
++  protected readonly workspaceGlowControls_ = [
++    {key: 'x', label: 'workspaceX', min: 0, max: 1},
++    {key: 'y', label: 'workspaceY', min: 0, max: 1},
++    {key: 'radius', label: 'workspaceRadius', min: 0.1, max: 1.5},
++    {key: 'opacity', label: 'workspaceOpacity', min: 0, max: 1},
++  ] as const;
++
++  protected workspaceLabel_(key: string): string {
++    return loadTimeData.getString(key);
++  }
++
++  private async refreshWorkspace_() {
++    const generation = ++this.workspaceGeneration_;
++    try {
++      const state = await sendWithPromise<WorkspaceAppearance>('getArciumAppearance');
++      if (generation === this.workspaceGeneration_ && this.isConnected) {
++        this.workspace_ = state;
++      }
++    } catch {
++      if (this.isConnected) this.workspaceStatus_ = this.workspaceLabel_('workspaceError');
++    }
++  }
++
++  private async saveWorkspace_(action: string, value: unknown) {
++    if (this.workspaceBusy_ || !this.workspace_?.spaceId) return;
++    const target = this.workspace_.spaceId;
++    this.workspaceBusy_ = true;
++    try {
++      const accepted = await sendWithPromise<boolean>('setArciumAppearance',
++          {spaceId: target, action, value});
++      if (this.isConnected) {
++        this.workspaceStatus_ = this.workspaceLabel_(
++            accepted ? 'workspaceSaved' : 'workspaceError');
++        await this.refreshWorkspace_();
++      }
++    } catch {
++      if (this.isConnected) this.workspaceStatus_ = this.workspaceLabel_('workspaceError');
++    } finally {
++      this.workspaceBusy_ = false;
++    }
++  }
++
++  protected onResetWorkspacePaletteClick_() {
++    void this.saveWorkspace_('resetPalette', true);
++  }
++
++  protected onWorkspacePresetClick_() {
++    void this.saveWorkspace_('preset', true);
++  }
++
++  protected onWorkspaceChange_(event: Event) {
++    const input = event.currentTarget as HTMLInputElement|HTMLSelectElement;
++    const {action, key, kind} = input.dataset;
++    if (!action) return;
++    let value: unknown = input.value;
++    if (kind === 'number') value = Number(input.value);
++    if (kind === 'boolean') value = (input as HTMLInputElement).checked;
++    if (action === 'pref') value = {name: key, value};
++    if (action === 'chrome' || action === 'frame' || action === 'tuning') {
++      if (!key) return;
++      value = {[key]: value};
++      if (action === 'chrome' && key === 'material') {
++        value = {material: input.value, enabled: true};
++      }
++      if (action === 'chrome' && key === 'tintColor') {
++        value = {tintColor: input.value, colorEffect: 'tint', enabled: true};
++      }
++    }
++    if (action === 'chroma') {
++      if (!key || !this.workspace_) return;
++      value = {...this.workspace_.palette, [key]: value};
++      // The model accepts only these two tuning values.
++      value = {controlsChroma: (value as WorkspaceAppearance['palette']).controlsChroma,
++               panelsChroma: (value as WorkspaceAppearance['palette']).panelsChroma};
++    }
++    void this.saveWorkspace_(action, value);
++  }
++
++  protected onWorkspaceGlowChange_(event: Event) {
++    const input = event.currentTarget as HTMLInputElement;
++    const index = Number(input.dataset['index']);
++    const key = input.dataset['key'];
++    const points = this.workspace_?.chrome.points.map(point => ({...point}));
++    if (!points?.[index] || !key) return;
++    const point = points[index];
++    if (key === 'color') point.color = input.value;
++    else if (key === 'x' || key === 'y' || key === 'radius' || key === 'opacity') {
++      point[key] = Number(input.value);
++    } else return;
++    void this.saveWorkspace_('chrome', {points});
++  }
++
++  protected onAddWorkspaceGlowClick_() {
++    const points = this.workspace_?.chrome.points.map(point => ({...point}));
++    if (!points || points.length >= 4) return;
++    points.push({id: crypto.randomUUID(), color: '#a8baff', x: 0.5,
++                 y: 0.5, radius: 0.5, opacity: 0.7});
++    void this.saveWorkspace_('chrome', {points, enabled: true, colorEffect: 'glows'});
++  }
++
++  protected onRemoveWorkspaceGlowClick_(event: Event) {
++    const index = Number((event.currentTarget as HTMLElement).dataset['index']);
++    const points = this.workspace_?.chrome.points.filter((_, i) => i !== index);
++    if (points) void this.saveWorkspace_('chrome', {points});
+   }
+ 
+   protected accessor browserLayoutPref_: PrefObject<number>|undefined =
+@@ -100,6 +247,13 @@
+   override connectedCallback() {
+     super.connectedCallback();
+ 
++    // <if expr="is_win">
++    this.addWebUiListener('arcium-appearance-changed', () => {
++      if (!this.workspaceBusy_) void this.refreshWorkspace_();
++    });
++    void this.refreshWorkspace_();
++    // </if>
++
+     this.mirrorPrefs({
+       'helium.browser.layout': 'browserLayoutPref_',
+       'helium.browser.zen_mode': 'zenModePref_',
+@@ -107,6 +261,11 @@
+     });
+   }
+ 
++  override disconnectedCallback() {
++    ++this.workspaceGeneration_;
++    super.disconnectedCallback();
++  }
++
+   protected showVerticalSettings_(): boolean {
+     return this.browserLayoutPref_?.value === BrowserLayout.VERTICAL;
+   }
+--- a/chrome/browser/resources/side_panel/customize_chrome/app.html.ts
++++ b/chrome/browser/resources/side_panel/customize_chrome/app.html.ts
+@@ -1,6 +1,8 @@
+ // Copyright 2024 The Chromium Authors
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
++
++import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
+ 
+ import {html} from '//resources/lit/v3_0/lit.rollup.js';
+ 
+@@ -9,6 +11,14 @@
+ export function getHtml(this: AppElement) {
+   // clang-format off
+   return html`<!--_html_template_start_-->
++<div class="sp-card" style="display:flex;gap:8px;padding:12px">
++  ${loadTimeData.getBoolean('isWindowsWorkspaceAppearance') ? html`<cr-button id="workspaceAppearance" @click="${this.onWorkspaceAppearanceClick_}">
++    $i18n{workspaceAppearance}
++  </cr-button>` : ''}
++  <cr-button id="closeWorkspacePanel" @click="${this.onCloseWorkspacePanelClick_}">
++    $i18n{closeWorkspacePanel}
++  </cr-button>
++</div>
+ <cr-page-selector id="container"
+     class="sp-scroller sp-scroller-top-of-page sp-scroller-bottom-of-page"
+     selected="${this.page_}" attr-for-selected="page-name">
+--- a/chrome/browser/resources/side_panel/customize_chrome/app.ts
++++ b/chrome/browser/resources/side_panel/customize_chrome/app.ts
+@@ -127,8 +127,25 @@
+   private apiProxy_: CustomizeChromeApiProxy =
+       CustomizeChromeApiProxy.getInstance();
+ 
++  private onWorkspacePanelKeyDown_ = (event: KeyboardEvent) => {
++    if (event.key === 'Escape' && !event.defaultPrevented && !event.isComposing) {
++      event.preventDefault();
++      event.stopPropagation();
++      this.onCloseWorkspacePanelClick_();
++    }
++  };
++
++  protected onCloseWorkspacePanelClick_() {
++    this.apiProxy_.handler.closePanel();
++  }
++
++  protected onWorkspaceAppearanceClick_() {
++    this.apiProxy_.handler.openWorkspaceAppearance();
++  }
++
+   override connectedCallback() {
+     super.connectedCallback();
++    this.addEventListener('keydown', this.onWorkspacePanelKeyDown_);
+ 
+     this.listenerIds_ = [
+       this.apiProxy_.callbackRouter.scrollToSection.addListener(
+@@ -168,6 +185,7 @@
+ 
+   override disconnectedCallback() {
+     super.disconnectedCallback();
++    this.removeEventListener('keydown', this.onWorkspacePanelKeyDown_);
+ 
+     for (const id of this.listenerIds_) {
+       assert(this.apiProxy_.callbackRouter.removeListener(id));
+--- a/chrome/browser/resources/side_panel/customize_chrome/appearance.html.ts
++++ b/chrome/browser/resources/side_panel/customize_chrome/appearance.html.ts
+@@ -1,6 +1,8 @@
+ // Copyright 2024 The Chromium Authors
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
++
++import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
+ 
+ import {html} from '//resources/lit/v3_0/lit.rollup.js';
+ 
+@@ -15,11 +17,12 @@
+     @edit-theme-click="${this.onEditThemeClick_}"
+     hidden>
+ </customize-chrome-theme-snapshot>
+-<customize-color-scheme-mode></customize-color-scheme-mode>
++${!loadTimeData.getBoolean('isWindowsWorkspaceAppearance') ? html`
++<customize-color-scheme-mode></customize-color-scheme-mode>` : ''}
+ <cr-theme-color-picker id="chromeColors" ?hidden="${!this.showColorPicker_}">
+ </cr-theme-color-picker>
+ <div id="followThemeToggle" class="sp-card-content"
+-    ?hidden="${!this.showDeviceThemeToggle_}">
++    ?hidden="${!this.showDeviceThemeToggle_ || loadTimeData.getBoolean('isWindowsWorkspaceAppearance')}">
+   <div id="followThemeToggleTitle">$i18n{followThemeToggle}</div>
+   <cr-toggle id="followThemeToggleControl" title="$i18n{followThemeToggle}"
+       ?checked="${!!this.theme_ && this.theme_.followDeviceTheme}"
+--- a/chrome/browser/ui/helium/arcium_settings_model.cc
++++ b/chrome/browser/ui/helium/arcium_settings_model.cc
+@@ -27,26 +27,28 @@
+ #include "chrome/browser/ui/browser_shortcuts/browser_shortcut_service_factory.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
++#include "chrome/browser/ui/color/arcium_space_color_mixer.h"
+ #include "chrome/browser/ui/color/chrome_color_id.h"
+-#include "chrome/browser/ui/color/arcium_space_color_mixer.h"
+-#include "chrome/browser/ui/helium/space_palette.h"
+ #include "chrome/browser/ui/helium/arcium_appearance_prefs.h"
+-#include "chrome/browser/ui/omnibox/arcium_command_design.h"
+-#include "chrome/browser/ui/omnibox/arcium_command_sites.h"
+ #include "chrome/browser/ui/helium/arcium_settings_prefs.h"
+ #include "chrome/browser/ui/helium/helium_space.h"
+ #include "chrome/browser/ui/helium/helium_space_service.h"
+ #include "chrome/browser/ui/helium/helium_space_service_factory.h"
++#include "chrome/browser/ui/helium/space_palette.h"
++#include "chrome/browser/ui/omnibox/arcium_command_design.h"
++#include "chrome/browser/ui/omnibox/arcium_command_sites.h"
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/frame/mru_tab_switcher_visualizer.h"
+ #include "chrome/browser/ui/views/helium/arcium_chrome_ui_scale.h"
+ #include "chrome/browser/ui/views/helium/glass_surface_configuration.h"
+ #include "chrome/browser/ui/views/helium/surface_style.h"
++#include "chrome/browser/ui/webui/webui_embedding_context.h"
+ #include "chrome/common/pref_names.h"
+ #include "components/prefs/pref_service.h"
++#include "content/public/browser/web_contents.h"
++#include "ui/color/color_id.h"
+ #include "ui/color/color_provider.h"
+-#include "ui/color/color_id.h"
+ #include "ui/native_theme/native_theme.h"
+ #include "ui/views/widget/widget.h"
+ 
+@@ -636,6 +638,33 @@
+   return SetCommandSites(sites) ? id : std::string();
+ }
+ 
++std::unique_ptr<ArciumSettingsModel> ArciumSettingsModel::CaptureForWebContents(
++    content::WebContents* contents,
++    base::RepeatingClosure changed_callback,
++    base::RepeatingClosure profile_destroyed_callback) {
++  if (!contents)
++    return nullptr;
++  auto* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
++  auto* browser = webui::GetBrowserWindowInterface(contents);
++  if (!profile || profile->IsOffTheRecord() || profile->IsGuestSession() ||
++      !browser || browser->GetProfile() != profile ||
++      browser->GetType() != BrowserWindowInterface::Type::TYPE_NORMAL) {
++    return nullptr;
++  }
++  auto* service = helium::HeliumSpaceServiceFactory::GetForProfile(profile);
++  if (!service)
++    return nullptr;
++  const std::string id(service->GetExplicitSpaceIdForBrowser(browser));
++  if (id.empty() || !service->GetSpaceById(id))
++    return nullptr;
++  auto model = std::make_unique<ArciumSettingsModel>(
++      profile, std::move(changed_callback),
++      std::move(profile_destroyed_callback));
++  if (!model->SetAppearanceSpace(id))
++    return nullptr;
++  return model;
++}
++
+ helium::HeliumSpace* ArciumSettingsModel::GetAppearanceSpace() const {
+   return !shutting_down_ && space_service_
+              ? space_service_->GetSpaceById(appearance_space_id_) : nullptr;
+--- a/chrome/browser/ui/helium/arcium_settings_model.h
++++ b/chrome/browser/ui/helium/arcium_settings_model.h
+@@ -5,6 +5,7 @@
+ #ifndef CHROME_BROWSER_UI_HELIUM_ARCIUM_SETTINGS_MODEL_H_
+ #define CHROME_BROWSER_UI_HELIUM_ARCIUM_SETTINGS_MODEL_H_
+ 
++#include <memory>
+ #include <string>
+ #include <string_view>
+ #include <vector>
+@@ -19,6 +20,10 @@
+ #include "chrome/browser/ui/browser_shortcuts/arcium_shortcut_presets.h"
+ #include "chrome/browser/ui/browser_shortcuts/browser_shortcut_service.h"
+ #include "components/prefs/pref_change_registrar.h"
++
++namespace content {
++class WebContents;
++}
+ 
+ class PrefService;
+ class Profile;
+@@ -53,6 +58,12 @@
+   ArciumSettingsModel(const ArciumSettingsModel&) = delete;
+   ArciumSettingsModel& operator=(const ArciumSettingsModel&) = delete;
+   ~ArciumSettingsModel() override;
++
++  // Fails closed for private windows, detached pages and unassigned windows.
++  static std::unique_ptr<ArciumSettingsModel> CaptureForWebContents(
++      content::WebContents* contents,
++      base::RepeatingClosure changed_callback,
++      base::RepeatingClosure profile_destroyed_callback);
+ 
+   Profile* profile() const { return profile_; }
+   bool available() const { return profile_ && prefs_; }
+--- a/chrome/browser/ui/views/frame/browser_desktop_window_tree_host_win.cc
++++ b/chrome/browser/ui/views/frame/browser_desktop_window_tree_host_win.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "chrome/browser/ui/views/frame/browser_desktop_window_tree_host_win.h"
+ 
++#include <dwmapi.h>
+ #include <windows.h>
+ 
+ #include <memory>
+@@ -24,6 +25,7 @@
+ #include "chrome/browser/profiles/profile_manager.h"
+ #include "chrome/browser/themes/theme_service.h"
+ #include "chrome/browser/themes/theme_service_factory.h"
++#include "chrome/browser/ui/helium/helium_space_service.h"
+ #include "chrome/browser/ui/ui_features.h"
+ #include "chrome/browser/ui/views/frame/browser_frame_view.h"
+ #include "chrome/browser/ui/views/frame/browser_frame_view_win.h"
+@@ -33,6 +35,8 @@
+ #include "chrome/browser/ui/views/frame/system_menu_insertion_delegate_win.h"
+ #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/frame/windows_caption_button.h"
++#include "chrome/browser/ui/views/helium/glass_surface.h"
++#include "chrome/browser/ui/views/helium/native_frame_materials.h"
+ #include "chrome/browser/ui/views/tabs/tab_strip.h"
+ #include "chrome/browser/win/app_icon.h"
+ #include "chrome/browser/win/titlebar_config.h"
+@@ -287,6 +291,19 @@
+   virtual_desktop_helper_ =
+       base::MakeRefCounted<VirtualDesktopHelper>(params.workspace);
+   virtual_desktop_helper_->Init(GetHWND());
++  if (browser_view_->GetProfile() && browser_view_->GetIsNormalType()) {
++    auto* prefs = browser_view_->GetProfile()->GetPrefs();
++    arcium_appearance_preferences_.Init(prefs);
++    for (const char* name :
++         {helium::kArciumChromeAppearancePref, helium::kHeliumSpacesPref}) {
++      if (prefs->FindPreference(name)) {
++        arcium_appearance_preferences_.Add(
++            name, base::BindRepeating(
++                      &BrowserDesktopWindowTreeHostWin::UpdateArciumBackdrop,
++                      weak_factory_.GetWeakPtr()));
++      }
++    }
++  }
+ }
+ 
+ void BrowserDesktopWindowTreeHostWin::Show(
+@@ -363,6 +380,10 @@
+ 
+ bool BrowserDesktopWindowTreeHostWin::GetDwmFrameInsetsInPixels(
+     gfx::Insets* insets) const {
++  if (helium::ShouldUseNativeFrameGlass(browser_view_)) {
++    *insets = gfx::Insets(-1);
++    return true;
++  }
+   // For "normal" windows on Aero, we always need to reset the glass area
+   // correctly, even if we're not currently showing the native frame (e.g.
+   // because a theme is showing), so we explicitly check for that case rather
+@@ -403,6 +424,8 @@
+ }
+ 
+ void BrowserDesktopWindowTreeHostWin::HandleDestroying() {
++  arcium_widget_ready_ = false;
++  arcium_appearance_preferences_.RemoveAll();
+   browser_window_property_manager_.reset();
+   DesktopWindowTreeHostWin::HandleDestroying();
+ }
+@@ -411,6 +434,11 @@
+                                                    WPARAM w_param,
+                                                    LPARAM l_param,
+                                                    LRESULT* result) {
++  if (message == WM_SETTINGCHANGE || message == WM_THEMECHANGED ||
++      message == WM_DWMCOMPOSITIONCHANGED) {
++    helium::RefreshWindowsGlassAvailability();
++    UpdateArciumBackdrop();
++  }
+   switch (message) {
+     case WM_ENDSESSION:
+       chrome::SessionEnding();
+@@ -538,10 +566,65 @@
+ bool BrowserDesktopWindowTreeHostWin::ShouldWindowContentsBeTransparent()
+     const {
+   CHECK(browser_view_);
+-  return false;
++  return browser_view_->GetIsNormalType() &&
++         helium::GetNativeFrameGlassAvailability().native_material;
++}
++
++void BrowserDesktopWindowTreeHostWin::OnWidgetInitDone() {
++  DesktopWindowTreeHostWin::OnWidgetInitDone();
++  arcium_widget_ready_ = true;
++  UpdateArciumBackdrop();
++}
++
++void BrowserDesktopWindowTreeHostWin::SetBackgroundColor(SkColor color) {
++  DesktopWindowTreeHostWin::SetBackgroundColor(color);
++  UpdateArciumBackdrop();
++}
++
++void BrowserDesktopWindowTreeHostWin::UpdateArciumBackdrop() {
++  if (!arcium_widget_ready_ || !browser_view_ || !GetHWND() || !GetWidget() ||
++      !browser_view_->GetProfile())
++    return;
++  const auto availability = helium::GetNativeFrameGlassAvailability();
++  if (!availability.native_material) {
++    helium::SetWindowsFrameGlassReady(browser_view_, false);
++    return;
++  }
++  const auto resolution = helium::GetNativeFrameGlassResolution(browser_view_);
++  const bool composition_surface = (GetWindowLongPtr(GetHWND(), GWL_EXSTYLE) &
++                                    WS_EX_NOREDIRECTIONBITMAP) != 0;
++  const bool eligible =
++      composition_surface && browser_view_->GetIsNormalType() &&
++      !browser_view_->GetProfile()->IsOffTheRecord() &&
++      !browser_view_->GetProfile()->IsGuestSession() &&
++      !ThemeServiceFactory::GetForProfile(browser_view_->GetProfile())
++           ->UsingPolicyTheme() &&
++      resolution.enabled && resolution.paints_chrome_transparent;
++  const bool frosted = eligible && resolution.uses_translucent_native_base;
++  const auto configuration = helium::ReadGlassSurfaceConfiguration(
++      browser_view_->GetProfile()->GetPrefs());
++  const DWM_SYSTEMBACKDROP_TYPE backdrop =
++      !frosted ? DWMSBT_NONE
++      : configuration.material == helium::GlassSurfaceMaterial::kAuto
++          ? DWMSBT_MAINWINDOW
++          : DWMSBT_TRANSIENTWINDOW;
++  const HRESULT installed = DwmSetWindowAttribute(
++      GetHWND(), DWMWA_SYSTEMBACKDROP_TYPE, &backdrop, sizeof(backdrop));
++  const MARGINS margins = frosted && SUCCEEDED(installed)
++                              ? MARGINS{-1, -1, -1, -1}
++                              : MARGINS{0, 0, 0, 0};
++  const HRESULT extended = DwmExtendFrameIntoClientArea(GetHWND(), &margins);
++  const BOOL dark =
++      GetWidget()->GetColorMode() == ui::ColorProviderKey::ColorMode::kDark;
++  DwmSetWindowAttribute(GetHWND(), DWMWA_USE_IMMERSIVE_DARK_MODE, &dark,
++                        sizeof(dark));
++  helium::SetWindowsFrameGlassReady(
++      browser_view_, eligible && SUCCEEDED(installed) && SUCCEEDED(extended));
+ }
+ 
+ void BrowserDesktopWindowTreeHostWin::ClientDestroyedWidget() {
++  arcium_widget_ready_ = false;
++  arcium_appearance_preferences_.RemoveAll();
+   profile_observation_.Reset();
+   system_menu_.reset();
+   browser_window_property_manager_.reset();
+--- a/chrome/browser/ui/views/frame/browser_desktop_window_tree_host_win.h
++++ b/chrome/browser/ui/views/frame/browser_desktop_window_tree_host_win.h
+@@ -19,6 +19,7 @@
+ #include "base/win/scoped_gdi_object.h"
+ #include "chrome/browser/profiles/profile_attributes_storage.h"
+ #include "chrome/browser/ui/views/frame/browser_desktop_window_tree_host.h"
++#include "components/prefs/pref_change_registrar.h"
+ #include "ui/base/mojom/window_show_state.mojom-forward.h"
+ #include "ui/views/widget/desktop_aura/desktop_window_tree_host_win.h"
+ 
+@@ -58,6 +59,9 @@
+ 
+   // Overridden from DesktopWindowTreeHostWin:
+   void Init(const views::Widget::InitParams& params) override;
++  void SetBackgroundColor(SkColor background_color) override;
++  void UpdateArciumBackdrop();
++  void OnWidgetInitDone() override;
+   void Show(ui::mojom::WindowShowState show_state,
+             const gfx::Rect& restore_bounds) override;
+   std::string GetWorkspace() const override;
+@@ -93,6 +97,8 @@
+   // Shows the custom Views system menu at the default location (top left).
+   void ShowViewsSystemMenuAtDefaultLocation();
+ 
++  bool arcium_widget_ready_ = false;
++  PrefChangeRegistrar arcium_appearance_preferences_;
+   raw_ptr<BrowserView> browser_view_;
+   raw_ptr<BrowserWidget> browser_widget_;
+ 
+--- a/chrome/browser/ui/views/frame/browser_frame_view_win.cc
++++ b/chrome/browser/ui/views/frame/browser_frame_view_win.cc
+@@ -7,6 +7,7 @@
+ #include <dwmapi.h>
+ 
+ #include <algorithm>
++#include <cmath>
+ #include <memory>
+ #include <utility>
+ 
+@@ -15,6 +16,8 @@
+ #include "base/scoped_observation.h"
+ #include "base/trace_event/common/trace_event_common.h"
+ #include "base/trace_event/trace_event.h"
++#include "cc/paint/paint_flags.h"
++#include "cc/paint/paint_shader.h"
+ #include "chrome/app/chrome_command_ids.h"
+ #include "chrome/app/chrome_dll_resource.h"
+ #include "chrome/browser/themes/theme_properties.h"
+@@ -28,6 +31,7 @@
+ #include "chrome/browser/ui/views/frame/minimize_button_metrics_win.h"
+ #include "chrome/browser/ui/views/frame/safe_invoke/safe_invoke.h"
+ #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
++#include "chrome/browser/ui/views/helium/native_frame_materials.h"
+ #include "chrome/browser/ui/views/tabs/new_tab_button.h"
+ #include "chrome/browser/ui/views/tabs/tab.h"
+ #include "chrome/browser/ui/views/tabs/tab_strip.h"
+@@ -471,6 +475,42 @@
+ 
+ void BrowserFrameViewWin::OnPaint(gfx::Canvas* canvas) {
+   TRACE_EVENT0("views.frame", "BrowserFrameViewWin::OnPaint");
++  if (helium::ShouldUseNativeFrameGlass(GetBrowserView())) {
++    auto configuration =
++        helium::GetNativeFrameGlassConfiguration(GetBrowserView());
++    const auto resolution =
++        helium::GetNativeFrameGlassResolution(GetBrowserView());
++    const bool opaque = !resolution.uses_translucent_native_base;
++    const SkColor floor = configuration.chrome_contrast_floor.value_or(
++        GetColorProvider()->GetColor(kColorToolbar));
++    const double minimum_opacity = std::max(0.35, SkColorGetA(floor) / 255.0);
++    const auto alpha = static_cast<U8CPU>(
++        std::lround(255.0 * (opaque ? 1.0
++                                    : std::clamp(configuration.material_opacity,
++                                                 minimum_opacity, 1.0))));
++    configuration = helium::GlassSurfaceConfigurationForPainting(configuration);
++    const gfx::RectF bounds(GetLocalBounds());
++    const float extent = std::max(bounds.width(), bounds.height());
++    for (size_t i = 0; i < configuration.point_count; ++i) {
++      const auto& point = configuration.points[i];
++      const auto color = SkColorSetA(
++          point.color.toSkColor(),
++          static_cast<U8CPU>(std::lround(255.0 * point.opacity *
++                                         configuration.tint_strength)));
++      const SkColor4f colors[] = {SkColor4f::FromColor(color),
++                                 SkColor4f::FromColor(SkColorSetA(color, 0))};
++      const SkScalar positions[] = {0.f, 1.f};
++      cc::PaintFlags flags;
++      flags.setShader(cc::PaintShader::MakeRadialGradient(
++          SkPoint::Make(point.x * bounds.width(), point.y * bounds.height()),
++          std::max(1.f, static_cast<float>(point.radius) * extent * 0.6f),
++          colors, positions, 2, SkTileMode::kClamp));
++      canvas->DrawRect(bounds, flags);
++    }
++    // Apply the palette readability floor above decoration and the OS backdrop.
++    canvas->FillRect(GetLocalBounds(), SkColorSetA(floor, alpha));
++    return;
++  }
+   PaintTitlebar(canvas);
+ }
+ 
+--- a/chrome/browser/ui/views/helium/arcium_space_editor_view.cc
++++ b/chrome/browser/ui/views/helium/arcium_space_editor_view.cc
+@@ -237,6 +237,14 @@
+     AddChildView(CreateDeleteConfirmation(name));
+   }
+ 
++  if (!is_creating() && space_profile_) {
++    saved_theme_snapshot_ = theme_;
++    space_theme_preferences_.Init(space_profile_->GetPrefs());
++    space_theme_preferences_.Add(
++        helium::kHeliumSpacesPref,
++        base::BindRepeating(&ArciumSpaceEditorView::OnSavedSpaceThemeChanged,
++                            weak_factory_.GetWeakPtr()));
++  }
+   UpdateThemeControls();
+   UpdateSubmitButton();
+ }
+@@ -407,6 +415,19 @@
+   UpdateThemeControls();
+ }
+ 
++void ArciumSpaceEditorView::OnSavedSpaceThemeChanged() {
++  auto* service =
++      helium::HeliumSpaceServiceFactory::GetForProfile(space_profile_);
++  auto* space = service ? service->GetSpaceById(space_id_) : nullptr;
++  // Changes to Pins, names, or unrelated Spaces must not replace this draft.
++  if (!space || saved_theme_snapshot_ == space->theme())
++    return;
++  saved_theme_snapshot_ = space->theme();
++  theme_ = space->theme();
++  theme_editor_->SetTheme(theme_);
++  UpdateThemeControls();
++}
++
+ void ArciumSpaceEditorView::UpdateThemeControls() {
+   // Editing another window's Space would preview on the wrong window.
+   auto* service = helium::HeliumSpaceServiceFactory::GetForProfile(
+--- a/chrome/browser/ui/views/helium/arcium_space_editor_view.h
++++ b/chrome/browser/ui/views/helium/arcium_space_editor_view.h
+@@ -17,6 +17,7 @@
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/weak_ptr.h"
+ #include "chrome/browser/ui/helium/helium_space.h"
++#include "components/prefs/pref_change_registrar.h"
+ #include "ui/base/metadata/metadata_header_macros.h"
+ #include "ui/views/controls/textfield/textfield_controller.h"
+ #include "ui/views/view.h"
+@@ -90,6 +91,7 @@
+   void OnThemeChanged(const helium::SpaceTheme& theme);
+   void OpenFullThemeEditor();
+   void ApplyFullTheme(const helium::SpaceTheme& theme);
++  void OnSavedSpaceThemeChanged();
+   void UpdateThemeControls();
+   helium::SpaceTheme PreviewForSelectedProfile() const;
+   Profile* SelectedProfile() const;
+@@ -115,6 +117,8 @@
+ 
+   std::string icon_;
+   helium::SpaceTheme theme_;
++  std::optional<helium::SpaceTheme> saved_theme_snapshot_;
++  PrefChangeRegistrar space_theme_preferences_;
+   // Profiles offered for a new Space; the last combobox row creates one.
+   std::vector<std::pair<base::FilePath, std::u16string>> profiles_;
+ 
+--- a/chrome/browser/ui/views/helium/glass_surface.cc
++++ b/chrome/browser/ui/views/helium/glass_surface.cc
+@@ -21,6 +21,14 @@
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ #include "ui/compositor/layer.h"
+ #include "ui/compositor/layer_solid_color.h"
++
++#if BUILDFLAG(IS_WIN)
++#include <dwmapi.h>
++#include <windows.h>
++#include "base/win/registry.h"
++#include "base/win/windows_version.h"
++#include "ui/native_theme/native_theme.h"
++#endif
+ 
+ namespace helium {
+ 
+@@ -120,11 +128,54 @@
+   return GlassBackend::kOpaque;
+ }
+ 
+-#if !BUILDFLAG(IS_MAC)
++#if BUILDFLAG(IS_WIN)
++namespace {
++struct WindowsGlassAvailability {
++  bool supported = false;
++  bool transparency_disabled = false;
++};
++WindowsGlassAvailability ReadWindowsGlassAvailability() {
++  BOOL composition = FALSE;
++  WindowsGlassAvailability state;
++  state.supported =
++      base::win::OSInfo::GetInstance()->version_number().build >= 22621 &&
++      SUCCEEDED(DwmIsCompositionEnabled(&composition)) && composition;
++  DWORD transparency = 1;
++  base::win::RegKey key(
++      HKEY_CURRENT_USER,
++      L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
++      KEY_QUERY_VALUE);
++  if (key.ReadValueDW(L"EnableTransparency", &transparency) == ERROR_SUCCESS) {
++    state.transparency_disabled = transparency == 0;
++  }
++  return state;
++}
++WindowsGlassAvailability& WindowsGlassState() {
++  static WindowsGlassAvailability state = ReadWindowsGlassAvailability();
++  return state;
++}
++}  // namespace
++
++void RefreshWindowsGlassAvailability() {
++  WindowsGlassState() = ReadWindowsGlassAvailability();
++}
++
++bool GlassReduceTransparency() {
++  const auto* theme = ui::NativeTheme::GetInstanceForNativeUi();
++  return WindowsGlassState().transparency_disabled ||
++         theme->forced_colors() != ui::ColorProviderKey::ForcedColors::kNone ||
++         theme->preferred_contrast() ==
++             ui::NativeTheme::PreferredContrast::kMore;
++}
++
++GlassBackendAvailability GetNativeFrameGlassAvailability() {
++  return {.native_material = WindowsGlassState().supported,
++          .reduce_transparency = GlassReduceTransparency()};
++}
++#elif !BUILDFLAG(IS_MAC)
+ bool GlassReduceTransparency() {
+   return false;
+ }
+-
+ GlassBackendAvailability GetNativeFrameGlassAvailability() {
+   return {};
+ }
+--- a/chrome/browser/ui/views/helium/glass_surface.h
++++ b/chrome/browser/ui/views/helium/glass_surface.h
+@@ -22,7 +22,7 @@
+ inline constexpr char kArciumGlassBackendSwitch[] = "arcium-glass-backend";
+ 
+ // The implementation used to draw a glass surface. Native backends are hosted
+-// by AppKit and Chromium is drawn inside the browser compositor.
++// by the operating system; Chromium glass is drawn inside the compositor.
+ enum class GlassBackend {
+   kAuto,
+   kNativeLiquidGlass,
+@@ -56,6 +56,11 @@
+ const char* GlassBackendName(GlassBackend backend);
+ 
+ GlassBackendAvailability GetNativeFrameGlassAvailability();
++#if BUILDFLAG(IS_WIN)
++// Called on the UI thread after Windows transparency/composition settings
++// change.
++void RefreshWindowsGlassAvailability();
++#endif
+ bool GlassReduceTransparency();
+ 
+ // Resolves the profile's surface roles against the renderers available to
+--- a/chrome/browser/ui/views/helium/native_frame_materials.cc
++++ b/chrome/browser/ui/views/helium/native_frame_materials.cc
+@@ -22,8 +22,16 @@
+ #include "ui/views/view.h"
+ #include "ui/views/widget/widget.h"
+ 
++#if BUILDFLAG(IS_WIN)
++#include "ui/aura/window.h"
++#include "ui/base/class_property.h"
++#endif
++
+ namespace helium {
+ namespace {
++#if BUILDFLAG(IS_WIN)
++DEFINE_UI_CLASS_PROPERTY_KEY(bool, kWindowsFrameGlassReady, false)
++#endif
+ 
+ const PrefService* ChromeAppearancePrefs(const BrowserView* browser_view) {
+   if (!browser_view || !browser_view->GetIsNormalType() ||
+@@ -100,10 +108,28 @@
+                                  GetNativeFrameGlassAvailability());
+ }
+ 
++#if BUILDFLAG(IS_WIN)
++void SetWindowsFrameGlassReady(BrowserView* browser_view, bool ready) {
++  auto* widget = browser_view ? browser_view->GetWidget() : nullptr;
++  auto* window = widget ? widget->GetNativeWindow() : nullptr;
++  if (!window || window->GetProperty(kWindowsFrameGlassReady) == ready)
++    return;
++  window->SetProperty(kWindowsFrameGlassReady, ready);
++  widget->ThemeChanged();
++  browser_view->SchedulePaint();
++}
++#endif
++
+ bool ShouldUseNativeFrameGlass(const BrowserView* browser_view) {
+   if (!browser_view || browser_view->GetIsWebAppType()) {
+     return false;
+   }
++#if BUILDFLAG(IS_WIN)
++  const auto* widget = browser_view->GetWidget();
++  if (!widget || !widget->GetNativeWindow() ||
++      !widget->GetNativeWindow()->GetProperty(kWindowsFrameGlassReady))
++    return false;
++#endif
+   const GlassBackendAvailability availability =
+       GetNativeFrameGlassAvailability();
+   if (!availability.native_liquid_glass && !availability.native_material) {
+@@ -138,7 +164,13 @@
+ bool ShouldUseTranslucentNativeFrameWindow(const BrowserView* browser_view) {
+   // Solid custom chrome fills its native background completely, while keeping
+   // the window initialized for live switching to a translucent material.
++#if BUILDFLAG(IS_WIN)
++  // Windows uses DirectComposition alpha with the normal HWND. A layered
++  // translucent HWND disables Chromium's supported DWM backdrop path.
++  return false;
++#else
+   return ShouldUseNativeFrameGlass(browser_view);
++#endif
+ }
+ 
+ }  // namespace helium
+--- a/chrome/browser/ui/views/helium/native_frame_materials.h
++++ b/chrome/browser/ui/views/helium/native_frame_materials.h
+@@ -5,6 +5,7 @@
+ #ifndef CHROME_BROWSER_UI_VIEWS_HELIUM_NATIVE_FRAME_MATERIALS_H_
+ #define CHROME_BROWSER_UI_VIEWS_HELIUM_NATIVE_FRAME_MATERIALS_H_
+ 
++#include "build/build_config.h"
+ #include "chrome/browser/ui/views/helium/glass_surface_configuration.h"
+ 
+ class BrowserView;
+@@ -15,9 +16,14 @@
+ }  // namespace views
+ 
+ namespace helium {
++#if BUILDFLAG(IS_WIN)
++// Chrome Views become transparent only after the window host successfully
++// installed its backdrop (or its explicit solid appearance).
++void SetWindowsFrameGlassReady(BrowserView* browser_view, bool ready);
++#endif
+ 
+ // Returns the profile-owned configuration and its current native resolution.
+-// The returned values are snapshots and are safe to pass to AppKit on the UI
++// The returned values are snapshots for the native window host on the UI
+ // thread. A disabled configuration leaves the legacy command-line resolver in
+ // control.
+ GlassSurfaceConfiguration GetNativeFrameGlassConfiguration(
+--- a/chrome/browser/ui/webui/cr_components/theme_color_picker/theme_color_picker_handler.cc
++++ b/chrome/browser/ui/webui/cr_components/theme_color_picker/theme_color_picker_handler.cc
+@@ -5,6 +5,15 @@
+ #include "chrome/browser/ui/webui/cr_components/theme_color_picker/theme_color_picker_handler.h"
+ 
+ #include <limits>
++#if BUILDFLAG(IS_WIN)
++#include "base/functional/bind.h"
++#include "base/functional/callback_helpers.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/strings/stringprintf.h"
++#include "chrome/browser/ui/helium/arcium_settings_model.h"
++#include "chrome/browser/ui/helium/helium_space_service.h"
++#include "chrome/browser/ui/views/helium/glass_surface_configuration.h"
++#endif
+ 
+ #include "base/containers/fixed_flat_map.h"
+ #include "chrome/browser/new_tab_page/chrome_colors/generated_colors_info.h"
+@@ -80,6 +89,17 @@
+   native_theme_observation_.Observe(ui::NativeTheme::GetInstanceForNativeUi());
+   theme_service_observation_.Observe(theme_service_);
+ 
++#if BUILDFLAG(IS_WIN)
++  workspace_preferences_.Init(profile_->GetPrefs());
++  for (const char* pref :
++       {helium::kHeliumSpacesPref, helium::kArciumChromeAppearancePref}) {
++    if (profile_->GetPrefs()->FindPreference(pref)) {
++      workspace_preferences_.Add(
++          pref, base::BindRepeating(&ThemeColorPickerHandler::UpdateTheme,
++                                    base::Unretained(this)));
++    }
++  }
++#endif
+   ntp_custom_background_service_observation_.Observe(
+       ntp_custom_background_service_.get());
+ }
+@@ -93,12 +113,25 @@
+ }
+ 
+ void ThemeColorPickerHandler::SetDefaultColor() {
++#if BUILDFLAG(IS_WIN)
++  auto model = arcium_settings::ArciumSettingsModel::CaptureForWebContents(
++      web_contents_, base::DoNothing(), base::DoNothing());
++  if (model)
++    model->ResetChromeAppearance();
++  UpdateTheme();
++  return;
++#endif
+   theme_service_->SetUserColor(std::nullopt);
+   theme_service_->UseDeviceTheme(false);
+   MaybeIncrementSeedColorChangeCount();
+ }
+ 
+ void ThemeColorPickerHandler::SetGreyDefaultColor() {
++#if BUILDFLAG(IS_WIN)
++  SetSeedColor(SkColorSetRGB(128, 128, 128),
++               ui::mojom::BrowserColorVariant::kNeutral);
++  return;
++#endif
+   theme_service_->SetIsGrayscale(true);
+   theme_service_->UseDeviceTheme(false);
+   MaybeIncrementSeedColorChangeCount();
+@@ -107,6 +140,22 @@
+ void ThemeColorPickerHandler::SetSeedColor(
+     SkColor seed_color,
+     ui::mojom::BrowserColorVariant variant) {
++#if BUILDFLAG(IS_WIN)
++  auto model = arcium_settings::ArciumSettingsModel::CaptureForWebContents(
++      web_contents_, base::DoNothing(), base::DoNothing());
++  if (model) {
++    auto appearance = model->GetChromeAppearance();
++    appearance.Set("enabled", true);
++    appearance.Set(
++        "tintColor",
++        base::StringPrintf("#%02x%02x%02x", SkColorGetR(seed_color),
++                           SkColorGetG(seed_color), SkColorGetB(seed_color)));
++    appearance.Set("colorEffect", "tint");
++    model->SetChromeAppearance(appearance);
++  }
++  UpdateTheme();
++  return;
++#endif
+   theme_service_->SetUserColorAndBrowserColorVariant(seed_color, variant);
+   theme_service_->UseDeviceTheme(false);
+   MaybeIncrementSeedColorChangeCount();
+@@ -155,6 +204,31 @@
+ 
+   auto user_color = theme->follow_device_theme ? native_theme->user_color()
+                                                : theme_service_->GetUserColor();
++#if BUILDFLAG(IS_WIN)
++  auto workspace = arcium_settings::ArciumSettingsModel::CaptureForWebContents(
++      web_contents_, base::DoNothing(), base::DoNothing());
++  if (workspace) {
++    const auto appearance = workspace->GetChromeAppearance();
++    const auto palette = workspace->GetSpacePalette();
++    const int mode = workspace->GetAppearanceMode();
++    const bool dark =
++        mode == 2 ||
++        (mode == 0 && native_theme->preferred_color_scheme() ==
++                          ui::NativeTheme::PreferredColorScheme::kDark);
++    const auto* roles = palette.FindDict(dark ? "dark" : "light");
++    const auto* effect = appearance.FindString("colorEffect");
++    const auto* color = effect && *effect == "tint"
++                            ? appearance.FindString("tintColor")
++                        : roles ? roles->FindString("accent")
++                                : nullptr;
++    unsigned rgb = 0;
++    if (color && color->size() == 7 &&
++        base::HexStringToUInt(color->substr(1), &rgb)) {
++      user_color = SkColorSetA(rgb, SK_AlphaOPAQUE);
++    }
++    theme->follow_device_theme = false;
++  }
++#endif
+   // If a user has a GM2 theme set they are in a limbo state between the 2 theme
+   // types. We need to get the color of their theme with
+   // GetAutogeneratedThemeColor still until they set a GM3 theme, use the old
+@@ -196,6 +270,18 @@
+   theme->has_third_party_theme = theme_service_->UsingExtensionTheme();
+ 
+   theme->is_dark_mode = theme_service_->BrowserUsesDarkColors();
++#if BUILDFLAG(IS_WIN)
++  if (workspace) {
++    theme->colors_managed_by_policy = workspace->IsAppearanceManaged();
++    theme->has_third_party_theme = false;
++    theme->is_grey_baseline = false;
++    const int mode = workspace->GetAppearanceMode();
++    theme->is_dark_mode =
++        mode == 2 ||
++        (mode == 0 && native_theme->preferred_color_scheme() ==
++                          ui::NativeTheme::PreferredColorScheme::kDark);
++  }
++#endif
+   client_->SetTheme(std::move(theme));
+ }
+ 
+--- a/chrome/browser/ui/webui/cr_components/theme_color_picker/theme_color_picker_handler.h
++++ b/chrome/browser/ui/webui/cr_components/theme_color_picker/theme_color_picker_handler.h
+@@ -7,9 +7,11 @@
+ 
+ #include "base/memory/raw_ptr.h"
+ #include "base/scoped_observation.h"
++#include "build/build_config.h"
+ #include "chrome/browser/search/background/ntp_custom_background_service.h"
+ #include "chrome/browser/themes/theme_service.h"
+ #include "chrome/browser/themes/theme_service_observer.h"
++#include "components/prefs/pref_change_registrar.h"
+ #include "components/themes/ntp_custom_background_service_observer.h"
+ #include "mojo/public/cpp/bindings/pending_receiver.h"
+ #include "mojo/public/cpp/bindings/receiver.h"
+@@ -69,6 +71,9 @@
+   // NtpCustomBackgroundServiceObserver:
+   void OnCustomBackgroundImageUpdated() override;
+ 
++#if BUILDFLAG(IS_WIN)
++  PrefChangeRegistrar workspace_preferences_;
++#endif
+   bool seed_color_changed_ = false;
+   raw_ptr<NtpCustomBackgroundService> ntp_custom_background_service_;
+   raw_ptr<Profile> profile_;
+--- a/chrome/browser/ui/webui/settings/appearance_handler.cc
++++ b/chrome/browser/ui/webui/settings/appearance_handler.cc
+@@ -19,6 +19,20 @@
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_metrics.h"
+ #include "chrome/browser/ui/toolbar/pinned_toolbar/pinned_toolbar_actions_model.h"
+ #include "chrome/common/pref_names.h"
++#if BUILDFLAG(IS_WIN)
++#include "base/functional/callback_helpers.h"
++#include "base/strings/utf_string_conversions.h"
++#include "chrome/browser/ui/helium/arcium_appearance_prefs.h"
++#include "chrome/browser/ui/helium/arcium_settings_model.h"
++#include "chrome/browser/ui/helium/helium_space.h"
++#include "chrome/browser/ui/helium/helium_space_service.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/helium/arcium_chrome_ui_scale.h"
++#include "chrome/browser/ui/views/helium/glass_surface.h"
++#include "chrome/browser/ui/views/helium/native_frame_materials.h"
++#include "chrome/browser/ui/webui/webui_embedding_context.h"
++#include "components/prefs/pref_service.h"
++#endif
+ #include "content/public/browser/web_ui.h"
+ #include "ui/actions/actions.h"
+ 
+@@ -30,9 +44,23 @@
+ AppearanceHandler::~AppearanceHandler() = default;
+ 
+ void AppearanceHandler::OnJavascriptAllowed() {}
+-void AppearanceHandler::OnJavascriptDisallowed() {}
++void AppearanceHandler::OnJavascriptDisallowed() {
++#if BUILDFLAG(IS_WIN)
++  arcium_appearance_.reset();
++#endif
++}
+ 
+ void AppearanceHandler::RegisterMessages() {
++#if BUILDFLAG(IS_WIN)
++  web_ui()->RegisterMessageCallback(
++      "getArciumAppearance",
++      base::BindRepeating(&AppearanceHandler::GetArciumAppearance,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "setArciumAppearance",
++      base::BindRepeating(&AppearanceHandler::SetArciumAppearance,
++                          base::Unretained(this)));
++#endif
+   web_ui()->RegisterMessageCallback(
+       "useDefaultTheme",
+       base::BindRepeating(&AppearanceHandler::HandleUseTheme,
+@@ -117,4 +145,205 @@
+       is_vertical, tabs::VerticalTabStripEntryPoint::kSettings);
+ }
+ 
++#if BUILDFLAG(IS_WIN)
++namespace {
++struct WorkspacePreference {
++  const char* id;
++  const char* pref;
++  int minimum;
++  int maximum;
++  bool boolean;
++};
++constexpr WorkspacePreference kWorkspacePreferences[] = {
++    {"frameWidth", arcium::kChromeFrameBorderWidthPref, 0, 24, false},
++    {"scale", arcium::kChromeUIScalePref, 80, 125, false},
++    {"collapseStyle", arcium::kCollapsedSidebarStylePref, 0, 1, false},
++    {"sidebarNavigation", arcium::kArcSidebarNavigationEnabledPref, 0, 1, true},
++    {"roundedFrame", prefs::kHeliumRoundedFrame, 0, 1, true},
++};
++}  // namespace
++
++void AppearanceHandler::GetArciumAppearance(const base::ListValue& args) {
++  CHECK_EQ(args.size(), 1u);
++  AllowJavascript();
++  if (!arcium_appearance_ || !arcium_appearance_->GetAppearanceSpace()) {
++    arcium_appearance_.reset();
++    arcium_appearance_ =
++        arcium_settings::ArciumSettingsModel::CaptureForWebContents(
++            web_ui()->GetWebContents(),
++            base::BindRepeating(&AppearanceHandler::OnArciumAppearanceChanged,
++                                weak_ptr_factory_.GetWeakPtr()),
++            base::DoNothing());
++  }
++  ResolveJavascriptCallback(args[0], base::Value(ArciumAppearanceSnapshot()));
++}
++
++base::DictValue AppearanceHandler::ArciumAppearanceSnapshot() {
++  auto* model = arcium_appearance_.get();
++  if (!model || !model->available())
++    return base::DictValue().Set("available", false);
++  auto* space = model->GetAppearanceSpace();
++  base::ListValue spaces;
++  for (const auto& item : model->GetSpaces()) {
++    spaces.Append(base::DictValue()
++                      .Set("id", item.id)
++                      .Set("name", base::UTF16ToUTF8(item.name)));
++  }
++  base::DictValue preferences;
++  for (const auto& item : kWorkspacePreferences) {
++    base::Value value = item.boolean
++                            ? base::Value(model->GetBoolean(item.pref))
++                            : base::Value(model->GetInteger(item.pref));
++    preferences.Set(item.id,
++                    base::DictValue()
++                        .Set("value", std::move(value))
++                        .Set("editable", model->HasPreference(item.pref) &&
++                                             !model->IsManaged(item.pref)));
++  }
++  preferences.Set("sidebarWidth",
++                  base::DictValue()
++                      .Set("value", model->GetSidebarWidth())
++                      .Set("editable", model->HasSidebarWidth() &&
++                                           !model->IsSidebarWidthManaged()));
++  auto* browser = webui::GetBrowserWindowInterface(web_ui()->GetWebContents());
++  auto* view =
++      browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
++  const auto glass = helium::GetNativeFrameGlassAvailability();
++  const bool glass_active =
++      view && helium::ShouldUseNativeFrameGlass(view) &&
++      helium::GetNativeFrameGlassResolution(view).uses_translucent_native_base;
++  return base::DictValue()
++      .Set("windowGlassActive", glass_active)
++      .Set("windowGlassSupported",
++           glass.native_material && !glass.reduce_transparency)
++      .Set("available", space && !model->IsAppearanceManaged())
++      .Set("spaceId", space ? space->id() : std::string())
++      .Set("name", space ? base::UTF16ToUTF8(space->name()) : std::string())
++      .Set("spaces", std::move(spaces))
++      .Set("preferences", std::move(preferences))
++      .Set("chrome", model->GetChromeAppearance())
++      .Set("palette", model->GetSpacePalette())
++      .Set("mode", model->GetAppearanceMode())
++      .Set("webMode", model->GetWebAppearanceMode())
++      .Set("surface", model->GetSurfaceSet())
++      .Set("tuning", model->GetSurfaceTuning())
++      .Set("frame", model->GetContentFrame());
++}
++
++void AppearanceHandler::SetArciumAppearance(const base::ListValue& args) {
++  CHECK_EQ(args.size(), 2u);
++  AllowJavascript();
++  const auto* request = args[1].GetIfDict();
++  const bool accepted = request && ApplyArciumAppearance(*request);
++  ResolveJavascriptCallback(args[0], base::Value(accepted));
++  if (accepted)
++    OnArciumAppearanceChanged();
++}
++
++bool AppearanceHandler::ApplyArciumAppearance(const base::DictValue& request) {
++  auto* model = arcium_appearance_.get();
++  const auto* target = request.FindString("spaceId");
++  const auto* action = request.FindString("action");
++  if (!model || !model->available() || !model->GetAppearanceSpace() ||
++      !target || *target != model->GetAppearanceSpace()->id() || !action)
++    return false;
++  const auto* value = request.Find("value");
++  if (!value)
++    return false;
++  if (*action == "space") {
++    return value->is_string() && model->SetAppearanceSpace(value->GetString());
++  }
++  if (*action == "mode" || *action == "webMode") {
++    if (!value->is_int())
++      return false;
++    return *action == "mode" ? model->SetAppearanceMode(value->GetInt())
++                             : model->SetWebAppearanceMode(value->GetInt());
++  }
++  if (*action == "resetPalette") {
++    if (model->IsAppearanceManaged() ||
++        model->IsManaged(helium::kHeliumSpacesPref))
++      return false;
++    model->ResetChromeAppearance();
++    return true;
++  }
++  if (*action == "surface") {
++    return value->is_string() && model->SetSurfaceSet(value->GetString());
++  }
++  if (*action == "chrome" || *action == "tuning" || *action == "frame") {
++    if (!value->is_dict())
++      return false;
++    auto merged = *action == "chrome"   ? model->GetChromeAppearance()
++                  : *action == "tuning" ? model->GetSurfaceTuning()
++                                        : model->GetContentFrame();
++    merged.Merge(value->GetDict().Clone());
++    return *action == "chrome"   ? model->SetChromeAppearance(merged)
++           : *action == "tuning" ? model->SetSurfaceTuning(merged)
++                                 : model->SetContentFrame(merged);
++  }
++  if (*action == "chroma") {
++    return value->is_dict() && model->SetSpacePaletteChroma(value->GetDict());
++  }
++  if (*action == "pref") {
++    if (!value->is_dict())
++      return false;
++    const auto* name = value->GetDict().FindString("name");
++    const auto* setting = value->GetDict().Find("value");
++    if (!name || !setting)
++      return false;
++    if (*name == "sidebarWidth") {
++      return setting->is_int() && model->SetSidebarWidth(setting->GetInt());
++    }
++    for (const auto& item : kWorkspacePreferences) {
++      if (*name != item.id)
++        continue;
++      if (!model->HasPreference(item.pref) || model->IsManaged(item.pref))
++        return false;
++      if (item.boolean) {
++        if (!setting->is_bool())
++          return false;
++        model->SetBoolean(item.pref, setting->GetBool());
++      } else {
++        if (!setting->is_int() || setting->GetInt() < item.minimum ||
++            setting->GetInt() > item.maximum)
++          return false;
++        model->SetInteger(item.pref, setting->GetInt());
++      }
++      return true;
++    }
++  }
++  if (*action == "preset") {
++    // Check every setting before the first write. Saved tabs and palettes are
++    // deliberately absent; this action changes only the visible layout.
++    const char* names[] = {prefs::kHeliumLayout,
++                           prefs::kHeliumVerticalRightAligned,
++                           prefs::kHeliumZenMode,
++                           prefs::kHeliumRoundedFrame,
++                           arcium::kArcSidebarNavigationEnabledPref,
++                           arcium::kChromeFrameBorderWidthPref,
++                           arcium::kChromeUIScalePref,
++                           arcium::kCollapsedSidebarStylePref,
++                           prefs::kVerticalTabsUncollapsedWidth};
++    for (const char* pref : names) {
++      if (!model->HasPreference(pref) || model->IsManaged(pref))
++        return false;
++    }
++    model->SetInteger(prefs::kHeliumLayout, 2);
++    model->SetBoolean(prefs::kHeliumVerticalRightAligned, false);
++    model->SetBoolean(prefs::kHeliumZenMode, false);
++    model->SetBoolean(prefs::kHeliumRoundedFrame, true);
++    model->SetBoolean(arcium::kArcSidebarNavigationEnabledPref, true);
++    model->SetInteger(arcium::kChromeFrameBorderWidthPref, 5);
++    model->SetInteger(arcium::kChromeUIScalePref, 110);
++    model->SetInteger(arcium::kCollapsedSidebarStylePref, 1);
++    return model->SetSidebarWidth(220);
++  }
++  return false;
++}
++
++void AppearanceHandler::OnArciumAppearanceChanged() {
++  if (IsJavascriptAllowed())
++    FireWebUIListener("arcium-appearance-changed");
++}
++#endif  // BUILDFLAG(IS_WIN)
++
+ }  // namespace settings
+--- a/chrome/browser/ui/webui/settings/appearance_handler.h
++++ b/chrome/browser/ui/webui/settings/appearance_handler.h
+@@ -4,6 +4,8 @@
+ 
+ #ifndef CHROME_BROWSER_UI_WEBUI_SETTINGS_APPEARANCE_HANDLER_H_
+ #define CHROME_BROWSER_UI_WEBUI_SETTINGS_APPEARANCE_HANDLER_H_
++
++#include <memory>
+ 
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/weak_ptr.h"
+@@ -16,6 +18,9 @@
+ }
+ 
+ class Profile;
++namespace arcium_settings {
++class ArciumSettingsModel;
++}
+ 
+ namespace settings {
+ 
+@@ -49,6 +54,15 @@
+   // Records the vertical tab strip mode change.
+   void HandleRecordVerticalTabStripModeChanged(const base::ListValue& args);
+ 
++#if BUILDFLAG(IS_WIN)
++  void GetArciumAppearance(const base::ListValue& args);
++  void SetArciumAppearance(const base::ListValue& args);
++  void OnArciumAppearanceChanged();
++  base::DictValue ArciumAppearanceSnapshot();
++  bool ApplyArciumAppearance(const base::DictValue& request);
++  std::unique_ptr<arcium_settings::ArciumSettingsModel> arcium_appearance_;
++#endif
++
+   raw_ptr<Profile> profile_;  // Weak pointer.
+ 
+   base::WeakPtrFactory<AppearanceHandler> weak_ptr_factory_{this};
+--- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
++++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
+@@ -587,7 +587,73 @@
+ 
+ void AddAppearanceStrings(content::WebUIDataSource* html_source,
+                           Profile* profile) {
++  html_source->AddBoolean("isWindowsWorkspaceAppearance", BUILDFLAG(IS_WIN));
+   static constexpr webui::LocalizedString kLocalizedStrings[] = {
++      {"workspaceAppearance", IDS_SETTINGS_ARCIUM_WORKSPACE_APPEARANCE},
++      {"workspaceDescription", IDS_SETTINGS_ARCIUM_WORKSPACE_DESCRIPTION},
++      {"workspaceUnavailable", IDS_SETTINGS_ARCIUM_WORKSPACE_UNAVAILABLE},
++      {"workspacePreset", IDS_SETTINGS_ARCIUM_WORKSPACE_PRESET},
++      {"workspacePresetDescription",
++       IDS_SETTINGS_ARCIUM_WORKSPACE_PRESET_DESCRIPTION},
++      {"workspaceError", IDS_SETTINGS_ARCIUM_WORKSPACE_ERROR},
++      {"workspaceSaved", IDS_SETTINGS_ARCIUM_WORKSPACE_SAVED},
++      {"workspaceSpace", IDS_SETTINGS_ARCIUM_WORKSPACE_SPACE},
++      {"workspaceBrowserMode", IDS_SETTINGS_ARCIUM_WORKSPACE_BROWSER_MODE},
++      {"workspacePageMode", IDS_SETTINGS_ARCIUM_WORKSPACE_PAGE_MODE},
++      {"workspaceSystem", IDS_SETTINGS_ARCIUM_WORKSPACE_SYSTEM},
++      {"workspaceLight", IDS_SETTINGS_ARCIUM_WORKSPACE_LIGHT},
++      {"workspaceDark", IDS_SETTINGS_ARCIUM_WORKSPACE_DARK},
++      {"workspaceColorEffect", IDS_SETTINGS_ARCIUM_WORKSPACE_COLOR_EFFECT},
++      {"workspaceTint", IDS_SETTINGS_ARCIUM_WORKSPACE_TINT},
++      {"workspaceGlows", IDS_SETTINGS_ARCIUM_WORKSPACE_GLOWS},
++      {"workspaceNone", IDS_SETTINGS_ARCIUM_WORKSPACE_NONE},
++      {"workspaceColor", IDS_SETTINGS_ARCIUM_WORKSPACE_COLOR},
++      {"workspaceGlowStrength", IDS_SETTINGS_ARCIUM_WORKSPACE_GLOW_STRENGTH},
++      {"workspaceAddGlow", IDS_SETTINGS_ARCIUM_WORKSPACE_ADD_GLOW},
++      {"workspaceRemoveGlow", IDS_SETTINGS_ARCIUM_WORKSPACE_REMOVE_GLOW},
++      {"workspaceGlow", IDS_SETTINGS_ARCIUM_WORKSPACE_GLOW},
++      {"workspaceX", IDS_SETTINGS_ARCIUM_WORKSPACE_X},
++      {"workspaceY", IDS_SETTINGS_ARCIUM_WORKSPACE_Y},
++      {"workspaceRadius", IDS_SETTINGS_ARCIUM_WORKSPACE_RADIUS},
++      {"workspaceOpacity", IDS_SETTINGS_ARCIUM_WORKSPACE_OPACITY},
++      {"workspaceControlsChroma",
++       IDS_SETTINGS_ARCIUM_WORKSPACE_CONTROLS_CHROMA},
++      {"workspacePanelsChroma", IDS_SETTINGS_ARCIUM_WORKSPACE_PANELS_CHROMA},
++      {"workspaceSurfaces", IDS_SETTINGS_ARCIUM_WORKSPACE_SURFACES},
++      {"workspaceGlass", IDS_SETTINGS_ARCIUM_WORKSPACE_GLASS},
++      {"workspaceRefractive", IDS_SETTINGS_ARCIUM_WORKSPACE_REFRACTIVE},
++      {"workspaceQuiet", IDS_SETTINGS_ARCIUM_WORKSPACE_QUIET},
++      {"workspaceSolid", IDS_SETTINGS_ARCIUM_WORKSPACE_SOLID},
++      {"workspaceCustom", IDS_SETTINGS_ARCIUM_WORKSPACE_CUSTOM},
++      {"workspaceTextOpacity", IDS_SETTINGS_ARCIUM_WORKSPACE_TEXT_OPACITY},
++      {"workspacePanelOpacity", IDS_SETTINGS_ARCIUM_WORKSPACE_PANEL_OPACITY},
++      {"workspaceTextTint", IDS_SETTINGS_ARCIUM_WORKSPACE_TEXT_TINT},
++      {"workspacePanelTint", IDS_SETTINGS_ARCIUM_WORKSPACE_PANEL_TINT},
++      {"workspaceFrameWidth", IDS_SETTINGS_ARCIUM_WORKSPACE_FRAME_WIDTH},
++      {"workspaceSidebarWidth", IDS_SETTINGS_ARCIUM_WORKSPACE_SIDEBAR_WIDTH},
++      {"workspaceScale", IDS_SETTINGS_ARCIUM_WORKSPACE_SCALE},
++      {"workspaceCollapse", IDS_SETTINGS_ARCIUM_WORKSPACE_COLLAPSE},
++      {"workspaceRail", IDS_SETTINGS_ARCIUM_WORKSPACE_RAIL},
++      {"workspaceHidden", IDS_SETTINGS_ARCIUM_WORKSPACE_HIDDEN},
++      {"workspaceRounded", IDS_SETTINGS_ARCIUM_WORKSPACE_ROUNDED},
++      {"workspaceNavigation", IDS_SETTINGS_ARCIUM_WORKSPACE_NAVIGATION},
++      {"workspaceShadow", IDS_SETTINGS_ARCIUM_WORKSPACE_SHADOW},
++      {"workspaceDefault", IDS_SETTINGS_ARCIUM_WORKSPACE_DEFAULT},
++      {"workspaceShadowBlur", IDS_SETTINGS_ARCIUM_WORKSPACE_SHADOW_BLUR},
++      {"workspaceShadowOpacity", IDS_SETTINGS_ARCIUM_WORKSPACE_SHADOW_OPACITY},
++      {"workspaceContentBorder", IDS_SETTINGS_ARCIUM_WORKSPACE_CONTENT_BORDER},
++      {"workspaceGlassSupport", IDS_SETTINGS_ARCIUM_WORKSPACE_GLASS_SUPPORT},
++      {"workspaceManageSpace", IDS_SETTINGS_ARCIUM_WORKSPACE_MANAGE_SPACE},
++      {"workspaceWindowEffects", IDS_SETTINGS_ARCIUM_WORKSPACE_WINDOW_EFFECTS},
++      {"workspaceWindowMaterial",
++       IDS_SETTINGS_ARCIUM_WORKSPACE_WINDOW_MATERIAL},
++      {"workspaceMica", IDS_SETTINGS_ARCIUM_WORKSPACE_MICA},
++      {"workspaceAcrylic", IDS_SETTINGS_ARCIUM_WORKSPACE_ACRYLIC},
++      {"workspaceWindowOpacity", IDS_SETTINGS_ARCIUM_WORKSPACE_WINDOW_OPACITY},
++      {"workspaceGlassActive", IDS_SETTINGS_ARCIUM_WORKSPACE_GLASS_ACTIVE},
++      {"workspaceGlassFallback", IDS_SETTINGS_ARCIUM_WORKSPACE_GLASS_FALLBACK},
++      {"workspaceResetPalette", IDS_SETTINGS_ARCIUM_WORKSPACE_RESET_PALETTE},
++      {"workspaceFollowBrowser", IDS_SETTINGS_ARCIUM_WORKSPACE_FOLLOW_BROWSER},
+       {"appearancePageTitle", IDS_SETTINGS_APPEARANCE},
+       {"appearanceBehaviorPageTitle", IDS_SETTINGS_APPEARANCE_AND_BEHAVIOR},
+       {"behaviorPageTitle", IDS_SETTINGS_BEHAVIOR},
+--- a/chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome.mojom
++++ b/chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome.mojom
+@@ -167,6 +167,10 @@
+   UpdateThemeEditable(bool is_theme_editable);
+ 
+   // Sets Chrome's theme according to the default color.
++  // Explicit dismissal remains available when the native header is hidden.
++  ClosePanel();
++  OpenWorkspaceAppearance();
++
+   SetDefaultColor();
+ 
+   // Set that the theme should follow the device's.
+--- a/chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome_page_handler.cc
++++ b/chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome_page_handler.cc
+@@ -27,7 +27,12 @@
+ #include "chrome/browser/search_engines/template_url_service_factory.h"
+ #include "chrome/browser/themes/theme_service.h"
+ #include "chrome/browser/themes/theme_service_factory.h"
++#if BUILDFLAG(IS_WIN)
++#include "base/functional/callback_helpers.h"
++#include "chrome/browser/ui/helium/arcium_settings_model.h"
++#endif
+ #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/color/chrome_color_id.h"
+ #include "chrome/browser/ui/navigator/browser_navigator.h"
+ #include "chrome/browser/ui/navigator/browser_navigator_params.h"
+@@ -66,6 +71,7 @@
+ #include "chrome/browser/ui/browser_window.h"
+ #include "chrome/browser/ui/views/new_tab_footer/footer_controller.h"
+ #include "chrome/browser/ui/views/side_panel/customize_chrome/customize_chrome_utils.h"
++#include "chrome/browser/ui/views/side_panel/side_panel_coordinator.h"
+ #include "chrome/browser/ui/webui/new_tab_footer/new_tab_footer_helper.h"
+ #include "chrome/browser/ui/webui/new_tab_page_third_party/new_tab_page_third_party_ui.h"
+ #include "chrome/browser/ui/webui/ntp/new_tab_ui.h"
+@@ -224,7 +230,44 @@
+              template_url_service_->search_terms_data());
+ }
+ 
++void CustomizeChromePageHandler::ClosePanel() {
++#if !BUILDFLAG(IS_ANDROID)
++  if (auto* browser = webui::GetBrowserWindowInterface(web_contents_)) {
++    if (auto* panel = SidePanelCoordinator::From(browser);
++        panel &&
++        panel->GetCurrentEntryId() == SidePanelEntryId::kCustomizeChrome) {
++      panel->Close();
++    }
++  }
++#endif
++}
++
++void CustomizeChromePageHandler::OpenWorkspaceAppearance() {
++#if !BUILDFLAG(IS_ANDROID)
++  auto* browser = webui::GetBrowserWindowInterface(web_contents_);
++  if (!browser || browser->GetProfile() != profile_)
++    return;
++  NavigateParams params(browser, GURL("chrome://settings/appearance"),
++                        ui::PAGE_TRANSITION_LINK);
++  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
++  Navigate(&params);
++  // Navigation may destroy the source WebUI; use only the captured browser.
++  if (auto* panel = SidePanelCoordinator::From(browser);
++      panel &&
++      panel->GetCurrentEntryId() == SidePanelEntryId::kCustomizeChrome) {
++    panel->Close();
++  }
++#endif
++}
++
+ void CustomizeChromePageHandler::SetDefaultColor() {
++#if BUILDFLAG(IS_WIN)
++  auto model = arcium_settings::ArciumSettingsModel::CaptureForWebContents(
++      web_contents_, base::DoNothing(), base::DoNothing());
++  if (model)
++    model->ResetChromeAppearance();
++  return;
++#endif
+   theme_service_->UseDeviceTheme(false);
+   theme_service_->UseDefaultTheme();
+ }
+--- a/chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome_page_handler.h
++++ b/chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome_page_handler.h
+@@ -112,6 +112,8 @@
+   bool IsNtpManagedByThirdPartySearchEngine() const;
+ 
+   // side_panel::mojom::CustomizeChromePageHandler:
++  void ClosePanel() override;
++  void OpenWorkspaceAppearance() override;
+   void SetDefaultColor() override;
+   void SetFollowDeviceTheme(bool follow) override;
+   void SetBackgroundImage(const std::string& attribution_1,
+--- a/chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome_ui.cc
++++ b/chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome_ui.cc
+@@ -112,6 +112,8 @@
+       {"backButton", IDS_ACCNAME_BACK},
+       {"title", IDS_SIDE_PANEL_CUSTOMIZE_CHROME_TITLE},
+       // Header strings.
++      {"closeWorkspacePanel", IDS_NTP_CLOSE},
++      {"workspaceAppearance", IDS_SETTINGS_ARCIUM_WORKSPACE_APPEARANCE},
+       {"appearanceHeader", IDS_NTP_CUSTOMIZE_APPEARANCE_LABEL},
+       {"cardsHeader", IDS_NTP_CUSTOMIZE_MENU_MODULES_LABEL},
+       {"categoriesHeader", IDS_NTP_CUSTOMIZE_THEMES_HEADER},
+@@ -279,6 +281,7 @@
+       {"newBadgeLabel", IDS_NEW_BADGE},
+   };
+   source->AddLocalizedStrings(kLocalizedStrings);
++  source->AddBoolean("isWindowsWorkspaceAppearance", BUILDFLAG(IS_WIN));
+ 
+   source->AddBoolean(
+       "modulesEnabled",

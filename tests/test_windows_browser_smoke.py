@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -11,6 +12,21 @@ from scripts import windows_browser_smoke as smoke
 
 
 class BrowserLaunchSmokeTests(unittest.TestCase):
+    def test_real_cli_starts_as_file_and_module_without_browser_launch(self):
+        script = Path(smoke.__file__).resolve()
+        with tempfile.TemporaryDirectory() as directory:
+            cases = (
+                ([sys.executable, '-I', str(script), '--help'], Path(directory)),
+                ([sys.executable, '-m', 'scripts.windows_browser_smoke', '--help'], smoke.ROOT),
+            )
+            for command, cwd in cases:
+                with self.subTest(command=command):
+                    result = subprocess.run(command, cwd=cwd, capture_output=True,
+                                            text=True, timeout=15)
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertIn('--timeout', result.stdout)
+                    self.assertNotIn('ModuleNotFoundError', result.stderr)
+
     def test_command_uses_only_disposable_profile_and_about_blank(self):
         browser = Path("C:/temp/chrome.exe")
         profile = Path("C:/temp/arcium-test-profile")

@@ -3,12 +3,14 @@
 import unittest
 from pathlib import Path
 import tempfile
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from scripts.browser_only_build import (
     BROWSER_ONLY_TARGETS, ORIGINAL_RELEASE_TARGETS,
+    ONBOARDING_ANCHOR, ONBOARDING_STEP,
     first_compiler_failure, make_browser_only_builder, print_diagnostic,
-    REQUIRED_NATIVE_CHROMIUM_SDK, require_native_chromium_sdk
+    REQUIRED_NATIVE_CHROMIUM_SDK, require_native_chromium_sdk,
+    latest_build_progress, require_compilation_cache, stop_build_tree
 )
 from scripts.gn_smoke import RESTORE_ANCHOR, RESTORE_STEP
 from scripts.windows_version_compat import OLD_VERSION_BLOCK
@@ -45,6 +47,11 @@ class BrowserOnlyBuilderTests(unittest.TestCase):
         self.assertNotIn(ORIGINAL_RELEASE_TARGETS, code)
         self.assertNotIn("helium_version.check_existing_version(", code)
         self.assertNotIn("helium_version.append_version(", code)
+        self.assertEqual(code.count(ONBOARDING_STEP), 1)
+
+    def test_unknown_first_run_entry_is_rejected_before_native_build(self):
+        with self.assertRaisesRegex(ValueError, "pre-GN onboarding"):
+            make_browser_only_builder(pinned_fixture().replace(ONBOARDING_ANCHOR, ""))
 
     def test_native_compile_requires_reviewed_28000_sdk(self):
         self.assertEqual(REQUIRED_NATIVE_CHROMIUM_SDK, "10.0.28000.0")
@@ -53,6 +60,55 @@ class BrowserOnlyBuilderTests(unittest.TestCase):
             require_native_chromium_sdk("10.0.26100.0")
         with self.assertRaisesRegex(EnvironmentError, "28000"):
             require_native_chromium_sdk("10.0.99999.0")
+
+    def test_compilation_progress_uses_last_ninja_status(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "compiler.log"
+            path.write_text(
+                "GN generation started\n"
+                "[82/93638] CXX first.obj\n"
+                "SISO 4h34m status\n"
+                "[22400/81338] CXX latest.obj\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(latest_build_progress(path), (22400, 81338))
+
+    def test_compilation_progress_handles_empty_or_missing_log(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "compiler.log"
+            self.assertIsNone(latest_build_progress(path))
+            path.write_text("patches and GN are running\n", encoding="utf-8")
+            self.assertIsNone(latest_build_progress(path))
+
+    def test_compiler_cache_requirement_must_fail_closed(self):
+        with patch("scripts.browser_only_build.shutil.which", return_value=None):
+            with self.assertRaisesRegex(EnvironmentError, "Missing sccache"):
+                require_compilation_cache()
+        with patch("scripts.browser_only_build.shutil.which",
+                   return_value="C:/tools/sccache.exe") as which:
+            require_compilation_cache()
+            which.assert_called_once_with("sccache")
+
+    def test_windows_timeout_kills_child_compilers(self):
+        process = Mock()
+        process.pid = 1234
+        process.poll.return_value = 1
+        with patch("scripts.browser_only_build.os.name", "nt"), patch(
+            "scripts.browser_only_build.subprocess.run"
+        ) as run:
+            stop_build_tree(process)
+        self.assertEqual(run.call_args.args[0][:4],
+                         ["taskkill", "/PID", "1234", "/T"])
+        process.kill.assert_not_called()
+        process.wait.assert_called_once_with(timeout=30)
+
+    def test_non_windows_timeout_kills_parent(self):
+        process = Mock()
+        process.poll.return_value = None
+        with patch("scripts.browser_only_build.os.name", "posix"):
+            stop_build_tree(process)
+        process.kill.assert_called_once_with()
+        process.wait.assert_called_once_with(timeout=30)
 
     def test_windows_legacy_console_can_print_unicode_diagnostics(self):
         # Raw errors remain intact in the diagnostic log and JSON. The

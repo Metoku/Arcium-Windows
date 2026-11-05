@@ -1,0 +1,85 @@
+"""Static guardrails for the opt-in local Windows incremental build script.
+
+These checks deliberately do NOT download Chromium or compile anything.
+"""
+
+from pathlib import Path
+import shutil
+import subprocess
+import unittest
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPT = ROOT / "scripts" / "local_windows_resume.ps1"
+GUIDE = ROOT / "docs" / "local-windows-incremental-build.md"
+
+
+class LocalIncrementalBuildTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which('pwsh') or shutil.which('powershell'), 'PowerShell required')
+    def test_real_powershell_parser_accepts_resume_script(self):
+        shell = shutil.which('pwsh') or shutil.which('powershell')
+        script = "$tokens=$null; $errors=$null; " + (
+            "[System.Management.Automation.Language.Parser]::ParseFile('" +
+            str(SCRIPT).replace("'", "''") + "',[ref]$tokens,[ref]$errors) | Out-Null; "
+            "if ($errors.Count) { $errors | Out-String | Write-Error; exit 1 }")
+        result = subprocess.run([shell, '-NoProfile', '-NonInteractive', '-Command', script],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_script_preserves_existing_compilation_outputs(self):
+        source = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("out\\Default\\build.ninja", source)
+        self.assertIn("out\\Default\\args.gn", source)
+        self.assertIn("ARCIUM_GN_GENERATED.marker", source)
+        self.assertIn("PINNED_WINDOWS_GN_GENERATED", source)
+        self.assertIn("windows_port.py' audit", source)
+        self.assertIn("autoninja.py", source)
+        self.assertIn(" -C out\\Default chrome", source)
+        self.assertNotIn("windows_port.py' stage", source)
+        self.assertNotIn("& $python 'scripts\\gn_smoke.py'", source)
+        self.assertNotIn("mini_installer", source)
+        self.assertNotIn("Remove-Item -LiteralPath $source", source)
+        self.assertNotIn("out\\Default\\setup.exe", source)
+
+    def test_preflight_requires_full_sdk_28000(self):
+        source = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("10.0.28000.0", source)
+        self.assertIn("NTDDI_WIN11_BR", source)
+        self.assertIn("provision_chromium_sdk.ps1", source)
+        self.assertNotIn("provision_chromium_sdk.ps1 -Install", source)
+        self.assertIn("VC\\Auxiliary\\Build\\vcvarsall.bat", source)
+        self.assertIn("ValidateSet('check', 'resume')", source)
+
+    def test_python3_protobuf_plugin_has_local_shim_and_no_global_mutation(self):
+        source = SCRIPT.read_text(encoding="utf-8")
+        # Chromium 156 invokes python3 from tools/protoc_wrapper/protoc-gen-ts_proto.bat.
+        # Use the same python.exe as the build adapter instead of WindowsApps.
+        self.assertIn("python3.bat", source)
+        self.assertIn("GN's Windows interpreter resolution checks python3.exe and python3.bat", source)
+        self.assertIn("ARCIUM_LOCAL_GN_DESC_PASSED", source)
+        self.assertIn("v8:v8_base_without_compiler", source)
+        self.assertIn("desc -q out", source)
+        self.assertIn("('set \"PATH=' + $shimDir + ';%PATH%\"')", source)
+        self.assertIn("'where python3'", source)
+        self.assertIn("'call python3 --version'", source)
+        self.assertNotIn("        'python3 --version',", source)
+        self.assertIn("('\\\"' + $python + '\\\" %*')".replace('\\\"', '\"'), source)
+        self.assertIn("Remove-Item -LiteralPath $shimDir -Recurse -Force", source)
+        self.assertLess(
+            source.index("'call python3 --version'"),
+            source.rindex('autoninja.py'),
+        )
+
+    def test_guide_separates_source_preparation_from_resume(self):
+        guide = GUIDE.read_text(encoding="utf-8")
+        self.assertIn("windows_port.py stage", guide)
+        self.assertIn("gn_smoke.py --execute --max-minutes 160", guide)
+        self.assertIn("local_windows_resume.ps1 -Mode check", guide)
+        self.assertIn("local_windows_resume.ps1 -Mode resume -Jobs 5", guide)
+        self.assertIn("chromium-156.0.8078.47-win-x64.tar.zst", guide)
+        self.assertIn("Do not separately clone", guide)
+        self.assertIn("do not", guide.lower())
+
+
+if __name__ == "__main__":
+    unittest.main()

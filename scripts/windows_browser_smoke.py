@@ -15,7 +15,8 @@ import subprocess
 import sys
 import tempfile
 
-from scripts.windows_port import ROOT
+# Keep this stdlib-only entry point runnable both as a file and with python -m.
+ROOT = Path(__file__).resolve().parents[1]
 
 
 DEFAULT_BROWSER = (
@@ -113,9 +114,12 @@ def main() -> int:
     )
     parser.add_argument("--timeout", type=int, default=45)
     arguments = parser.parse_args()
-    return run_smoke(
+    result = run_smoke(
         arguments.browser, arguments.report, timeout=arguments.timeout
     )
+    print("HEADLESS_LAUNCH_PASSED" if result == 0 else "HEADLESS_LAUNCH_FAILED")
+    print(f"Report: {arguments.report.resolve()}")
+    return result
 
 
 if __name__ == "__main__":

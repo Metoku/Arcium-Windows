@@ -23,7 +23,7 @@ permissions:
 
 concurrency:
   group: windows-experiment-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   stage-and-optional-compile:
@@ -53,6 +53,20 @@ jobs:
         run: python scripts/windows_port.py plan
       - name: Stage Helium Windows platform with Arcium shared core
         run: python scripts/windows_port.py stage
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install pinned appearance validation tools
+        run: npm install --prefix work/appearance-ui --no-save --ignore-scripts --no-audit --no-fund typescript@6.0.2 stylelint@17.0.0 "@stylistic/stylelint-plugin@5.0.0" postcss@8.5.3 eslint@10.2.0 "@typescript-eslint/eslint-plugin@8.58.2" "@typescript-eslint/parser@8.58.2" eslint-plugin-lit@2.2.1
+      - name: Replay optional Windows Arc integration patches
+        run: python -m scripts.check_windows_arc_import_patch --core-dir work/windows-platform/helium-chromium --platform-dir work/windows-platform --typescript work/appearance-ui/node_modules/typescript
+      - name: Upload optional Arc patch replay report (NOT a build)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-arc-import-patch-replay
+          path: work/windows-arc-import-replay.json
+          if-no-files-found: warn
       - name: Validate full-source preparation adapter (no downloads)
         run: python scripts/prepare_full_chromium.py --validate
       - name: Validate browser-only compilation adapter (no download or build)
