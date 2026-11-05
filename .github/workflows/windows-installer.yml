@@ -1,0 +1,114 @@
+name: Windows installer and updates
+
+on:
+  pull_request:
+    paths:
+      - "installer/**"
+      - "scripts/package_windows_installer.ps1"
+      - "scripts/fetch_windows_portable.ps1"
+      - "tests/test_windows_distribution.py"
+      - "tests/windows_icon_resources.py"
+      - ".github/workflows/windows-installer.yml"
+  workflow_dispatch:
+    inputs:
+      portable_release:
+        description: Published portable release to reuse
+        required: true
+        default: v0.1.0-alpha.1
+        type: string
+      package_version:
+        description: Installer release version (no v prefix)
+        required: true
+        default: 0.1.0-alpha.2
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-installer-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  installer:
+    name: Install, upgrade, uninstall and package
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      PORTABLE_RELEASE: ${{ inputs.portable_release || 'v0.1.0-alpha.1' }}
+      PACKAGE_VERSION: ${{ inputs.package_version || '0.1.0-alpha.2' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install SHA256-pinned Inno Setup compiler
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          . ./installer/windows/Distribution.ps1
+          $setup = Join-Path $env:RUNNER_TEMP 'innosetup-7.1.1-x64.exe'
+          $client = New-ArciumWebClient
+          try {
+            $client.DownloadFile('https://github.com/jrsoftware/issrc/releases/download/is-7_1_1/innosetup-7.1.1-x64.exe', $setup)
+          } finally { $client.Dispose() }
+          if ((Get-ArciumSha256 $setup) -cne '8a5a6711c3766a6e5fb74f280ba0e3551e719ce94538d901fdbd1f8f9920b3f0') { throw 'Inno Setup digest mismatch.' }
+          $tool = Join-Path $env:RUNNER_TEMP 'Arcium-Inno'
+          $p = Start-Process -FilePath $setup -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',('/DIR="' + $tool + '"')) -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Inno Setup installation failed: $($p.ExitCode)" }
+          $iscc = Join-Path $tool 'ISCC.exe'
+          if (-not (Test-Path -LiteralPath $iscc)) { throw 'ISCC.exe was not installed.' }
+          "ARCIUM_ISCC=$iscc" >> $env:GITHUB_ENV
+      - name: Test real setup lifecycle with a synthetic browser
+        env:
+          ARCIUM_RUN_INSTALLER_TESTS: "1"
+        run: python -m unittest discover -s tests -p test_windows_distribution.py -v
+      - name: Download and verify the published portable browser
+        shell: pwsh
+        run: |
+          ./scripts/fetch_windows_portable.ps1 -ReleaseTag $env:PORTABLE_RELEASE -OutputDirectory (Join-Path $env:RUNNER_TEMP 'Arcium-Portable-Source')
+      - name: Build installer from the existing runtime
+        shell: pwsh
+        run: |
+          $version = $env:PORTABLE_RELEASE.Substring(1)
+          $zip = Join-Path $env:RUNNER_TEMP "Arcium-Portable-Source/Arcium-Windows-$version.zip"
+          ./scripts/package_windows_installer.ps1 -PortableZip $zip -Version $env:PACKAGE_VERSION
+      - name: Install candidate and launch the real browser with an isolated profile
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $setup = Join-Path $env:GITHUB_WORKSPACE "dist/Arcium-Windows-$($env:PACKAGE_VERSION)-Setup.exe"
+          $root = Join-Path $env:RUNNER_TEMP 'Arcium-Real-Install'
+          try {
+            $p = Start-Process -FilePath $setup -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',('/DIR="' + $root + '"')) -Wait -PassThru
+            if ($p.ExitCode -ne 0) { throw "Candidate installation failed: $($p.ExitCode)" }
+            python ./tests/windows_icon_resources.py --installed-root $root --setup $setup --report ./dist/installed-icon-report.json
+            if ($LASTEXITCODE -ne 0) { throw 'Installed icons lost high-DPI representations.' }
+            $checker = Join-Path $root 'tools/Update-Arcium.ps1'
+            $legacy = Join-Path $env:WINDIR 'System32/WindowsPowerShell/v1.0/powershell.exe'
+            & $legacy -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $checker -CheckOnly
+            if ($LASTEXITCODE -ne 0) { throw 'Installed update checker failed.' }
+            $browser = Join-Path $root "versions/$($env:PACKAGE_VERSION)/chrome.exe"
+            python ./scripts/windows_browser_smoke.py --browser $browser --timeout 60 --report ./dist/installed-browser-smoke.json
+            if ($LASTEXITCODE -ne 0) { throw 'Installed browser launch failed.' }
+          } finally {
+            $uninstall = Join-Path $root 'unins000.exe'
+            if (Test-Path -LiteralPath $uninstall) {
+              $p = Start-Process -FilePath $uninstall -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -Wait -PassThru
+              if ($p.ExitCode -ne 0) { throw "Candidate uninstall failed: $($p.ExitCode)" }
+            }
+          }
+      - name: Upload installer candidate, checksums and provenance
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Arcium-Windows-installer-${{ github.run_number }}
+          path: |
+            dist/*-Setup.exe
+            dist/*-Setup.exe.sha256
+            dist/*-Setup.exe.json
+            dist/installed-browser-smoke.json
+            dist/installed-icon-report.json
+          if-no-files-found: warn
+          compression-level: 0
+          retention-days: 14
