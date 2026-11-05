@@ -9,9 +9,10 @@ do not copy or delete that profile or Helium's files.
 
 Open **Actions → Windows installer and updates → Run workflow**. Select the
 published portable source tag and new package version, for example
-`v0.1.0-alpha.1` and `0.1.0-alpha.2`. The job downloads this
+`v0.1.0-alpha.3` and `0.1.0-alpha.4`. The job downloads this
 repository's ZIP and sidecar, checks the SHA256 and GitHub asset digests,
-then builds an installer candidate.
+then builds an installer candidate. These defaults reuse alpha.3 browser bytes;
+a new installer version alone does not add new native browser changes.
 
 PRs changing distribution code also build a candidate from the existing alpha
 ZIP. The artifact contains the `-Setup.exe`, `.sha256` sidecar,
@@ -24,7 +25,7 @@ permission and uploads Actions artifacts; it does not publish or alter a release
 Install Inno Setup 7, then run from the repository in PowerShell:
 
 ```powershell
-.\scripts\package_windows_installer.ps1 -PortableZip .\dist\Arcium-Windows-0.1.0-alpha.1.zip -Version '0.1.0-alpha.2'
+.\scripts\package_windows_installer.ps1 -PortableZip .\dist\Arcium-Windows-0.1.0-alpha.3.zip -Version '0.1.0-alpha.4'
 ```
 
 The ZIP's matching `.sha256` file is required. Set `ARCIUM_ISCC` or

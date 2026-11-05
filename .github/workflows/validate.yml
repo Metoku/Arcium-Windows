@@ -40,5 +40,5 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python scripts/validate_upstream.py --check-remote
 
-# Intentionally no Chromium compile or executable artifact.
-# This workflow tests source tracking only; Windows porting is still required.
+# This metadata workflow does not compile Chromium or upload browser binaries.
+# Native builds and installer acceptance have their own checks and release records.

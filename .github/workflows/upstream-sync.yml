@@ -1,6 +1,11 @@
 name: Monitor Arcium upstream
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/upstream-sync.yml"
+      - ".github/scripts/upstream-sync.cjs"
   schedule:
     - cron: "0 */6 * * *"
   workflow_dispatch:
@@ -17,124 +22,16 @@ concurrency:
 
 jobs:
   upstream:
-    name: Propose tested upstream revision
+    name: Prepare upstream revision for review
     runs-on: ubuntu-latest
     steps:
-      - name: Check upstream and maintain review PR
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check upstream and maintain review proposal
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const base = context.payload.repository.default_branch;
-            const branch = 'automation/arcium-core-update';
-            const path = 'upstream/arcium-core.sha';
-
-            const latestResponse = await github.rest.repos.getCommit({
-              owner: 'dr-baker', repo: 'Arcium', ref: 'main'
-            });
-            const latest = latestResponse.data.sha.toLowerCase();
-            if (!/^[a-f0-9]{40}$/.test(latest)) {
-              throw new Error('Upstream returned an invalid commit SHA');
-            }
-
-            const baseFile = await github.rest.repos.getContent({
-              owner, repo, path, ref: base
-            });
-            const pinned = Buffer.from(baseFile.data.content, 'base64')
-              .toString('utf8').trim();
-            core.info('Base: ' + pinned + '; upstream: ' + latest);
-            if (latest === pinned) {
-              core.info('The default branch already tracks current upstream.');
-              return;
-            }
-
-            let branchExists = true;
-            try {
-              await github.rest.git.getRef({
-                owner, repo, ref: 'heads/' + branch
-              });
-            } catch (error) {
-              if (error.status !== 404) throw error;
-              branchExists = false;
-            }
-
-            if (!branchExists) {
-              const baseRef = await github.rest.git.getRef({
-                owner, repo, ref: 'heads/' + base
-              });
-              await github.rest.git.createRef({
-                owner, repo, ref: 'refs/heads/' + branch,
-                sha: baseRef.data.object.sha
-              });
-            }
-
-            const candidateFile = await github.rest.repos.getContent({
-              owner, repo, path, ref: branch
-            });
-            const candidate = Buffer.from(candidateFile.data.content, 'base64')
-              .toString('utf8').trim();
-
-            if (candidate !== latest) {
-              await github.rest.repos.createOrUpdateFileContents({
-                owner, repo, path, branch,
-                message: 'chore: propose Arcium core ' + latest.slice(0, 12),
-                content: Buffer.from(latest + '\n').toString('base64'),
-                sha: candidateFile.data.sha
-              });
-              core.info('Updated candidate revision to ' + latest);
-            } else {
-              core.info('Candidate branch already tracks current upstream.');
-            }
-
-            const prs = await github.rest.pulls.list({
-              owner, repo, state: 'open', base,
-              head: owner + ':' + branch, per_page: 20
-            });
-            if (prs.data.length === 0) {
-              const body = [
-                'Automated upstream Arcium core revision proposal.',
-                '',
-                '- Current pinned revision: ' + pinned,
-                '- New upstream revision: ' + latest,
-                '- Upstream source: https://github.com/dr-baker/Arcium',
-                '',
-                '**Manual review required.** Successful metadata checks do not mean',
-                'that the Windows port builds or that all Chromium patches apply.',
-                'Do not merge until platform compatibility has been verified.'
-              ].join('\n');
-              try {
-                const pr = await github.rest.pulls.create({
-                  owner, repo, base, head: branch,
-                  title: 'chore: update Arcium core revision',
-                  body
-                });
-                core.info('Opened update PR: ' + pr.data.html_url);
-              } catch (error) {
-                core.warning('Could not create PR: ' + error.message);
-                const title = 'Enable Actions pull-request creation for upstream sync';
-                const existing = await github.rest.issues.listForRepo({
-                  owner, repo, state: 'open', per_page: 100
-                });
-                if (!existing.data.some(issue => issue.title === title)) {
-                  await github.rest.issues.create({
-                    owner, repo, title,
-                    body: 'The upstream-sync workflow updated the candidate branch but could not create its PR. In Settings > Actions > General, enable "Allow GitHub Actions to create and approve pull requests" (or configure an appropriately scoped GitHub App). Failure: ' + error.message
-                  });
-                }
-              }
-            } else {
-              core.info('Existing update PR: ' + prs.data[0].html_url);
-            }
-
-            // GitHub-token-authored commits do not themselves trigger normal
-            // push/PR workflows. Explicit workflow_dispatch is supported.
-            try {
-              await github.rest.actions.createWorkflowDispatch({
-                owner, repo, workflow_id: 'validate.yml', ref: branch
-              });
-              core.info('Dispatched validation on ' + branch);
-            } catch (error) {
-              core.warning('Validation dispatch failed: ' + error.message);
-            }
+            const monitor = require('./.github/scripts/upstream-sync.cjs');
+            await monitor({github, context, core});

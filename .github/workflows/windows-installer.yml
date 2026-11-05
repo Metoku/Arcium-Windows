@@ -14,12 +14,12 @@ on:
       portable_release:
         description: Published portable release to reuse
         required: true
-        default: v0.1.0-alpha.1
+        default: v0.1.0-alpha.3
         type: string
       package_version:
         description: Installer release version (no v prefix)
         required: true
-        default: 0.1.0-alpha.2
+        default: 0.1.0-alpha.4
         type: string
 
 permissions:
@@ -35,8 +35,8 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 30
     env:
-      PORTABLE_RELEASE: ${{ inputs.portable_release || 'v0.1.0-alpha.1' }}
-      PACKAGE_VERSION: ${{ inputs.package_version || '0.1.0-alpha.2' }}
+      PORTABLE_RELEASE: ${{ inputs.portable_release || 'v0.1.0-alpha.3' }}
+      PACKAGE_VERSION: ${{ inputs.package_version || '0.1.0-alpha.4' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
