@@ -1,77 +1,49 @@
 # Arcium-Windows
 
-> **Status: experimental Windows port. The first portable alpha is published; native build and runtime acceptance are user reports. Installer candidates receive separate Windows validation.**
+> **Windows x64 alpha: [v0.1.0-alpha.3 is published](https://github.com/Metoku/Arcium-Windows/releases/tag/v0.1.0-alpha.3). The maintainer reports a working local browser, installer and corrected Mac-style window controls. Automated source checks and installer tests are separate from those runtime reports.**
 
-Unofficial experimental Windows platform project for [Arcium](https://github.com/dr-baker/Arcium), a Chromium/Helium-based browser. This project is independent of, and not endorsed by, the upstream maintainers.
+Unofficial Windows platform project for [Arcium](https://github.com/dr-baker/Arcium), a Chromium/Helium-based browser. Independent of, and not endorsed by, the upstream maintainers.
 
-## Architecture
+## Install and use
 
-[dr-baker/Arcium](https://github.com/dr-baker/Arcium) owns shared browser behavior and Chromium patches. [dr-baker/Arcium-macOS](https://github.com/dr-baker/Arcium-macOS) is a macOS reference, not a Windows build source. This repository will own Windows platform integration, build scripts, testing and packaging.
+Download **Arcium-Windows-0.1.0-alpha.3-Setup.exe** from the [alpha.3 release](https://github.com/Metoku/Arcium-Windows/releases/tag/v0.1.0-alpha.3), or extract its ZIP and launch `chrome.exe`. The release includes both checksum files and installer provenance. The installer and application are currently unsigned.
 
-## Automation
+The installer provides Start-menu shortcuts, an optional desktop shortcut, the original Arcium icon at Windows display sizes, and **Check for Arcium updates**. Setup can register Arcium in Windows Default Apps; choosing it remains the user's action.
 
-For a per-user installer and an on-demand update checker, see
-[Windows installer and updates](docs/windows-installer-updates.md).
-The GitHub installer workflow reuses a published portable ZIP, validates
-installation/upgrades/uninstall and creates an installer candidate without
-rebuilding Chromium. Installed users get a **Check for Arcium updates** shortcut.
+Arcium stores its profile in `%LOCALAPPDATA%\Arcium\User Data`, separately from Helium. Quit Arcium before backing up that folder. Updates and uninstall retain the profile. See [onboarding and profile isolation](docs/windows-onboarding.md) and [installer/update behavior](docs/windows-installer-updates.md).
 
-To copy your existing browser runtime into a test ZIP, see
-[Windows portable packaging](docs/windows-portable-package.md).
-`.\scripts\package_windows_portable.ps1` creates a staged folder, ZIP and SHA256
-checksum under `dist` while retaining the existing build output. It requires
-no browser rebuild; the extracted package still needs a standalone launch test.
+Mac-style red/yellow/green buttons are optional. Enable `helium://flags/#arcium-mac-window-buttons` and relaunch. Alpha.3 includes the duplicate Windows-caption correction from [PR #39](https://github.com/Metoku/Arcium-Windows/pull/39). The maintainer confirmed the New Tab correction after a local incremental rebuild on 2026-11-05.
 
-For synchronized Space colors, Windows Mica/Acrylic, rounded-frame and sidebar
-controls, see [Windows workspace appearance](docs/arc-appearance-windows.md).
-`--feature all --apply` validates and applies all five integrations as
-one source transaction before an incremental build. Native compilation and
-visible acceptance are still required for the appearance port.
+## Features and limits
 
-For first-launch setup, browser import and an independent Windows profile, see
-[Windows onboarding and profile isolation](docs/windows-onboarding.md).
-Arcium uses `%LOCALAPPDATA%\Arcium\User Data` instead of Helium's profile folder.
-Existing prepared trees need `--feature onboarding --apply` and an incremental
-build; new browser-only builds apply this integration automatically before GN.
+The shared core supplies Spaces, profiles, Pins, Favorites, folders, split views, the command bar, Peek, recent-tab previews and Little Arc. Windows integrations expose their workflow and appearance controls, Arc sidebar discovery, password CSV import, first-run setup and separate browser identity.
 
-For the optional Windows workflow controls and reversible shortcut preset, see
-[Arc workflow on Windows](docs/arc-workflow-windows.md). The integration applies
-to an already prepared tree and requires an incremental browser build.
+- [Workflow and shortcuts](docs/arc-workflow-windows.md)
+- [Space colors, customization and Windows Mica/Acrylic](docs/arc-appearance-windows.md)
+- [Arc sidebar import](docs/arc-import-windows.md): supported Spaces, Pins, folders and Favorites; optional history. Imported split layouts are flattened and some source identities remain unavailable.
+- [Saved passwords](docs/arc-password-import-windows.md): separate CSV import into the chosen profile. Cookies, existing sign-ins, extensions and passkeys are not transferred by that flow.
+- [Mac-style window buttons](docs/mac-window-buttons.md): Windows minimize/maximize/close actions with a leading-button style. Broader DPI/accessibility acceptance is still needed.
 
-For opt-in red/yellow/green controls at the top left, see
-[Mac-style window buttons](docs/mac-window-buttons.md). This separate frame
-style keeps Windows actions and requires an incremental build, then enabling
-its browser flag. Its native compilation and visible acceptance remain pending.
+Widevine/PlayReady playback has not been established for this release. Do not describe DRM-protected streaming as supported until actual encrypted playback is tested. Native macOS Liquid Glass is not a Windows renderer.
 
-For the optional Windows Arc sidebar importer and Space picker, see
-[Import from Arc on Windows](docs/arc-import-windows.md). It reuses Arcium's
-saved-Pins importer with corrected Windows discovery and additional sidebar
-format support. Windows browser compilation and real-data acceptance remain
-required before calling migration complete.
+## Personal maintenance and builds
 
-The optional [Windows saved-password integration](docs/arc-password-import-windows.md)
-restores local password-manager support and imports an Arc CSV export through
-Chromium's native UI. It is separate from saved-sidebar migration and needs
-Windows runtime acceptance after rebuilding.
+Use **Check for Arcium updates** when you want to update an installed copy. Preview releases require the preview-channel option. This is an on-demand checker, not a background updater; it verifies the release's installer/checksum pair before offering installation.
 
-CI can detect upstream changes and open reviewable update proposals. Until a Windows port compiles successfully, it must **not** claim to produce working binaries or automatically publish releases. Upstream revisions will be pinned and tested before adoption.
+The [upstream monitor](.github/workflows/upstream-sync.yml) checks Arcium every six hours and prepares a separate review candidate. It does not change the installed browser, merge proposals or publish releases. If GitHub blocks automatic PR creation, its run summary and [permission issue #28](https://github.com/Metoku/Arcium-Windows/issues/28) provide a manual comparison link. See [automation and maintenance](docs/automation.md).
 
-## Implemented repository foundation
+Windows source is pinned to Chromium **156.0.8078.47**, Arcium core [4e8f8e2b](https://github.com/dr-baker/Arcium/tree/4e8f8e2bd3cdcab014ae9663907db93e915cb850), and the tracked [Windows platform revision](upstream/helium-windows.sha). Upstream compatibility and security changes need review before adopting a new pin.
 
-- **Pinned upstream core:** [tracked SHA](upstream/arcium-core.sha).
-- **Upstream monitoring:** [scheduled workflow](.github/workflows/upstream-sync.yml) (every six hours, opens reviewable update PRs).
-- **Source validation:** [Linux and Windows checks](.github/workflows/validate.yml), including unit tests, upstream revision verification, and Windows checkout of the exact pinned core.
-- **Windows source bootstrap:** [PowerShell script](scripts/fetch_core.ps1), which fetches the pinned source but **does not compile Chromium**.
-- **Maintenance:** [Automation and GitHub settings](docs/automation.md) and [first Windows build milestone](https://github.com/Metoku/Arcium-Windows/issues/1).
+Existing local builds use [incremental resume](docs/local-windows-incremental-build.md). Keep `out\Default`; Git updates alone do not change the compiled browser. [Portable packaging](docs/windows-portable-package.md) copies a finished runtime. [Installer packaging](docs/windows-installer-updates.md) wraps that ZIP without recompiling Chromium.
 
-## Roadmap
+## Validation and next work
 
-1. Track upstream core revisions and validate repository metadata.
-2. Audit core patches for Windows compatibility.
-3. Adapt a Windows Chromium/Helium toolchain and compile a first working browser.
-4. Add Windows UI integration, smoke tests, and regression coverage.
-5. Implement installer, signing, release channels, and secure updates.
+CI covers Linux/Windows repository tests, pinned source and patch replay, API/compiler contracts, and installer install/upgrade/uninstall tests. Some workflows can attempt a full Windows Chromium build on a suitable host, but a metadata check is not a browser compilation. Alpha.3 was built and accepted locally by the maintainer; it is not claimed to be a fully automated native release build.
 
-## Licensing
+Current priorities are upstream/security maintenance, broader profile/import/upgrade testing and accurate release records. Signing, background updates, DRM and more complete migration remain separate work. See [automation](docs/automation.md) for the evidence and release procedure.
 
-Preserve original copyright notices and applicable GPL and third-party licenses when importing code. Review trademark and branding requirements before distribution.
+## Architecture and licensing
+
+[Arcium core](https://github.com/dr-baker/Arcium) owns shared browser behavior and Chromium patches; this repository owns Windows platform integration, build helpers, tests and packaging. [Arcium-macOS](https://github.com/dr-baker/Arcium-macOS) and [Xelium-macOS](https://github.com/minervanet/xelium-macos) are references, not Windows build sources.
+
+Original copyright notices and GPL/Chromium/third-party licenses are retained. Original Arcium icon attribution is in [installer assets](installer/windows/assets/README.md). Distribution and branding verification remain part of release maintenance.

@@ -7,9 +7,11 @@ does not compile, install, launch, sign or publish a browser.
 From `D:\src\Arcium-Windows`, run:
 
 ```powershell
-git pull --ff-only origin codex/arc-workflow-windows
+git switch main
+if ($LASTEXITCODE -ne 0) { throw 'Branch switch failed.' }
+git pull --ff-only origin main
 if ($LASTEXITCODE -ne 0) { throw 'Repository update failed.' }
-.\scripts\package_windows_portable.ps1 -Version '0.1.0-alpha.1'
+.\scripts\package_windows_portable.ps1 -Version '0.1.0-alpha.3'
 ```
 
 Windows PowerShell 5.1 and PowerShell 7 are supported. No additional Python,
@@ -20,9 +22,9 @@ Default input:
 
 Outputs:
 
-- `dist\Arcium-Windows-0.1.0-alpha.1\` -- staged runtime files.
-- `dist\Arcium-Windows-0.1.0-alpha.1.zip` -- ZIP with that folder at its root.
-- `dist\Arcium-Windows-0.1.0-alpha.1.zip.sha256` -- checksum.
+- `dist\Arcium-Windows-0.1.0-alpha.3\` -- staged runtime files.
+- `dist\Arcium-Windows-0.1.0-alpha.3.zip` -- ZIP with that folder at its root.
+- `dist\Arcium-Windows-0.1.0-alpha.3.zip.sha256` -- checksum.
 
 The version names the package; it does not change the compiled browser version.
 The helper refuses an existing output folder, ZIP or checksum. For another
@@ -37,7 +39,7 @@ For a read-only file list:
 For different paths:
 
 ```powershell
-.\scripts\package_windows_portable.ps1 -BuildDirectory 'D:\another-build\out\Default' -OutputDirectory 'D:\Arcium-Packages' -Version '0.1.0-alpha.2'
+.\scripts\package_windows_portable.ps1 -BuildDirectory 'D:\another-build\out\Default' -OutputDirectory 'D:\Arcium-Packages' -Version '0.1.0-alpha.4'
 ```
 
 The list follows the runtime categories of pinned Chromium

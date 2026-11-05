@@ -25,8 +25,10 @@ Exit the running Arcium build, then run from the repository root:
 ```powershell
 git fetch origin
 if ($LASTEXITCODE -ne 0) { throw 'Repository fetch failed.' }
-git switch codex/mac-caption-single-frame
-if ($LASTEXITCODE -ne 0) { throw 'Could not switch to the caption fix branch.' }
+git switch main
+if ($LASTEXITCODE -ne 0) { throw 'Could not switch to main.' }
+git pull --ff-only origin main
+if ($LASTEXITCODE -ne 0) { throw 'Repository update failed.' }
 python -m scripts.apply_windows_arc_workflow --feature mac-buttons --apply
 if ($LASTEXITCODE -ne 0) { throw 'Caption fix was not applied.' }
 ```
@@ -34,7 +36,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Caption fix was not applied.' }
 After `ARCIUM_WINDOWS_MAC_BUTTONS_APPLIED`, resume the existing build:
 
 ```powershell
-.\scripts\local_windows_resume.ps1 -Mode resume -Jobs 8 -KeepGoing
+.\scripts\local_windows_resume.ps1 -Mode resume -Jobs 5
 ```
 
 Source and compiled output are retained. This is a separate opt-in style;
@@ -105,4 +107,7 @@ Before accepting it, check all three actions, green maximize/restore after
 resize, dragging between buttons, Windows Snap, full screen, frameless/sidebar
 reveal, theme/accessibility changes and 100/125/150/200% display scaling in
 Classic and Vertical layouts. The previously working browser build establishes
-the baseline; this new style still needs its own native build and UI checks.
+the baseline. On 2026-11-05 the maintainer reported a successful incremental
+build and confirmed that the duplicate Windows controls disappeared on New Tab
+pages. The corrected runtime is in the published alpha.3 release. Broader
+DPI, accessibility and theme/full-screen configurations remain acceptance work.
