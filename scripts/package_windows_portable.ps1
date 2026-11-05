@@ -132,7 +132,15 @@ foreach ($relative in $relativeFiles) {
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 [System.IO.Compression.ZipFile]::CreateFromDirectory(
     $packageRoot, $zipPath, [System.IO.Compression.CompressionLevel]::Optimal, $true)
-$hash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+$sha256 = [System.Security.Cryptography.SHA256]::Create()
+$archiveStream = [System.IO.File]::OpenRead($zipPath)
+try {
+    $hash = [System.BitConverter]::ToString($sha256.ComputeHash($archiveStream)).Replace('-', '').ToLowerInvariant()
+}
+finally {
+    $archiveStream.Dispose()
+    $sha256.Dispose()
+}
 [System.IO.File]::WriteAllText($checksumPath,
     $hash + '  ' + [System.IO.Path]::GetFileName($zipPath) + [Environment]::NewLine,
     [System.Text.UTF8Encoding]::new($false))
