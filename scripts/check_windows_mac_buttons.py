@@ -16,7 +16,11 @@ from scripts.apply_windows_arc_workflow import (
 
 
 MAC_PATCH = ROOT / "patches/windows/mac-window-buttons.patch"
-MAC_API_FILES = ("ui/gfx/canvas.h", "ui/views/view.h")
+PREVIOUS_MAC_PATCH = ROOT / "patches/windows/history/mac-window-buttons-v1.patch"
+HOST_SOURCE = "chrome/browser/ui/views/frame/browser_desktop_window_tree_host_win.cc"
+FRAME_MODE_SIGNATURE = "views::FrameMode BrowserDesktopWindowTreeHostWin::GetFrameMode() const"
+MAC_API_FILES = ("ui/gfx/canvas.h", "ui/views/view.h",
+                 "ui/views/win/hwnd_message_handler.cc")
 
 
 def cpp_function(text: str, signature: str) -> str:
@@ -99,7 +103,16 @@ def check_mac_buttons(source: Path, originals: dict[str, bytes], catalogs: tuple
     """Check both overlapping catalog orders in every supported source format."""
     if not (shutil.which("g++") or shutil.which("c++")):
         raise RuntimeError("A C++ compiler is required for Mac caption contract checks")
-    checks, proof, postimages, upgrades = [], None, {}, []
+    checks, proof, postimages, upgrades, frame_upgrades = [], None, {}, [], []
+    expected_previous = json.loads(
+        (ROOT / "tests/fixtures/mac_window_functions.json").read_text())["previous_host_frame_mode"]
+    if cpp_function(originals[HOST_SOURCE].decode(), FRAME_MODE_SIGNATURE) != expected_previous:
+        raise RuntimeError("Previous HWND frame-mode fixture differs from pinned source")
+    previous_handler = json.loads(
+        (ROOT / "tests/fixtures/mac_window_functions.json").read_text())["previous_hwnd_frame_change"]
+    if cpp_function(originals["ui/views/win/hwnd_message_handler.cc"].decode(),
+                    "void HWNDMessageHandler::FrameTypeChanged()") != previous_handler:
+        raise RuntimeError("Previous HWND transition fixture differs from pinned source")
     for style in ("LF", "CRLF", "mixed", "missing-final-newline"):
         baseline = {}
         for index, (name, data) in enumerate(sorted(originals.items())):
@@ -175,6 +188,30 @@ def check_mac_buttons(source: Path, originals: dict[str, bytes], catalogs: tuple
                        if p != MAC_CAPTION_SOURCE):
                     raise RuntimeError("Mac caption upgrade rewrote unrelated source")
                 upgrades.append(style)
+                # Reconstruct the exact earlier complete caption catalog beside
+                # the already-applied workflow/appearance catalogs. Exercise
+                # both the fixed and the earlier protected-member variant.
+                for protected in (False, True):
+                    integrate(source, patch=MAC_PATCH, revert=True)
+                    integrate(source, patch=PREVIOUS_MAC_PATCH, apply=True)
+                    if protected:
+                        path = source / MAC_CAPTION_SOURCE
+                        path.write_bytes(path.read_bytes().replace(
+                            MAC_LAYOUT_INVALIDATION, LEGACY_MAC_LAYOUT_INVALIDATION, 1))
+                    earlier = {p:((source/p).read_bytes(), (source/p).stat().st_mtime_ns)
+                               for p in originals}
+                    if integrate(source, patch=MAC_PATCH) != "UPDATE_AVAILABLE":
+                        raise RuntimeError("Previous complete caption style was not recognized")
+                    if earlier != {p:((source/p).read_bytes(), (source/p).stat().st_mtime_ns)
+                                   for p in originals}:
+                        raise RuntimeError("Read-only HWND caption upgrade rewrote source")
+                    integrate(source, patch=MAC_PATCH, apply=True)
+                    if postimage != {p:(source/p).read_bytes() for p in originals}:
+                        raise RuntimeError("Previous caption style did not upgrade exactly")
+                    if any((source/p).stat().st_mtime_ns != stamp
+                           for p,(data,stamp) in earlier.items() if data == postimage[p]):
+                        raise RuntimeError("Caption migration rewrote an unrelated source file")
+                    frame_upgrades.append({"endings":style,"protected_member_variant":protected})
             times = {p:(source / p).stat().st_mtime_ns for p in originals}
             for patch in order:
                 integrate(source, patch=patch, apply=True)
@@ -187,4 +224,5 @@ def check_mac_buttons(source: Path, originals: dict[str, bytes], catalogs: tuple
             checks.append({"endings":style, "order":[p.name for p in order]})
     return {"status":"MAC_CAPTION_REPLAY_AND_CONTRACTS_PASSED", "checks":checks,
             "proof":proof, "previous_version_upgrades":upgrades,
+            "previous_frame_mode_upgrades":frame_upgrades,
             "browser_compiled":False, "native_rendering_verified":False}

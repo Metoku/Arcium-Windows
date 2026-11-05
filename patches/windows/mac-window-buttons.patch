@@ -91,22 +91,28 @@
  #include "ui/strings/grit/ui_strings.h"
  #include "ui/views/metadata/view_factory.h"
  #include "ui/views/widget/widget.h"
-@@ -163,7 +166,13 @@
+@@ -163,7 +166,19 @@
  }
  
  bool BrowserFrameViewWin::CaptionButtonsOnLeadingEdge() const {
 -  return false;
-+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
++  return ShouldUseMacWindowButtons(GetBrowserView());
++}
++
++// static
++bool BrowserFrameViewWin::ShouldUseMacWindowButtons(BrowserView* browser_view) {
++  return browser_view &&
++         base::CommandLine::ForCurrentProcess()->HasSwitch(
 +             "arcium-mac-window-buttons") &&
-+         GetBrowserView()->GetIsNormalType() &&
-+         ShouldBrowserCustomDrawTitlebar(GetBrowserView()) &&
++         browser_view->GetIsNormalType() &&
++         ShouldBrowserCustomDrawTitlebar(browser_view) &&
 +         !base::i18n::IsRTL() && !ui::TouchUiController::Get()->touch_ui() &&
 +         ui::NativeTheme::GetInstanceForNativeUi()->forced_colors() ==
 +             ui::ColorProviderKey::ForcedColors::kNone;
  }
  
  int BrowserFrameViewWin::GetTopInset(bool restored) const {
-@@ -306,6 +315,24 @@
+@@ -306,6 +321,24 @@
    const int frame_component =
        browser_widget()->client_view()->NonClientHitTest(point);
  
@@ -131,7 +137,7 @@
    // In fullscreen there is no draggable or resizable frame, so window
    // controls overlay hits outside the caption buttons must stay HTCLIENT;
    // HTCAPTION would swallow clicks meant for the overlaid app UI.
-@@ -360,7 +387,8 @@
+@@ -360,7 +393,8 @@
    // cursor while hovering over the caption buttons, thus giving the incorrect
    // impression that the user can resize the window.
    RECT button_bounds = {0};
@@ -141,7 +147,7 @@
                                        DWMWA_CAPTION_BUTTON_BOUNDS,
                                        &button_bounds, sizeof(button_bounds)))) {
      gfx::RectF button_bounds_in_dips = gfx::ConvertRectToDips(
-@@ -408,10 +436,8 @@
+@@ -408,10 +442,8 @@
    }
  }
  
@@ -154,7 +160,7 @@
  }
  
  void BrowserFrameViewWin::ResetWindowControls() {
-@@ -598,7 +624,7 @@
+@@ -598,7 +630,7 @@
  }
  
  bool BrowserFrameViewWin::ShouldShowWindowIcon(TitlebarType type) const {
@@ -163,7 +169,7 @@
      return false;
    }
    if (browser_widget()->IsFullscreen()) {
-@@ -608,7 +634,7 @@
+@@ -608,7 +640,7 @@
  }
  
  bool BrowserFrameViewWin::ShouldShowWindowTitle(TitlebarType type) const {
@@ -172,7 +178,7 @@
      return false;
    }
    if (browser_widget()->IsFullscreen()) {
-@@ -754,8 +780,10 @@
+@@ -754,8 +786,10 @@
            ? (TitlebarHeight(false) - WindowTopY())
            : GetFrameHeight();
  
@@ -311,3 +317,50 @@
      {"hide-window-buttons",
       "Hide window buttons",
       "Hides the close, minimize, and maximize buttons on browser-drawn title "
+--- a/chrome/browser/ui/views/frame/browser_frame_view_win.h
++++ b/chrome/browser/ui/views/frame/browser_frame_view_win.h
+@@ -37,6 +37,9 @@
+   // BrowserFrameView:
+   BrowserLayoutParams GetBrowserLayoutParams() const override;
+   bool CaptionButtonsOnLeadingEdge() const override;
++
++  // Shared with the HWND host before the FrameView has been constructed.
++  static bool ShouldUseMacWindowButtons(BrowserView* browser_view);
+   int GetTopInset(bool restored) const override;
+   SkColor GetCaptionColor(BrowserFrameActiveState active_state) const override;
+   void UpdateThrobber(bool running) override;
+--- a/chrome/browser/ui/views/frame/browser_desktop_window_tree_host_win.cc
++++ b/chrome/browser/ui/views/frame/browser_desktop_window_tree_host_win.cc
+@@ -494,6 +494,14 @@
+     return views::FrameMode::SYSTEM_DRAWN;
+   }
+ 
++  // Glass-backed client pixels can expose system caption glyphs, notably on
++  // the transparent New Tab page. Select the custom frame mode from the first
++  // HWND query so Windows does not paint a second set behind the leading
++  // controls. Use the same eligibility policy as the buttons themselves.
++  if (BrowserFrameViewWin::ShouldUseMacWindowButtons(browser_view_)) {
++    return views::FrameMode::CUSTOM_DRAWN;
++  }
++
+   const views::FrameMode system_frame_mode =
+       views::FrameMode::SYSTEM_DRAWN_NO_CONTROLS;
+ 
+--- a/ui/views/win/hwnd_message_handler.cc
++++ b/ui/views/win/hwnd_message_handler.cc
+@@ -3792,6 +3792,15 @@
+ }
+ 
+ void HWNDMessageHandler::PerformDwmTransition() {
++  if (!IsFrameSystemDrawn()) {
++    // The frame can become custom while a native transition is deferred in
++    // fullscreen. Refresh the client frame without requesting a system-frame
++    // transition, and consume the deferred request.
++    dwm_transition_desired_ = false;
++    delegate_->HandleFrameChanged();
++    SendFrameChanged();
++    return;
++  }
+   CHECK(IsFrameSystemDrawn());
+ 
+   dwm_transition_desired_ = false;
