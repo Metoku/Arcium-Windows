@@ -74,7 +74,9 @@ async function run() {
   let result;
   if (config.workflow) {
     const yaml = fs.readFileSync('.github/workflows/upstream-sync.yml', 'utf8');
-    const script = yaml.split('          script: |\n')[1];
+    const ending = config.workflowEndings === 'CRLF' ? '\r\n' : '\n';
+    const source = yaml.replace(/\r?\n/g, ending);
+    const script = source.split(/          script: \|\r?\n/)[1];
     if (!script) throw new Error('Workflow script hook missing');
     const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
     await new AsyncFunction('require', 'github', 'context', 'core', script)(
@@ -98,7 +100,8 @@ class UpstreamMonitorTests(unittest.TestCase):
                                 text=True, cwd=ROOT, timeout=20)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         output = json.loads(result.stdout)
-        self.assertEqual(sum(c['name'] == 'writeSummary' for c in output['calls']), 1)
+        self.assertEqual(sum(c['name'] == 'writeSummary' for c in output['calls']),
+                         1, output.get('error', output))
         # All mutating APIs either target the candidate or proposal metadata.
         for call in output['calls']:
             if call['name'] == 'writePin':
@@ -193,9 +196,11 @@ class UpstreamMonitorTests(unittest.TestCase):
         self.assertFalse(self.call(repeated, 'updatePR'))
 
     def test_actual_workflow_executes_the_module(self):
-        output = self.run_monitor(workflow=True)
-        self.assertNotIn('error', output)
-        self.assertEqual(len(self.call(output, 'createPR')), 1)
+        for ending in ('LF', 'CRLF'):
+            with self.subTest(ending=ending):
+                output = self.run_monitor(workflow=True, workflowEndings=ending)
+                self.assertNotIn('error', output)
+                self.assertEqual(len(self.call(output, 'createPR')), 1)
 
     def test_write_capable_workflow_has_no_pull_request_trigger(self):
         workflow = (ROOT / '.github/workflows/upstream-sync.yml').read_text()
