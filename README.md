@@ -12,6 +12,8 @@ The installer provides Start-menu shortcuts, an optional desktop shortcut, the o
 
 Arcium stores its profile in `%LOCALAPPDATA%\Arcium\User Data`, separately from Helium. Quit Arcium before backing up that folder. Updates and uninstall retain the profile. See [onboarding and profile isolation](docs/windows-onboarding.md) and [installer/update behavior](docs/windows-installer-updates.md).
 
+If extension downloads are disabled after setup, see [services review and extension installation](docs/windows-extension-services.md).
+
 Mac-style red/yellow/green buttons are optional. Enable `helium://flags/#arcium-mac-window-buttons` and relaunch. Alpha.3 includes the duplicate Windows-caption correction from [PR #39](https://github.com/Metoku/Arcium-Windows/pull/39). The maintainer confirmed the New Tab correction after a local incremental rebuild on 2026-11-05.
 
 ## Features and limits

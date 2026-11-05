@@ -1,0 +1,323 @@
+--- a/chrome/app/settings_strings.grdp
++++ b/chrome/app/settings_strings.grdp
+@@ -1696,11 +1696,11 @@
+     <message name="IDS_SETTINGS_HELIUM_SCHEMA_IGNORE" desc="Checkbox label to ignore any future services change alerts">
+       Don't notify me again
+     </message>
+-    <message name="IDS_SETTINGS_HELIUM_SERVICES_SETUP_PENDING_TEXT" desc="Description shown in services settings when user has not completed onboarding">
+-      Helium services are not available until setup is complete to ensure your privacy and consent.
+-    </message>
+-    <message name="IDS_SETTINGS_HELIUM_SERVICES_SETUP_PENDING_BUTTON" desc="Button label directing user to complete onboarding">
+-      Complete setup
++    <message name="IDS_SETTINGS_HELIUM_SERVICES_SETUP_PENDING_TEXT" desc="Description shown before the user has reviewed browser services and given consent">
++      Review browser services to choose whether to allow connections, including extension downloads and updates.
++    </message>
++    <message name="IDS_SETTINGS_HELIUM_SERVICES_SETUP_PENDING_BUTTON" desc="Button label opening the browser services consent choices">
++      Review services
+     </message>
+     <message name="IDS_SETTINGS_HELIUM_SERVICES_TOGGLE" desc="Global toggle for enabling/disabling of all Helium services">
+       Allow connecting to Helium services
+--- a/chrome/browser/resources/settings/privacy_page/services_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/services_page.ts
+@@ -169,7 +169,7 @@
+   }
+ 
+   private onServicesPendingButtonClick_() {
+-    window.open('chrome://setup', '_blank');
++    window.open('chrome://setup/?services=1', '_blank');
+   }
+ }
+ 
+--- a/components/helium_onboarding/BUILD.gn
++++ b/components/helium_onboarding/BUILD.gn
+@@ -40,6 +40,9 @@
+     "package.json",
+     "vite.config.ts",
+     "svelte.config.js",
++    "src/lib/onboarding-flow.ts",
++    "src/components/PageNavigation.svelte",
++    "src/pages/HeliumServices.svelte",
+   ]
+ 
+   deps = [ ":localized_strings" ]
+--- a/components/helium_onboarding/src/components/PageNavigation.svelte
++++ b/components/helium_onboarding/src/components/PageNavigation.svelte
+@@ -14,6 +14,7 @@
+         importableProfiles,
+         importDiscovery,
+         importProfile,
++        preferencesBootstrap,
+         setPref,
+     } from "../lib/browser";
+     import {
+@@ -25,6 +26,7 @@
+         previouslyImportedProfiles,
+         failedProfiles,
+         standaloneImport,
++        standaloneServices,
+     } from "../lib/onboarding-flow";
+     import { arcCta, arcImport, finishStandaloneImport } from "../lib/arc";
+ 
+@@ -44,7 +46,8 @@
+     // browser. Refreshing may (re)move the previously targeted profiles. The
+     // user has to be aware of both.
+     const nextDisabled = $derived(
+-        working || ($currentPage === "DataImport" && $importDiscovery.refreshing)
++        working || ($currentPage === "DataImport" && $importDiscovery.refreshing) ||
++        ($currentPage === "HeliumServices" && $preferencesBootstrap !== "ready")
+     );
+ 
+     const doNext = async (): Promise<boolean> => {
+@@ -54,6 +57,10 @@
+             // then we mark consent (having seen the page) as true
+             await setPref("services.user_consented", true);
+             acceptLatestSchema();
++            if (standaloneServices) {
++                window.open("chrome://settings/privacy/services", "_self");
++                return false;
++            }
+             break;
+ 
+         case "DefaultBrowser":
+@@ -122,7 +129,8 @@
+ 
+     const next = async () => {
+         if (working || ($currentPage === "DataImport" &&
+-                        $importDiscovery.refreshing)) {
++                        $importDiscovery.refreshing) ||
++            ($currentPage === "HeliumServices" && $preferencesBootstrap !== "ready")) {
+             return;
+         }
+         working = true;
+@@ -141,7 +149,12 @@
+ 
+     const back = () => {
+         stepFailed = false;
+-        previousPage();
++        if (standaloneServices) {
++            // Leaving the review is not consent and does not complete setup.
++            window.open("chrome://settings/privacy/services", "_self");
++        } else {
++            previousPage();
++        }
+     };
+ 
+ </script>
+--- a/components/helium_onboarding/src/lib/onboarding-flow.ts
++++ b/components/helium_onboarding/src/lib/onboarding-flow.ts
+@@ -29,7 +29,15 @@
+ export const standaloneImport = typeof location !== "undefined" &&
+     new URLSearchParams(location.search).get("import") === "arc";
+ 
+-const index = writable(standaloneImport ? flow.indexOf("ArcSpaces") : 0);
++// Reviewing services is independent of first-run completion. Opening this
++// route never grants consent or restarts an import. An explicit Arc import
++// takes precedence if both query parameters are present.
++export const standaloneServices = !standaloneImport &&
++    typeof location !== "undefined" &&
++    new URLSearchParams(location.search).get("services") === "1";
++
++const index = writable(standaloneImport ? flow.indexOf("ArcSpaces") :
++    standaloneServices ? flow.indexOf("HeliumServices") : 0);
+ 
+ export const currentPage = derived(
+     index,
+@@ -53,6 +61,9 @@
+ const shouldSkip = (page: typeof flow[number]): boolean => {
+     if (standaloneImport) {
+         return page !== 'ArcSpaces';
++    }
++    if (standaloneServices) {
++        return page !== 'HeliumServices';
+     }
+     switch (page) {
+         case 'ArcSpaces':
+--- a/components/helium_onboarding/src/pages/HeliumServices.svelte
++++ b/components/helium_onboarding/src/pages/HeliumServices.svelte
+@@ -1,14 +1,15 @@
+ <script lang="ts">
+-    import { CardLink, HeliumLogo } from "@imput/helium-prism";
++    import { Button, CardLink, HeliumLogo } from "@imput/helium-prism";
+     import { s } from "../lib/strings";
+     import { platform } from "../lib/platform";
+     import { currentPage } from "../lib/onboarding-flow";
+-    import { preferences as pr } from "../lib/browser";
++    import { preferences as pr, preferencesBootstrap, retryPreferences } from "../lib/browser";
+ 
+     import PreferenceToggle from "../components/PreferenceToggle.svelte";
+     import PageHeader from "../components/PageHeader.svelte";
+ 
+     const visible = $derived($currentPage === "HeliumServices");
++    const preferencesReady = $derived($preferencesBootstrap === "ready");
+     const servicesEnabled = $derived($pr["services.enabled"]);
+     const services = ([
+         {
+@@ -57,10 +58,15 @@
+             iconHeight="32px"
+         />
+         <div class="page-content">
++            {#if $preferencesBootstrap === "failed"}
++                <p role="alert">{s.button.failed}</p>
++                <Button onclick={retryPreferences}>{s.spaces.tryAgain}</Button>
++            {/if}
+             <PreferenceToggle
+                 title={s.services.connectionTitle}
+                 desc={s.services.connectionDesc}
+                 prefName="services.enabled"
++                disabled={!preferencesReady}
+             />
+             <div class="toggle-separator"></div>
+             {#each services as service (service.prefName)}
+@@ -68,7 +74,7 @@
+                     title={service.title}
+                     desc={service.desc}
+                     prefName={service.prefName}
+-                    disabled={!servicesEnabled}
++                    disabled={!preferencesReady || !servicesEnabled}
+                 />
+             {/each}
+             <!-- TODO: wire instance settings on android -->
+--- a/components/helium_onboarding/tests/import-navigation.test.mjs
++++ b/components/helium_onboarding/tests/import-navigation.test.mjs
+@@ -66,7 +66,8 @@
+     let advances = 0;
+     const context = vm.createContext({
+         exports: {}, $derived: value => value, $state: value => value, SvelteSet: Set,
+-        standaloneImport: false, $arcCta: null,
++        standaloneImport: false, standaloneServices: false, $arcCta: null,
++        $preferencesBootstrap: 'ready',
+         $currentPage: 'DataImport', $userChoseHeliumAsDefault: false,
+         $importableProfiles: [profile(1), profile(2)], $selectedProfiles: new Set([101, 102]),
+         $importDiscovery: {refreshing: false},
+@@ -77,7 +78,7 @@
+         ...extra,
+     });
+     vm.runInContext(transpile(source, true), context);
+-    return {context, next: () => vm.runInContext('next()', context), state: () => vm.runInContext('({working, stepFailed})', context), advances: () => advances};
++    return {context, next: () => vm.runInContext('next()', context), back: () => vm.runInContext('back()', context), state: () => vm.runInContext('({working, stepFailed})', context), advances: () => advances};
+ }
+ 
+ test('imports FIFO with exactly one active listener and ignores intermediate/stale events', async () => {
+@@ -198,3 +199,122 @@
+         compile(readFileSync('src/components/' + file, 'utf8'), {filename: file, generate: 'client'});
+     }
+ });
++
++function servicesFlow(search, prefs) {
++    const context = vm.createContext({exports: {}, URLSearchParams, SvelteSet: Set,
++        writable: stores.writable, derived: stores.derived, get: stores.get,
++        platform: {is: {android: false}}, location: {search},
++        preferences: stores.writable(prefs), importableProfiles: stores.writable([]),
++        canBeDefaultBrowser: true, isDefaultBrowser: stores.writable(false),
++    });
++    vm.runInContext(transpile(readFileSync('src/lib/onboarding-flow.ts', 'utf8'), true), context);
++    return context.exports;
++}
++
++test('services review opens directly for fresh, completed and loading profiles and cannot walk into imports', () => {
++    for (const prefs of [{}, {completed_onboarding: true}, {completed_onboarding: false}]) {
++        const before = {...prefs};
++        const flow = servicesFlow('?services=1', prefs);
++        assert.equal(flow.standaloneServices, true);
++        assert.equal(flow.standaloneImport, false);
++        for (const action of [() => {}, flow.nextPage, flow.previousPage,
++            () => flow.chooseRoute('arcCustom'), () => flow.chooseRoute('other')]) {
++            action();
++            assert.equal(stores.get(flow.currentPage), 'HeliumServices');
++        }
++        assert.deepEqual(prefs, before, 'opening and navigating never change native prefs');
++    }
++});
++
++test('Arc import entry takes precedence and unrelated setup URLs retain the Welcome route', () => {
++    for (const search of ['?services=1&import=arc', '?import=arc&services=1']) {
++        const flow = servicesFlow(search, {completed_onboarding: true});
++        assert.equal(flow.standaloneServices, false);
++        assert.equal(flow.standaloneImport, true);
++        assert.equal(stores.get(flow.currentPage), 'ArcSpaces');
++    }
++    for (const search of ['', '?services=0', '?services=true', '?import=other']) {
++        const flow = servicesFlow(search, {completed_onboarding: true});
++        assert.equal(flow.standaloneServices, false);
++        assert.equal(stores.get(flow.currentPage), 'Welcome');
++    }
++});
++
++function serviceNavigation(extra = {}) {
++    const calls = [];
++    const n = navigation(null, {$currentPage: 'HeliumServices', standaloneServices: true,
++        setPref: async (...args) => calls.push(['pref', ...args]),
++        acceptLatestSchema: () => calls.push(['schema']),
++        window: {open: (...args) => calls.push(['navigate', ...args])},
++        importProfile: () => assert.fail('services review must not import'),
++        askToBeDefault: () => assert.fail('services review must not change the default browser'),
++        ...extra,
++    });
++    return {...n, calls};
++}
++
++test('opening and leaving services review never grant consent or complete onboarding', () => {
++    const n = serviceNavigation();
++    assert.deepEqual(n.calls, [], 'merely opening review has no writes or navigation');
++    n.back();
++    assert.deepEqual(n.calls, [['navigate', 'chrome://settings/privacy/services', '_self']]);
++    assert.equal(n.advances(), 0);
++});
++
++test('Next waits for persisted consent, deduplicates clicks, and returns to services without changing choices', async () => {
++    const prefs = {completed_onboarding: true, 'services.enabled': false,
++        'services.ext_proxy': false, 'services.user_consented': false};
++    let resolve;
++    const writes = [];
++    const n = serviceNavigation({setPref: (name, value) => {
++        writes.push([name, value]);
++        return new Promise(done => {resolve = () => {prefs[name] = value; done();};});
++    }});
++    const pending = n.next();
++    await n.next();
++    assert.deepEqual(writes, [['services.user_consented', true]]);
++    assert.deepEqual(n.calls, [], 'no navigation or schema acceptance before the native reply');
++    assert.equal(n.state().working, true);
++    resolve(); await pending;
++    assert.deepEqual(n.calls, [['schema'], ['navigate', 'chrome://settings/privacy/services', '_self']]);
++    assert.deepEqual(prefs, {completed_onboarding: true, 'services.enabled': false,
++        'services.ext_proxy': false, 'services.user_consented': true});
++    assert.equal(n.advances(), 0);
++    assert.equal(n.state().working, false);
++});
++
++test('failed consent write stays on review with a working retry', async () => {
++    let fail = true;
++    const writes = [];
++    const n = serviceNavigation({setPref: async (...args) => {
++        writes.push(args);
++        if (fail) throw new Error('native bridge failed');
++    }});
++    await n.next();
++    assert.deepEqual(n.calls, []);
++    assert.equal(n.advances(), 0);
++    assert.equal(n.state().stepFailed, true);
++    assert.equal(n.state().working, false);
++    fail = false; await n.next();
++    assert.deepEqual(writes, [['services.user_consented', true], ['services.user_consented', true]]);
++    assert.equal(n.state().stepFailed, false);
++    assert.deepEqual(n.calls, [['schema'], ['navigate', 'chrome://settings/privacy/services', '_self']]);
++});
++
++test('pending or failed preferences cannot grant consent; an authoritative reply unlocks review', async () => {
++    for (const state of ['pending', 'failed']) {
++        const n = serviceNavigation({$preferencesBootstrap: state});
++        await n.next();
++        assert.deepEqual(n.calls, []);
++        assert.equal(n.state().working, false);
++        n.context.$preferencesBootstrap = 'ready';
++        await n.next();
++        assert.deepEqual(n.calls[0], ['pref', 'services.user_consented', true]);
++        assert.deepEqual(n.calls.at(-1), ['navigate', 'chrome://settings/privacy/services', '_self']);
++    }
++});
++
++test('services controls and bootstrap retry compile with Svelte', () => {
++    compile(readFileSync('src/pages/HeliumServices.svelte', 'utf8'),
++        {filename: 'HeliumServices.svelte', generate: 'client'});
++});

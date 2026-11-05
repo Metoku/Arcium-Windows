@@ -38,8 +38,8 @@ ONBOARDING_ANCHOR = "    # Enter source tree to run build commands\n"
 ONBOARDING_STEP = (
     "    # Keep first-run/profile identity separate from installed Helium.\n"
     "    from scripts.apply_windows_arc_workflow import (\n"
-    "        ONBOARDING_PATCH, PASSWORD_PATCH, integrate_bundle)\n"
-    "    integrate_bundle(source_tree, catalogs=(PASSWORD_PATCH, ONBOARDING_PATCH), apply=True)\n\n"
+    "        ONBOARDING_PATCH, PASSWORD_PATCH, SERVICES_PATCH, integrate_bundle)\n"
+    "    integrate_bundle(source_tree, catalogs=(PASSWORD_PATCH, ONBOARDING_PATCH, SERVICES_PATCH), apply=True)\n\n"
 )
 
 

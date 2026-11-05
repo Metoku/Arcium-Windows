@@ -29,7 +29,7 @@ from scripts.apply_windows_arc_workflow import (
     LEGACY_APPEARANCE_CSS, LEGACY_DISCONNECT, PATCH, ROOT,
     appearance_css_addition, git_apply, integrate, integrate_bundle,
     patch_targets, preserve_line_endings,
-    ONBOARDING_PATCH,
+    ONBOARDING_PATCH, SERVICES_PATCH,
 )
 from scripts.check_patch_overlaps import discover_patch_paths, download_original, select_patch_sections
 from scripts.windows_port import audit_staged, chromium_version, git, read_pin, read_series
@@ -152,7 +152,8 @@ def check(core: Path, platform: Path | None = None,
     mac_targets = set(patch_targets(MAC_PATCH.read_text(encoding="utf-8")))
     replay_targets |= mac_targets | set(MAC_API_FILES)
     all_paths, created = discover_patch_paths(patches)
-    onboarding_targets = (set(patch_targets(ONBOARDING_PATCH.read_text(encoding="utf-8")))
+    onboarding_targets = (set(patch_targets(ONBOARDING_PATCH.read_text(encoding="utf-8"))) |
+                          set(patch_targets(SERVICES_PATCH.read_text(encoding="utf-8")))
                           if platform is not None else set())
     if onboarding_targets:
         replay_targets |= onboarding_targets | set(ONBOARDING_API_FILES)
