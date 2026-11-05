@@ -15,5 +15,8 @@
   "chrome/browser/ui/views/frame/browser_caption_button_container_win.h": [
     "  void UpdateMacButtonStyle();",
     "  bool mac_style_ = false;"
+  ],
+  "chrome/browser/ui/views/frame/browser_frame_view_win.h": [
+    "  static bool ShouldUseMacWindowButtons(BrowserView* browser_view);"
   ]
 }

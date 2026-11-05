@@ -5,5 +5,10 @@
       "  void InvalidateLayout(bool avoid_propagate_during_layout = false);": "public",
       "  virtual void PreferredSizeChanged();": "protected"
     }
+  },
+  "chrome/browser/ui/views/frame/browser_frame_view_win.h": {
+    "BrowserFrameViewWin": {
+      "  static bool ShouldUseMacWindowButtons(BrowserView* browser_view);": "public"
+    }
   }
 }

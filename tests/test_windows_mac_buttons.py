@@ -111,7 +111,7 @@ class MacCaptionContracts(unittest.TestCase):
             result=subprocess.run([str(binary)],capture_output=True,text=True)
             self.assertEqual(result.returncode,0,result.stdout+result.stderr)
 
-    def test_opt_in_falls_back_for_native_titlebar_apps_rtl_touch_and_forced_colors(self):
+    def eligibility_host(self):
         native_api=(ROOT/'tests/fixtures/native_theme_appearance.h').read_text()
         prefix=r'''
 namespace base {
@@ -128,11 +128,18 @@ namespace ui {struct ColorProviderKey{enum class ForcedColors{kNone,kActive};};s
 struct BrowserView {bool normal=true,custom=true;bool GetIsNormalType()const{return normal;}};
 bool ShouldBrowserCustomDrawTitlebar(BrowserView* view){return view->custom;}
 struct BrowserFrameViewWin {mutable BrowserView view;BrowserView* GetBrowserView()const{return &view;}
- bool CaptionButtonsOnLeadingEdge()const;};
+ bool CaptionButtonsOnLeadingEdge()const;
+ static bool ShouldUseMacWindowButtons(BrowserView* browser_view);};
 '''
+        return prefix.replace('static bool ShouldUseMacWindowButtons(BrowserView* browser_view);',
+            API['chrome/browser/ui/views/frame/browser_frame_view_win.h'][0].strip())
+
+    def test_opt_in_falls_back_for_native_titlebar_apps_rtl_touch_and_forced_colors(self):
+        prefix=self.eligibility_host()
         main=r'''
 int main(){BrowserFrameViewWin frame;
  assert(!frame.CaptionButtonsOnLeadingEdge());base::CommandLine::ForCurrentProcess()->flag=true;
+ assert(!BrowserFrameViewWin::ShouldUseMacWindowButtons(nullptr));
  assert(frame.CaptionButtonsOnLeadingEdge());
  frame.view.normal=false;assert(!frame.CaptionButtonsOnLeadingEdge());frame.view.normal=true;
  frame.view.custom=false;assert(!frame.CaptionButtonsOnLeadingEdge());frame.view.custom=true;
@@ -145,7 +152,136 @@ int main(){BrowserFrameViewWin frame;
  native->forced_colors_=ui::ColorProviderKey::ForcedColors::kNone;
  assert(frame.CaptionButtonsOnLeadingEdge());}
 '''
-        self.compile_run(prefix+actual(FRAME,'bool BrowserFrameViewWin::CaptionButtonsOnLeadingEdge() const')+main)
+        prefix=prefix.replace('static bool ShouldUseMacWindowButtons(BrowserView* browser_view);',
+            API['chrome/browser/ui/views/frame/browser_frame_view_win.h'][0].strip())
+        self.compile_run(prefix+actual(FRAME,
+            'bool BrowserFrameViewWin::ShouldUseMacWindowButtons(',
+            'bool BrowserFrameViewWin::CaptionButtonsOnLeadingEdge() const')+main)
+
+    def test_hwnd_frame_suppresses_duplicate_native_caption_on_new_tabs_and_webpages(self):
+        prefix=self.eligibility_host().replace('bool normal=true,custom=true;',
+                                               'bool normal=true,custom=true,new_tab=false;')
+        prefix+=r'''
+namespace views {
+enum class FrameMode{SYSTEM_DRAWN,SYSTEM_DRAWN_NO_CONTROLS,CUSTOM_DRAWN};
+struct DesktopWindowTreeHostWin {
+ FrameMode base_mode=FrameMode::SYSTEM_DRAWN;
+ FrameMode GetFrameMode()const{return base_mode;}
+};
+}
+struct ThemeProvider {bool native=true;bool ShouldUseNativeFrame()const{return native;}};
+struct Widget {ThemeProvider theme;const ThemeProvider* GetThemeProvider()const{return &theme;}};
+struct BrowserDesktopWindowTreeHostWin:views::DesktopWindowTreeHostWin {
+ BrowserView* browser_view_=nullptr;Widget widget;
+ const Widget* GetWidget()const{return &widget;}
+ views::FrameMode GetFrameMode()const;
+};
+using FrameMode=views::FrameMode;
+using UINT=unsigned;using WPARAM=uintptr_t;using LPARAM=intptr_t;using LRESULT=intptr_t;
+struct HWNDMessageHandler {
+ BrowserDesktopWindowTreeHostWin* delegate_;bool handled=false;
+ void SetMsgHandled(bool value){handled=value;}
+ LRESULT OnNCUAHDrawCaption(UINT,WPARAM,LPARAM);
+};
+'''
+        functions=actual(FRAME,'bool BrowserFrameViewWin::ShouldUseMacWindowButtons(')
+        functions+=actual('ui/views/win/hwnd_message_handler.cc',
+                          'LRESULT HWNDMessageHandler::OnNCUAHDrawCaption(')
+        signature='views::FrameMode BrowserDesktopWindowTreeHostWin::GetFrameMode() const'
+        old=json.loads((ROOT/'tests/fixtures/mac_window_functions.json').read_text())['previous_host_frame_mode']
+        self.compile_run(prefix+functions+old+r'''
+int main(){BrowserView view;BrowserDesktopWindowTreeHostWin host;host.browser_view_=&view;
+ base::CommandLine::ForCurrentProcess()->flag=true;HWNDMessageHandler hwnd{&host};
+ assert(host.GetFrameMode()==FrameMode::SYSTEM_DRAWN_NO_CONTROLS);
+ hwnd.OnNCUAHDrawCaption(0,0,0);assert(!hwnd.handled);}
+''')
+        self.compile_run(prefix+functions+actual(
+            'chrome/browser/ui/views/frame/browser_desktop_window_tree_host_win.cc',signature)+r'''
+int main(){BrowserDesktopWindowTreeHostWin host;BrowserView view;HWNDMessageHandler hwnd{&host};
+ assert(host.GetFrameMode()==FrameMode::SYSTEM_DRAWN);
+ host.browser_view_=&view;
+ assert(host.GetFrameMode()==FrameMode::SYSTEM_DRAWN_NO_CONTROLS);
+ base::CommandLine::ForCurrentProcess()->flag=true;
+ // No BrowserWidget or FrameView exists in this host: select the policy from
+ // the first HWND query, and keep it identical on transparent NTPs/webpages.
+ for(bool ntp:{true,false,true}){
+  view.new_tab=ntp;assert(host.GetFrameMode()==FrameMode::CUSTOM_DRAWN);
+  hwnd.handled=false;hwnd.OnNCUAHDrawCaption(0,0,0);assert(hwnd.handled);
+ }
+ for(int fallback:{0,1,2,3}){
+  if(fallback==0)view.normal=false;
+  if(fallback==1)view.custom=false;
+  if(fallback==2)base::i18n::rtl=true;
+  if(fallback==3)ui::TouchUiController::Get()->touch=true;
+  assert(host.GetFrameMode()==FrameMode::SYSTEM_DRAWN_NO_CONTROLS);
+  hwnd.handled=true;hwnd.OnNCUAHDrawCaption(0,0,0);assert(!hwnd.handled);
+  view.normal=true;view.custom=true;base::i18n::rtl=false;
+  ui::TouchUiController::Get()->touch=false;
+ }
+ auto* native=ui::NativeTheme::GetInstanceForNativeUi();
+ native->forced_colors_=ui::ColorProviderKey::ForcedColors::kActive;
+ assert(host.GetFrameMode()==FrameMode::SYSTEM_DRAWN_NO_CONTROLS);
+ native->forced_colors_=ui::ColorProviderKey::ForcedColors::kNone;
+ assert(host.GetFrameMode()==FrameMode::CUSTOM_DRAWN);
+ base::CommandLine::ForCurrentProcess()->flag=false;
+ assert(host.GetFrameMode()==FrameMode::SYSTEM_DRAWN_NO_CONTROLS);
+ host.widget.theme.native=false;assert(host.GetFrameMode()==FrameMode::CUSTOM_DRAWN);
+}
+''')
+
+    def test_custom_frame_theme_changes_cancel_native_dwm_transitions_without_a_check_failure(self):
+        prefix=r'''
+#include <stdexcept>
+#define CHECK(value) do {if(!(value))throw std::runtime_error("system frame required");} while(0)
+enum class FrameMode{SYSTEM_DRAWN,SYSTEM_DRAWN_NO_CONTROLS,CUSTOM_DRAWN};
+struct Delegate {
+ FrameMode mode=FrameMode::CUSTOM_DRAWN;int changed=0;
+ FrameMode GetFrameMode()const{return mode;}
+ void HandleFrameChanged(){++changed;}
+};
+struct Region {bool valid=false;bool is_valid()const{return valid;}};
+struct HWNDMessageHandler {
+ Delegate* delegate_;Region custom_window_region_;
+ bool needs_dwm_frame_clear_=false,dwm_transition_desired_=false,fullscreen=false;
+ int sent=0;
+ bool IsFullscreen()const{return fullscreen;}
+ bool IsFrameSystemDrawn()const;
+ void SendFrameChanged(){++sent;}
+ void FrameTypeChanged();void LegacyFrameTypeChanged();
+ void PerformDwmTransition();void LegacyPerformDwmTransition();
+};
+'''
+        fixture=json.loads((ROOT/'tests/fixtures/mac_window_functions.json').read_text())
+        previous=fixture['previous_hwnd_frame_change'].replace(
+            'void HWNDMessageHandler::FrameTypeChanged()',
+            'void HWNDMessageHandler::LegacyFrameTypeChanged()').replace(
+                'PerformDwmTransition();','LegacyPerformDwmTransition();')
+        previous+=fixture['previous_hwnd_transition'].replace(
+            'void HWNDMessageHandler::PerformDwmTransition()',
+            'void HWNDMessageHandler::LegacyPerformDwmTransition()')
+        functions=actual('ui/views/win/hwnd_message_handler.cc',
+            'bool HWNDMessageHandler::IsFrameSystemDrawn() const',
+            'void HWNDMessageHandler::PerformDwmTransition()',
+            'void HWNDMessageHandler::FrameTypeChanged()')
+        self.compile_run(prefix+previous+functions+r'''
+int main(){Delegate delegate;HWNDMessageHandler hwnd{&delegate};
+ bool caught=false;try{hwnd.LegacyFrameTypeChanged();}catch(const std::runtime_error&){caught=true;}
+ assert(caught);
+ hwnd.dwm_transition_desired_=true;hwnd.fullscreen=true;hwnd.FrameTypeChanged();
+ assert(hwnd.needs_dwm_frame_clear_&&hwnd.dwm_transition_desired_);
+ assert(delegate.changed==0&&hwnd.sent==0);
+ hwnd.fullscreen=false;
+ if(hwnd.dwm_transition_desired_)hwnd.PerformDwmTransition();
+ assert(delegate.changed==1&&hwnd.sent==1&&!hwnd.dwm_transition_desired_);
+ hwnd.FrameTypeChanged();assert(delegate.changed==2&&hwnd.sent==2);
+ delegate.mode=FrameMode::SYSTEM_DRAWN_NO_CONTROLS;
+ hwnd.FrameTypeChanged();assert(delegate.changed==3&&hwnd.sent==3&&!hwnd.dwm_transition_desired_);
+ hwnd.fullscreen=true;hwnd.FrameTypeChanged();
+ assert(hwnd.dwm_transition_desired_&&delegate.changed==3);
+ hwnd.fullscreen=false;hwnd.PerformDwmTransition();
+ assert(delegate.changed==4&&!hwnd.dwm_transition_desired_);
+}
+''')
 
     def test_actual_painter_colors_symbols_inactive_disabled_and_native_fallback(self):
         prefix=r'''

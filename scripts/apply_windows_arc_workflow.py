@@ -24,6 +24,7 @@ PASSWORD_PATCH = ROOT / "patches/windows/arc-password-import-windows.patch"
 MAC_CAPTION_SOURCE = "chrome/browser/ui/views/frame/browser_caption_button_container_win.cc"
 LEGACY_MAC_LAYOUT_INVALIDATION = b"    button->PreferredSizeChanged();"
 MAC_LAYOUT_INVALIDATION = b"    button->InvalidateLayout();"
+MAC_FRAME_HANDLER_SOURCE = "ui/views/win/hwnd_message_handler.cc"
 EXTERNAL_EXTENSION_SOURCE = "chrome/browser/extensions/external_registry_loader_win.cc"
 LEGACY_EXTERNAL_EXTENSION_REGISTRY = (
     b'const wchar_t kRegistryExtensions[] = L"Software\\\\Google\\\\Chrome\\\\Extensions";')
@@ -127,7 +128,8 @@ def patch_targets(text: str) -> list[str]:
     for path in new_paths:
         parts = PurePosixPath(path).parts
         if (
-            (not path.startswith("chrome/") and path not in ONBOARDING_EXTERNAL_TARGETS)
+            (not path.startswith("chrome/") and path not in ONBOARDING_EXTERNAL_TARGETS
+             and path != MAC_FRAME_HANDLER_SOURCE)
             or ".." in parts
             or "\\" in path
             or ":" in path
@@ -293,12 +295,28 @@ def integrate(source: Path, *, apply: bool = False, revert: bool = False,
             if before.count(LEGACY_MAC_LAYOUT_INVALIDATION) == 1:
                 path.write_bytes(before.replace(
                     LEGACY_MAC_LAYOUT_INVALIDATION, MAC_LAYOUT_INVALIDATION, 1))
-                corrected = git_apply(staged_source, staged_patch, reverse=True, check=True)
-                # Recognize only the fully applied earlier caption catalog.
-                # A matching line in an unknown/partial tree authorizes no writes.
-                if corrected.returncode == 0:
-                    backward = corrected
-                    needs_upgrade = True
+            corrected = git_apply(staged_source, staged_patch, reverse=True, check=True)
+            if corrected.returncode:
+                # The previous complete caption catalog had no HWND frame-mode
+                # integration. Rehearse reverting that exact catalog and
+                # applying the current one inside the temporary snapshot.
+                legacy = ROOT / "patches/windows/history/mac-window-buttons-v1.patch"
+                if legacy.is_file():
+                    old = staging / "mac-previous.patch"
+                    old.write_bytes(legacy.read_bytes().replace(b"\r\n", b"\n"))
+                    old_check = git_apply(staged_source, old, reverse=True, check=True)
+                    if old_check.returncode == 0:
+                        undone = git_apply(staged_source, old, reverse=True, check=False)
+                        new_check = git_apply(staged_source, staged_patch, reverse=False, check=True)
+                        if undone.returncode == 0 and new_check.returncode == 0:
+                            updated = git_apply(staged_source, staged_patch, reverse=False, check=False)
+                            if updated.returncode == 0:
+                                corrected = git_apply(staged_source, staged_patch, reverse=True, check=True)
+            # Only a complete corrected reverse-check authorizes a source
+            # commit. Unknown partial catalogs remain rejected without writes.
+            if corrected.returncode == 0:
+                backward = corrected
+                needs_upgrade = True
         if (forward.returncode and backward.returncode
                 and patch.name == ONBOARDING_PATCH.name
                 and EXTERNAL_EXTENSION_SOURCE in targets):
