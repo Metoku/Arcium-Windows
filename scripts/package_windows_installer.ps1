@@ -49,6 +49,7 @@ try {
     $payload=Join-Path $stage 'payload'
     $extractedVersion=Expand-ArciumRuntime $zip $payload
     if ($extractedVersion -cne $runtimeVersion) { throw 'Portable version changed during extraction.' }
+    if ((Get-ArciumSha256 $zip) -cne $hash) { throw 'Portable ZIP changed during packaging.' }
     Assert-ArciumX64Executable (Join-Path $payload 'chrome.exe')
     Add-Type -AssemblyName System.Drawing
     $icon=[Drawing.Icon]::ExtractAssociatedIcon((Join-Path $payload 'chrome.exe'))

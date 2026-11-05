@@ -81,6 +81,10 @@ jobs:
           try {
             $p = Start-Process -FilePath $setup -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',('/DIR="' + $root + '"')) -Wait -PassThru
             if ($p.ExitCode -ne 0) { throw "Candidate installation failed: $($p.ExitCode)" }
+            $checker = Join-Path $root 'tools/Update-Arcium.ps1'
+            $legacy = Join-Path $env:WINDIR 'System32/WindowsPowerShell/v1.0/powershell.exe'
+            & $legacy -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $checker -CheckOnly
+            if ($LASTEXITCODE -ne 0) { throw 'Installed update checker failed.' }
             $browser = Join-Path $root "versions/$($env:PACKAGE_VERSION)/chrome.exe"
             python ./scripts/windows_browser_smoke.py --browser $browser --timeout 60 --report ./dist/installed-browser-smoke.json
             if ($LASTEXITCODE -ne 0) { throw 'Installed browser launch failed.' }

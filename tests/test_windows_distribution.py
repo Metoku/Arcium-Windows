@@ -6,6 +6,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 import zipfile
 
@@ -212,6 +213,54 @@ class DistributionContracts(unittest.TestCase):
             "try { if($client.Headers['User-Agent'] -ne 'Arcium-Windows-Distribution') {"
             "throw 'Missing client identity' } } finally { $client.Dispose() }")
 
+    def test_update_download_verifies_bytes_before_returning_an_installer(self):
+        for shell in SHELLS:
+            for failure in (None, 'payload', 'checksum', 'size', 'digest', 'network'):
+                with self.subTest(shell=shell, failure=failure), tempfile.TemporaryDirectory() as folder:
+                    root=Path(folder); fixture=root/'fixtures'; fixture.mkdir()
+                    name='Arcium-Windows-1.0.0-Setup.exe'
+                    payload=b'fixture installer bytes'
+                    digest=hashlib.sha256(payload).hexdigest()
+                    checksum=(digest+'  '+name+'\n').encode()
+                    item=release('1.0.0')
+                    item['assets'][0].update(size=len(payload),digest='sha256:'+digest)
+                    item['assets'][1].update(size=len(checksum),digest='sha256:'+hashlib.sha256(checksum).hexdigest())
+                    (fixture/name).write_bytes(b'tampered payload bytes!' if failure=='payload' else payload)
+                    (fixture/(name+'.sha256')).write_bytes(
+                        checksum.replace(b'Setup.exe', b'Other.exe') if failure=='checksum' else checksum)
+                    if failure=='size':
+                        item['assets'][0]['size'] += 1
+                    if failure=='digest':
+                        item['assets'][0]['digest']='sha256:'+'0'*64
+                    code=(
+                        '$releases=ConvertFrom-Json '+psquote(json.dumps([item]))+'\n'
+                        "$candidate=Find-ArciumInstallerUpdate $releases '0.1.0' stable\n"
+                        '$script:fixture='+psquote(fixture)+'\n'
+                        '$script:networkFailure='+('$true' if failure=='network' else '$false')+'\n'
+                        # Substitute only transport: run the real receiver, size,
+                        # checksum, digest and resource-disposal code unchanged.
+                        'function New-ArciumWebClient {\n'
+                        ' $client=[pscustomobject]@{}\n'
+                        ' $client | Add-Member ScriptMethod DownloadFile {\n'
+                        '  param($url,$destination)\n'
+                        "  if($script:networkFailure){throw 'Simulated connection failure'}\n"
+                        "  $name=([uri]$url).Segments[-1]\n"
+                        '  [IO.File]::Copy((Join-Path $script:fixture $name),$destination,$false)\n'
+                        ' }\n'
+                        ' $client | Add-Member ScriptMethod Dispose { $script:disposed=$true }\n'
+                        ' return $client\n}\n'
+                        '$script:disposed=$false\n'
+                        '$failed=$false; $result=$null\n'
+                        'try { $result=Receive-ArciumInstaller $candidate '+psquote(root/'download')+' } '
+                        'catch { $failed=$true }\n'
+                        'if(-not $script:disposed){throw "Transport was not disposed"}\n')
+                    if failure:
+                        code += 'if(-not $failed -or $null -ne $result){throw "Rejected bytes returned as an installer"}'
+                    else:
+                        code += 'if($failed -or -not (Test-Path -LiteralPath $result)){throw "Verified installer missing"}'
+                    result=run_ps(shell,code,root)
+                    self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+
 
 @unittest.skipUnless(os.name == 'nt' and os.environ.get('ARCIUM_RUN_INSTALLER_TESTS') == '1',
                      'Windows setup lifecycle runs only in its isolated CI job')
@@ -226,7 +275,10 @@ class WindowsInstallerLifecycle(unittest.TestCase):
                 'using System; using System.IO; class Fake { static int Main(string[] args) {'
                 'File.WriteAllLines(Environment.GetEnvironmentVariable("ARCIUM_FAKE_ARGS"),args);'
                 'File.WriteAllText(Environment.GetEnvironmentVariable("ARCIUM_FAKE_PATH"),'
-                'System.Reflection.Assembly.GetExecutingAssembly().Location);return 0;} }')
+                'System.Reflection.Assembly.GetExecutingAssembly().Location);'
+                'if(Array.IndexOf(args,"--hold")>=0){'
+                'File.WriteAllText(Environment.GetEnvironmentVariable("ARCIUM_FAKE_PATH")+".ready","ready");'
+                'System.Threading.Thread.Sleep(60000);}return 0;} }')
             browser = root/'chrome.exe'
             csc = Path(os.environ['WINDIR'])/'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
             subprocess.run([str(csc), '/nologo', '/target:winexe', '/platform:x64',
@@ -264,6 +316,26 @@ class WindowsInstallerLifecycle(unittest.TestCase):
                                            '/NORESTART', '/DIR='+str(installed)], timeout=60)
                 self.assertNotEqual(rejected.returncode, 0)
                 self.assertIn('Version=0.1.0-alpha.10', (installed/'arcium-install.ini').read_text())
+                ready=root/'path.txt.ready'
+                holding=subprocess.Popen([str(installed/'Arcium.exe'),'--hold'],env=env)
+                blocked=None
+                try:
+                    for _ in range(100):
+                        if ready.exists():
+                            break
+                        time.sleep(0.05)
+                    self.assertTrue(ready.exists(),'Synthetic browser did not start')
+                    blocked=subprocess.Popen([
+                        str(installers[-1]),'/VERYSILENT','/SUPPRESSMSGBOXES',
+                        '/NORESTART','/DIR='+str(installed)])
+                    self.assertNotEqual(blocked.wait(timeout=20),0,'Setup ignored the running browser mutex')
+                finally:
+                    if blocked is not None and blocked.poll() is None:
+                        subprocess.run(['taskkill','/PID',str(blocked.pid),'/T','/F'],capture_output=True,timeout=10)
+                    # Only the CI-owned synthetic launcher/browser process tree.
+                    if holding.poll() is None:
+                        subprocess.run(['taskkill','/PID',str(holding.pid),'/T','/F'],capture_output=True,timeout=10)
+                    holding.wait(timeout=10)
             finally:
                 uninstaller = installed/'unins000.exe'
                 if uninstaller.exists():
