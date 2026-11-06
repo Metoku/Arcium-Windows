@@ -1,0 +1,35 @@
+--- a/chrome/browser/profiles/keep_alive/profile_keep_alive_types.h
++++ b/chrome/browser/profiles/keep_alive/profile_keep_alive_types.h
+@@ -190,7 +190,10 @@ enum class ProfileKeepAliveOrigin {
+   // alive.
+   kOmniboxEverywhere = 46,
+ 
+-  kMaxValue = kOmniboxEverywhere,
++  // A native Arcium Settings window is visible for this profile.
++  kArciumSettingsWindow = 47,
++
++  kMaxValue = kArciumSettingsWindow,
+ };
+ // LINT.ThenChange(/tools/metrics/histograms/metadata/profile/enums.xml)
+ 
+--- a/chrome/browser/profiles/keep_alive/profile_keep_alive_types.cc
++++ b/chrome/browser/profiles/keep_alive/profile_keep_alive_types.cc
+@@ -93,6 +93,8 @@ std::ostream& operator<<(std::ostream& o
+       return out << "kFetchKeepAlive";
+     case ProfileKeepAliveOrigin::kOmniboxEverywhere:
+       return out << "kOmniboxEverywhere";
++    case ProfileKeepAliveOrigin::kArciumSettingsWindow:
++      return out << "kArciumSettingsWindow";
+   }
+   NOTREACHED();
+ }
+--- a/tools/metrics/histograms/metadata/profile/enums.xml
++++ b/tools/metrics/histograms/metadata/profile/enums.xml
+@@ -430,6 +430,7 @@ chromium-metrics-reviews@google.com.
+   <int value="44" label="kWebAppDatabaseCorruptionRecovery"/>
+   <int value="45" label="kFetchKeepAlive"/>
+   <int value="46" label="kOmniboxEverywhere"/>
++  <int value="47" label="kArciumSettingsWindow"/>
+ </enum>
+ 
+ <!-- LINT.IfChange(ProfileLockStatus) -->

@@ -24,6 +24,8 @@ ONBOARDING_BUILD_SOURCE = "components/helium_onboarding/BUILD.gn"
 SERVICES_PATCH = ROOT / "patches/windows/extension-services-windows.patch"
 SERVICES_STRINGS_SOURCE = "chrome/app/settings_strings.grdp"
 PASSWORD_PATCH = ROOT / "patches/windows/arc-password-import-windows.patch"
+PROFILE_KEEP_ALIVE_PATCH = ROOT / "patches/windows/profile-keep-alive-windows.patch"
+PROFILE_KEEP_ALIVE_METRICS = "tools/metrics/histograms/metadata/profile/enums.xml"
 MAC_CAPTION_SOURCE = "chrome/browser/ui/views/frame/browser_caption_button_container_win.cc"
 LEGACY_MAC_LAYOUT_INVALIDATION = b"    button->PreferredSizeChanged();"
 MAC_LAYOUT_INVALIDATION = b"    button->InvalidateLayout();"
@@ -140,6 +142,7 @@ def patch_targets(text: str) -> list[str]:
         if (
             (not path.startswith("chrome/") and path not in ONBOARDING_EXTERNAL_TARGETS
              and path not in SERVICES_EXTERNAL_TARGETS
+             and path != PROFILE_KEEP_ALIVE_METRICS
              and path != MAC_FRAME_HANDLER_SOURCE)
             or ".." in parts
             or "\\" in path
@@ -593,7 +596,7 @@ def integrate_bundle(source: Path, *, apply: bool = False, revert: bool = False,
         catalogs = (PATCH, ROOT / "patches/windows/arc-import-windows.patch",
                     PASSWORD_PATCH,
                     ROOT / "patches/windows/arc-appearance-windows.patch",
-                    ONBOARDING_PATCH, SERVICES_PATCH)
+                    ONBOARDING_PATCH, SERVICES_PATCH, PROFILE_KEEP_ALIVE_PATCH)
     source = source.resolve(strict=True)
     if not (source / "BUILD.gn").is_file():
         raise ValueError("Expected a prepared Chromium source root containing BUILD.gn")
@@ -634,7 +637,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-dir", type=Path,
                         default=ROOT / "work/windows-platform/build/src")
-    parser.add_argument("--feature", choices=("workflow", "arc-import", "passwords", "appearance", "mac-buttons", "onboarding", "services", "all"),
+    parser.add_argument("--feature", choices=("workflow", "arc-import", "passwords", "appearance", "mac-buttons", "onboarding", "services", "profile-keep-alive", "all"),
                         default="workflow", help="Optional Windows integration to apply")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--check", action="store_true", help="Read-only applicability check (default)")
@@ -650,6 +653,7 @@ def main() -> int:
             "mac-buttons": ROOT / "patches/windows/mac-window-buttons.patch",
             "onboarding": ONBOARDING_PATCH,
             "services": SERVICES_PATCH,
+            "profile-keep-alive": PROFILE_KEEP_ALIVE_PATCH,
         }
         if args.feature == "all":
             status = integrate_bundle(args.source_dir, apply=args.apply, revert=args.revert)
@@ -663,6 +667,7 @@ def main() -> int:
               "mac-buttons": "MAC_BUTTONS",
               "onboarding": "ONBOARDING",
               "services": "SERVICES",
+              "profile-keep-alive": "PROFILE_KEEP_ALIVE",
               "all": "ALL"}[args.feature]
     print(f"ARCIUM_WINDOWS_{marker}_{status}")
     if args.apply or args.revert:

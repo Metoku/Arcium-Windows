@@ -53,6 +53,14 @@ try {
         throw 'Pinned Windows/Arcium source audit failed; do not resume this build.'
     }
 
+    # The shared Space editor/importer uses an origin formerly supplied only
+    # by the Mac platform. Validate its complete three-file Windows port;
+    # apply it once on resume while keeping -Mode check read-only.
+    $profileArgs = @('-m', 'scripts.apply_windows_arc_workflow', '--feature', 'profile-keep-alive')
+    if ($Mode -eq 'resume') { $profileArgs += '--apply' }
+    & $python @profileArgs
+    if ($LASTEXITCODE -ne 0) { throw 'Profile keep-alive compatibility check failed; source/output was retained.' }
+
     # A read-only SDK verification. -Install is intended for disposable CI.
     & (Join-Path $repo 'scripts\provision_chromium_sdk.ps1')
     if ($LASTEXITCODE -ne 0) { throw "Windows SDK $expectedSdk is incomplete." }
@@ -81,7 +89,7 @@ try {
     Write-Host "Visual Studio toolchain: $($vsCandidates[0])"
     Write-Host "Windows SDK: $expectedSdk"
     Write-Host "Parallel C++ jobs: $Jobs"
-    Write-Host 'Existing Ninja outputs WILL be retained. No patches will be applied again.'
+    Write-Host 'Completed Ninja output will be retained. Full patch stacks will not be reapplied.'
     $failureOption = ''
     if ($KeepGoing) {
         $failureOption = ' -k=0'

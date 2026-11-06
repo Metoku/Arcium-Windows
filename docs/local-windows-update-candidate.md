@@ -95,6 +95,26 @@ explicitly and repeats only GN, retaining source archives, applied patches and
 completed objects. Success creates the GN marker for the normal resume helper.
 New preparation runs also pass installed Python to GN explicitly.
 
+## Missing Arcium profile keep-alive origin during compilation
+
+The shared Space editor, icon picker and Arc importer use
+ProfileKeepAliveOrigin::kArciumSettingsWindow. Its declaration originally lived
+in the Mac platform's native-settings patch. The Windows compatibility catalog
+ports the declaration/value 47, its logger case and matching metric entry.
+Existing enum values retain their numbers.
+
+After updating to the reviewed fix, run the normal local resume command in
+the existing candidate folder. It validates and applies only that required
+three-file catalog before compiling; already-applied fixes preserve timestamps.
+Mode check validates applicability without modifying source. Fresh complete
+Windows bundles and browser-only builds include the same port.
+
+Keep the prepared source and out/Default. Do not rerun staging or full GN
+preparation for this compiler error. Ninja rebuilds the affected header users
+and retains unrelated completed output. The source replay now compiles the
+real enum/logger and verifies references in all four affected shared sources
+before a future full native build.
+
 ## Verify launch before accepting the candidate
 
 After compilation succeeds:

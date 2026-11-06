@@ -29,7 +29,7 @@ from scripts.apply_windows_arc_workflow import (
     LEGACY_APPEARANCE_CSS, LEGACY_DISCONNECT, PATCH, ROOT,
     appearance_css_addition, git_apply, integrate, integrate_bundle,
     patch_targets, preserve_line_endings,
-    ONBOARDING_PATCH, SERVICES_PATCH,
+    ONBOARDING_PATCH, SERVICES_PATCH, PROFILE_KEEP_ALIVE_PATCH,
 )
 from scripts.check_patch_overlaps import discover_patch_paths, download_original, select_patch_sections
 from scripts.windows_port import audit_staged, chromium_version, git, read_pin, read_series
@@ -38,6 +38,7 @@ from scripts.check_windows_onboarding import (
     ONBOARDING_ROOT, ONBOARDING_API_FILES, BRANDING_API_FILES,
     prepare_onboarding_assets, check_onboarding,
 )
+from scripts.check_windows_profile_keep_alive import PROFILE_KEEP_ALIVE_CONSUMERS
 
 
 IMPORT_PATCH = ROOT / "patches/windows/arc-import-windows.patch"
@@ -154,9 +155,11 @@ def check(core: Path, platform: Path | None = None,
     replay_targets |= mac_targets | set(MAC_API_FILES)
     all_paths, created = discover_patch_paths(patches)
     onboarding_targets = (set(patch_targets(ONBOARDING_PATCH.read_text(encoding="utf-8"))) |
-                          set(patch_targets(SERVICES_PATCH.read_text(encoding="utf-8")))
+                          set(patch_targets(SERVICES_PATCH.read_text(encoding="utf-8"))) |
+                          set(patch_targets(PROFILE_KEEP_ALIVE_PATCH.read_text(encoding="utf-8")))
                           if platform is not None else set())
     if onboarding_targets:
+        replay_targets |= set(PROFILE_KEEP_ALIVE_CONSUMERS)
         replay_targets |= onboarding_targets | set(ONBOARDING_API_FILES) | set(BRANDING_API_FILES)
         replay_targets |= {path for path in all_paths if path.startswith(ONBOARDING_ROOT + "/")}
     original_hashes = {}

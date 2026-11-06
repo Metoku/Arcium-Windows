@@ -20,12 +20,15 @@ import urllib.request
 import xml.etree.ElementTree as ET
 
 from scripts.apply_windows_arc_workflow import (
-    ROOT, ONBOARDING_PATCH, SERVICES_PATCH, SERVICES_STRINGS_SOURCE,
+    ROOT, ONBOARDING_PATCH, SERVICES_PATCH, SERVICES_STRINGS_SOURCE, PROFILE_KEEP_ALIVE_PATCH,
     git_apply, integrate, integrate_bundle,
     EXTERNAL_EXTENSION_SOURCE, LEGACY_EXTERNAL_EXTENSION_REGISTRY,
     EXTERNAL_EXTENSION_REGISTRY,
 )
 from scripts.check_windows_mac_buttons import MAC_PATCH, cpp_function
+from scripts.check_windows_profile_keep_alive import (
+    PROFILE_KEEP_ALIVE_CONSUMERS, verify_profile_keep_alive,
+)
 
 
 ONBOARDING_ROOT = 'components/helium_onboarding'
@@ -270,7 +273,7 @@ def check_onboarding(source: Path, originals: dict[str, bytes],
                 data = data.removesuffix(b'\n')
             baseline[name] = data
             (source / name).write_bytes(data)
-        others = (*catalogs, MAC_PATCH)
+        others = (*catalogs, MAC_PATCH, PROFILE_KEEP_ALIVE_PATCH)
         for order in ((ONBOARDING_PATCH, SERVICES_PATCH, *others),
                       (*others, SERVICES_PATCH, ONBOARDING_PATCH)):
             for patch in order:
@@ -286,6 +289,8 @@ def check_onboarding(source: Path, originals: dict[str, bytes],
             postimages[style] = postimage
             if proof is None:
                 proof = verify_native_sources(source)
+                proof['profile_keep_alive'] = verify_profile_keep_alive(
+                    source, compile_cpp=True, consumers=PROFILE_KEEP_ALIVE_CONSUMERS)
                 frontend = build_onboarding_frontend(source)
                 # Unknown extension roots must not be silently replaced.
                 path = source / EXTERNAL_EXTENSION_SOURCE
