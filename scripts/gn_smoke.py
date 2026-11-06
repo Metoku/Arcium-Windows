@@ -20,10 +20,11 @@ import time
 # Support both module and direct-script invocation on Windows CI.
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from scripts.windows_port import ROOT, audit_staged
+from scripts.windows_port import ROOT, audit_staged, git
 from scripts.windows_version_compat import adapt_builder_version_api, assert_arcium_version_api
 from scripts.windows_sdk_compat import adapt_windows_vcvars, select_windows_sdk
 from scripts.chromium_sdk_pin import inject_chromium_sdk_pin
+from scripts.windows_release_integrations import inject_release_integrations
 
 
 GN_ANCHOR = (
@@ -58,7 +59,7 @@ RESTORE_STEP = (
 
 
 
-def create_gn_only_builder(upstream: str) -> str:
+def create_gn_only_builder(upstream: str, *, release_candidate: bool = False) -> str:
     """Fail closed if the pinned upstream script structure changes."""
     if BUILDER_IDENTIFIER not in upstream:
         raise ValueError("Unexpected Windows builder identity")
@@ -72,6 +73,8 @@ def create_gn_only_builder(upstream: str) -> str:
         raise ValueError("Expected one Chromium patch-stage entry")
     # Never skip failing Arcium patches. Fetch the exact unmodified
     # Chromium test files omitted by the prepared tarball before patching.
+    if release_candidate:
+        upstream = inject_release_integrations(upstream)
     candidate = adapt_builder_version_api(upstream)
     candidate = adapt_windows_vcvars(candidate)
     candidate = inject_chromium_sdk_pin(candidate)
@@ -81,12 +84,14 @@ def create_gn_only_builder(upstream: str) -> str:
     return candidate
 
 
-def run_gn(platform: Path, report_path: Path, *, execute: bool, max_minutes: int) -> int:
+def run_gn(platform: Path, report_path: Path, *, execute: bool, max_minutes: int,
+           release_candidate: bool = False) -> int:
     report_path.parent.mkdir(parents=True, exist_ok=True)
     log_path = report_path.with_suffix(".log")
     status = {
         "status": "VALIDATING",
         "kind": "GN_GENERATION_ONLY",
+        "release_candidate_integrations": release_candidate,
         "source_download_attempted": False,
         "full_patch_application_verified": False,
         "gn_generation_verified": False,
@@ -108,12 +113,14 @@ def run_gn(platform: Path, report_path: Path, *, execute: bool, max_minutes: int
             "platform_commit": audit["platform_commit"],
             "expected_core_patches": audit["shared_patch_count"],
             "expected_windows_patches": audit["windows_patch_count"],
+            "integration_commit": git("-C", ROOT, "rev-parse", "HEAD"),
         })
         assert_arcium_version_api(
             platform / "helium-chromium" / "utils" / "helium_version.py"
         )
         builder = create_gn_only_builder(
-            (platform / "build.py").read_text(encoding="utf-8")
+            (platform / "build.py").read_text(encoding="utf-8"),
+            release_candidate=release_candidate,
         )
         status["status"] = "VALIDATED"
         save()
@@ -238,10 +245,13 @@ def main() -> int:
     args.add_argument("--execute", action="store_true",
                       help="Full source download, patching, GN generation")
     parser.add_argument("--max-minutes", type=int, default=65)
+    parser.add_argument("--release-candidate", action="store_true",
+                        help="Apply every Windows catalog and Mac buttons before branding")
     options = parser.parse_args()
     return run_gn(
         options.platform_dir.resolve(), options.report.resolve(),
-        execute=options.execute, max_minutes=options.max_minutes
+        execute=options.execute, max_minutes=options.max_minutes,
+        release_candidate=options.release_candidate,
     )
 
 
