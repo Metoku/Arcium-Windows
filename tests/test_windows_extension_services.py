@@ -9,7 +9,10 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from scripts.apply_windows_arc_workflow import SERVICES_PATCH, integrate, main, patch_targets
+from scripts.apply_windows_arc_workflow import (
+    SERVICES_PATCH, SERVICES_STRINGS_SOURCE, integrate, main, patch_targets,
+    services_branded_patch,
+)
 
 
 def hunk_preimages(text):
@@ -31,6 +34,18 @@ def hunk_preimages(text):
 
 
 class ExtensionServicesTests(unittest.TestCase):
+    def test_brand_variant_changes_only_two_displayed_lines_in_the_strings_hunk(self):
+        catalog = SERVICES_PATCH.read_bytes().replace(b'\r\n', b'\n')
+        variant = services_branded_patch(catalog)
+        self.assertIsNotNone(variant)
+        self.assertEqual(variant.count(b'Helium'), catalog.count(b'Helium') - 2)
+        self.assertEqual(variant.split(b'--- a/chrome/browser/resources/', 1)[1],
+                         catalog.split(b'--- a/chrome/browser/resources/', 1)[1])
+        self.assertIn(b'IDS_SETTINGS_HELIUM_SERVICES_SETUP_PENDING_TEXT', variant)
+        self.assertIn(b'desc="Global toggle for enabling/disabling of all Helium services"', variant)
+        self.assertIsNone(services_branded_patch(catalog.replace(
+            b'Allow connecting to Helium services', b'Unknown service control')))
+
     def test_services_cli_selects_only_the_recovery_catalog(self):
         with patch('sys.argv', ['apply_windows_arc_workflow.py', '--feature', 'services', '--apply']), \
                 patch('scripts.apply_windows_arc_workflow.integrate', return_value='APPLIED') as apply, \
@@ -98,6 +113,56 @@ class ExtensionServicesTests(unittest.TestCase):
                     with self.assertRaisesRegex(RuntimeError, 'No changes made'):
                         integrate(source, patch=SERVICES_PATCH, apply=True)
                     self.assertEqual(snapshot(), edited)
+
+    def test_built_tree_branding_before_and_after_application_is_idempotent_and_reversible(self):
+        originals = hunk_preimages(SERVICES_PATCH.read_text(encoding='utf-8'))
+        def brand(data):
+            # Only displayed text changes; identifiers and descriptions stay
+            # Helium. The full replay uses the real pinned XML branding code.
+            return (data.replace(b'      Helium services are not available',
+                                 b'      Arcium services are not available')
+                    .replace(b'      Allow connecting to Helium services',
+                             b'      Allow connecting to Arcium services'))
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary)
+            (source / 'BUILD.gn').write_bytes(b'# partial fixture\n')
+            for style in ('LF', 'CRLF', 'mixed', 'missing-final-newline'):
+                for applied_first in (False, True):
+                    with self.subTest(style=style, applied_first=applied_first):
+                        for index, (name, data) in enumerate(originals.items()):
+                            if style == 'CRLF' or (style == 'mixed' and index % 2):
+                                data = data.replace(b'\n', b'\r\n')
+                            if style == 'missing-final-newline':
+                                data = data.removesuffix(b'\n')
+                            path = source / name
+                            path.parent.mkdir(parents=True, exist_ok=True)
+                            path.write_bytes(data)
+                        expected = {name: brand((source / name).read_bytes())
+                                    if name == SERVICES_STRINGS_SOURCE else (source / name).read_bytes()
+                                    for name in originals}
+                        if applied_first:
+                            integrate(source, patch=SERVICES_PATCH, apply=True)
+                        strings = source / SERVICES_STRINGS_SOURCE
+                        strings.write_bytes(brand(strings.read_bytes()))
+                        snapshot = lambda: {name: ((source / name).read_bytes(),
+                                                   (source / name).stat().st_mtime_ns)
+                                            for name in originals}
+                        before = snapshot()
+                        status = 'APPLIED' if applied_first else 'READY'
+                        self.assertEqual(integrate(source, patch=SERVICES_PATCH), status)
+                        self.assertEqual(snapshot(), before)
+                        self.assertEqual(integrate(source, patch=SERVICES_PATCH, apply=True), 'APPLIED')
+                        after = snapshot()
+                        integrate(source, patch=SERVICES_PATCH, apply=True)
+                        self.assertEqual(snapshot(), after)
+                        self.assertEqual(integrate(source, patch=SERVICES_PATCH, revert=True), 'READY')
+                        self.assertEqual({name: (source / name).read_bytes() for name in originals}, expected)
+                        strings.write_bytes(strings.read_bytes().replace(
+                            b'Arcium services are not available', b'Unknown consent message'))
+                        edited = snapshot()
+                        with self.assertRaisesRegex(RuntimeError, 'No changes made'):
+                            integrate(source, patch=SERVICES_PATCH, apply=True)
+                        self.assertEqual(snapshot(), edited)
 
 
 if __name__ == '__main__':
