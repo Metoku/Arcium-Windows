@@ -69,6 +69,10 @@ Check the candidate's comparison and source metadata result. Then audit the Arci
 
 Before adopting a candidate, run the appropriate patch/source checks and a native Windows build in a separate prepared checkout. Reusing the existing working build for source restaging can invalidate compiled output; preserve it for the current release. Confirm normal browsing, profile persistence and the features used personally before replacing the installed version.
 
+For a personal PC, follow the [resumable local candidate procedure](local-windows-update-candidate.md).
+Its GN preparation applies the complete release integrations before branding;
+the existing local resume helper then compiles without the CI experiment timer.
+
 For an installed update, quit Arcium, back up `%LOCALAPPDATA%\Arcium\User Data`, and use the update checker or the tested installer. Source changes require a compiled runtime before packaging; rebuilding an installer around an older ZIP does not include new browser code.
 
 ## Release procedure and remaining work

@@ -20,9 +20,12 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 PATCH = ROOT / "patches" / "windows" / "arc-workflow-settings.patch"
 ONBOARDING_PATCH = ROOT / "patches/windows/onboarding-windows.patch"
+ONBOARDING_BUILD_SOURCE = "components/helium_onboarding/BUILD.gn"
 SERVICES_PATCH = ROOT / "patches/windows/extension-services-windows.patch"
 SERVICES_STRINGS_SOURCE = "chrome/app/settings_strings.grdp"
 PASSWORD_PATCH = ROOT / "patches/windows/arc-password-import-windows.patch"
+PROFILE_KEEP_ALIVE_PATCH = ROOT / "patches/windows/profile-keep-alive-windows.patch"
+PROFILE_KEEP_ALIVE_METRICS = "tools/metrics/histograms/metadata/profile/enums.xml"
 MAC_CAPTION_SOURCE = "chrome/browser/ui/views/frame/browser_caption_button_container_win.cc"
 LEGACY_MAC_LAYOUT_INVALIDATION = b"    button->PreferredSizeChanged();"
 MAC_LAYOUT_INVALIDATION = b"    button->InvalidateLayout();"
@@ -139,6 +142,7 @@ def patch_targets(text: str) -> list[str]:
         if (
             (not path.startswith("chrome/") and path not in ONBOARDING_EXTERNAL_TARGETS
              and path not in SERVICES_EXTERNAL_TARGETS
+             and path != PROFILE_KEEP_ALIVE_METRICS
              and path != MAC_FRAME_HANDLER_SOURCE)
             or ".." in parts
             or "\\" in path
@@ -172,6 +176,38 @@ def services_branded_patch(patch_bytes: bytes) -> bytes | None:
             return None
         section = section.replace(before, after, 1)
     return prefix + marker + section + next_header + remaining
+
+
+def onboarding_legal_inputs_patch(patch_bytes: bytes, build_source: bytes) -> bytes | None:
+    """Retain the exact upstream legal-page inputs and its Welcome dependency.
+
+    The newer core already tracks Welcome.svelte. Adapt only the known GN
+    section in a temporary catalog, adding the two remaining Windows inputs.
+    The complete eleven-file catalog must still verify in either direction.
+    """
+    marker = (f"--- a/{ONBOARDING_BUILD_SOURCE}\n"
+              f"+++ b/{ONBOARDING_BUILD_SOURCE}\n").encode()
+    legal_inputs = (b'    "src",\n    "public",\n'
+                    b'    "public/privacy.html",\n    "public/terms.html",\n'
+                    b'    "src/pages/Welcome.svelte",\n    "package.json",\n')
+    if patch_bytes.count(marker) != 1 or build_source.count(legal_inputs) != 1:
+        return None
+    before = (b'@@ -35,6 +35,9 @@\n \n   inputs = [\n     "index.html",\n'
+              b'+    "helium_onboarding_strings.grdp",\n'
+              b'+    "src/pages/Welcome.svelte",\n'
+              b'+    "src/pages/DataImport.svelte",\n'
+              b'     "src",\n     "public",\n     "package.json",\n')
+    after = (b'@@ -35,9 +35,11 @@\n \n   inputs = [\n     "index.html",\n'
+             b'+    "helium_onboarding_strings.grdp",\n'
+             b'+    "src/pages/DataImport.svelte",\n'
+             b'     "src",\n     "public",\n'
+             b'     "public/privacy.html",\n     "public/terms.html",\n'
+             b'     "src/pages/Welcome.svelte",\n     "package.json",\n')
+    prefix, _, tail = patch_bytes.partition(marker)
+    section, next_header, remaining = tail.partition(b"--- a/")
+    if section != before:
+        return None
+    return prefix + marker + after + next_header + remaining
 
 
 def appearance_css_addition(patch_bytes: bytes) -> bytes:
@@ -319,6 +355,11 @@ def integrate(source: Path, *, apply: bool = False, revert: bool = False,
             staged_file.write_bytes(normalized)
         staged_patch = staging / "workflow.patch"
         staged_patch.write_bytes(patch_bytes)
+        if patch.name == ONBOARDING_PATCH.name and ONBOARDING_BUILD_SOURCE in targets:
+            legal_variant = onboarding_legal_inputs_patch(
+                patch_bytes, (staged_source / ONBOARDING_BUILD_SOURCE).read_bytes())
+            if legal_variant is not None:
+                staged_patch.write_bytes(legal_variant)
         forward = git_apply(staged_source, staged_patch, reverse=False, check=True)
         backward = git_apply(staged_source, staged_patch, reverse=True, check=True)
         if (forward.returncode and backward.returncode
@@ -555,7 +596,7 @@ def integrate_bundle(source: Path, *, apply: bool = False, revert: bool = False,
         catalogs = (PATCH, ROOT / "patches/windows/arc-import-windows.patch",
                     PASSWORD_PATCH,
                     ROOT / "patches/windows/arc-appearance-windows.patch",
-                    ONBOARDING_PATCH, SERVICES_PATCH)
+                    ONBOARDING_PATCH, SERVICES_PATCH, PROFILE_KEEP_ALIVE_PATCH)
     source = source.resolve(strict=True)
     if not (source / "BUILD.gn").is_file():
         raise ValueError("Expected a prepared Chromium source root containing BUILD.gn")
@@ -596,7 +637,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-dir", type=Path,
                         default=ROOT / "work/windows-platform/build/src")
-    parser.add_argument("--feature", choices=("workflow", "arc-import", "passwords", "appearance", "mac-buttons", "onboarding", "services", "all"),
+    parser.add_argument("--feature", choices=("workflow", "arc-import", "passwords", "appearance", "mac-buttons", "onboarding", "services", "profile-keep-alive", "all"),
                         default="workflow", help="Optional Windows integration to apply")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--check", action="store_true", help="Read-only applicability check (default)")
@@ -612,6 +653,7 @@ def main() -> int:
             "mac-buttons": ROOT / "patches/windows/mac-window-buttons.patch",
             "onboarding": ONBOARDING_PATCH,
             "services": SERVICES_PATCH,
+            "profile-keep-alive": PROFILE_KEEP_ALIVE_PATCH,
         }
         if args.feature == "all":
             status = integrate_bundle(args.source_dir, apply=args.apply, revert=args.revert)
@@ -625,6 +667,7 @@ def main() -> int:
               "mac-buttons": "MAC_BUTTONS",
               "onboarding": "ONBOARDING",
               "services": "SERVICES",
+              "profile-keep-alive": "PROFILE_KEEP_ALIVE",
               "all": "ALL"}[args.feature]
     print(f"ARCIUM_WINDOWS_{marker}_{status}")
     if args.apply or args.revert:

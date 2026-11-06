@@ -69,6 +69,8 @@ jobs:
           if-no-files-found: warn
       - name: Validate full-source preparation adapter (no downloads)
         run: python scripts/prepare_full_chromium.py --validate
+      - name: Validate resumable local release preparation (no downloads or compilation)
+        run: python scripts/gn_smoke.py --validate --release-candidate --report work/release-gn-validation.json
       - name: Validate browser-only compilation adapter (no download or build)
         run: python scripts/browser_only_build.py --validate
       - name: Validate release integration entry before branding (no compilation)
@@ -107,5 +109,6 @@ jobs:
             work/browser-only-build.json
             work/browser-only-build.log
             work/release-builder-validation.json
+            work/release-gn-validation.json
           if-no-files-found: warn
           retention-days: 7

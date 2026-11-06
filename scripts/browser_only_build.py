@@ -25,6 +25,10 @@ from scripts.gn_smoke import RESTORE_ANCHOR, RESTORE_STEP
 from scripts.windows_port import ROOT, audit_staged, git
 from scripts.windows_sdk_compat import adapt_windows_vcvars, select_windows_sdk
 from scripts.chromium_sdk_pin import inject_chromium_sdk_pin
+from scripts.windows_release_integrations import (
+    RELEASE_INTEGRATIONS_ANCHOR, RELEASE_INTEGRATIONS_STEP,
+    inject_release_integrations,
+)
 from scripts.windows_version_compat import (
     adapt_builder_version_api, assert_arcium_version_api
 )
@@ -38,17 +42,8 @@ ONBOARDING_ANCHOR = "    # Enter source tree to run build commands\n"
 ONBOARDING_STEP = (
     "    # Keep first-run/profile identity separate from installed Helium.\n"
     "    from scripts.apply_windows_arc_workflow import (\n"
-    "        ONBOARDING_PATCH, PASSWORD_PATCH, SERVICES_PATCH, integrate_bundle)\n"
-    "    integrate_bundle(source_tree, catalogs=(PASSWORD_PATCH, ONBOARDING_PATCH, SERVICES_PATCH), apply=True)\n\n"
-)
-RELEASE_INTEGRATIONS_ANCHOR = "        if not args.dev:\n            # Substitute domains\n"
-RELEASE_INTEGRATIONS_STEP = (
-    "        # Apply reviewed Windows integrations before product-name substitution.\n"
-    "        from scripts.apply_windows_arc_workflow import (\n"
-    "            ROOT as arcium_integration_root, integrate, integrate_bundle)\n"
-    "        integrate_bundle(source_tree, apply=True)\n"
-    "        integrate(source_tree, patch=arcium_integration_root /\n"
-    "                  'patches/windows/mac-window-buttons.patch', apply=True)\n\n"
+    "        ONBOARDING_PATCH, PASSWORD_PATCH, SERVICES_PATCH, PROFILE_KEEP_ALIVE_PATCH, integrate_bundle)\n"
+    "    integrate_bundle(source_tree, catalogs=(PASSWORD_PATCH, ONBOARDING_PATCH, SERVICES_PATCH, PROFILE_KEEP_ALIVE_PATCH), apply=True)\n\n"
 )
 
 
@@ -159,8 +154,7 @@ def make_browser_only_builder(upstream: str, *, release_candidate: bool = False)
     builder = builder.replace(RESTORE_ANCHOR, RESTORE_STEP, 1)
     builder = builder.replace(ORIGINAL_RELEASE_TARGETS, BROWSER_ONLY_TARGETS, 1)
     if release_candidate:
-        builder = builder.replace(RELEASE_INTEGRATIONS_ANCHOR,
-                                  RELEASE_INTEGRATIONS_STEP + RELEASE_INTEGRATIONS_ANCHOR, 1)
+        builder = inject_release_integrations(builder)
     else:
         builder = builder.replace(ONBOARDING_ANCHOR,
                                   ONBOARDING_STEP + ONBOARDING_ANCHOR, 1)
