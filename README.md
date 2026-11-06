@@ -32,7 +32,9 @@ Widevine/PlayReady playback has not been established for this release. Do not de
 
 Use **Check for Arcium updates** when you want to update an installed copy. Preview releases require the preview-channel option. This is an on-demand checker, not a background updater; it verifies the release's installer/checksum pair before offering installation.
 
-The [upstream monitor](.github/workflows/upstream-sync.yml) checks Arcium every six hours and prepares a separate review candidate. It does not change the installed browser, merge proposals or publish releases. If GitHub blocks automatic PR creation, its run summary and [permission issue #28](https://github.com/Metoku/Arcium-Windows/issues/28) provide a manual comparison link. See [automation and maintenance](docs/automation.md).
+The [upstream monitor](.github/workflows/upstream-sync.yml) checks Arcium every six hours and prepares a separate review candidate with metadata, Chromium-hunk and Windows source checks. The [engine/feature watch](.github/workflows/upstream-watch.yml) also follows Arcium macOS, Xelium, the Windows platform and Google's Windows Stable engine baseline in one review issue. Neither workflow changes the installed browser, merges patches or publishes releases. Mac changes still need review and Windows porting. See [automation and maintenance](docs/automation.md).
+
+The manual [Windows release-candidate workflow](.github/workflows/windows-release-candidate.yml) can build fresh browser code on a suitable dedicated runner, verify the runtime and packaged launches, and produce a ZIP, installer, checksums and correlated receipts. It uploads candidates for testing; it does not publish or install updates automatically.
 
 Windows source is pinned to Chromium **156.0.8078.47**, Arcium core [4e8f8e2b](https://github.com/dr-baker/Arcium/tree/4e8f8e2bd3cdcab014ae9663907db93e915cb850), and the tracked [Windows platform revision](upstream/helium-windows.sha). Upstream compatibility and security changes need review before adopting a new pin.
 

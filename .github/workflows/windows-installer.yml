@@ -5,6 +5,7 @@ on:
     paths:
       - "installer/**"
       - "scripts/package_windows_installer.ps1"
+      - "scripts/install_inno_setup.ps1"
       - "scripts/fetch_windows_portable.ps1"
       - "tests/test_windows_distribution.py"
       - "tests/windows_icon_resources.py"
@@ -44,21 +45,7 @@ jobs:
           python-version: "3.12"
       - name: Install SHA256-pinned Inno Setup compiler
         shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          . ./installer/windows/Distribution.ps1
-          $setup = Join-Path $env:RUNNER_TEMP 'innosetup-7.1.1-x64.exe'
-          $client = New-ArciumWebClient
-          try {
-            $client.DownloadFile('https://github.com/jrsoftware/issrc/releases/download/is-7_1_1/innosetup-7.1.1-x64.exe', $setup)
-          } finally { $client.Dispose() }
-          if ((Get-ArciumSha256 $setup) -cne '8a5a6711c3766a6e5fb74f280ba0e3551e719ce94538d901fdbd1f8f9920b3f0') { throw 'Inno Setup digest mismatch.' }
-          $tool = Join-Path $env:RUNNER_TEMP 'Arcium-Inno'
-          $p = Start-Process -FilePath $setup -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',('/DIR="' + $tool + '"')) -Wait -PassThru
-          if ($p.ExitCode -ne 0) { throw "Inno Setup installation failed: $($p.ExitCode)" }
-          $iscc = Join-Path $tool 'ISCC.exe'
-          if (-not (Test-Path -LiteralPath $iscc)) { throw 'ISCC.exe was not installed.' }
-          "ARCIUM_ISCC=$iscc" >> $env:GITHUB_ENV
+        run: ./scripts/install_inno_setup.ps1 -OutputDirectory (Join-Path $env:RUNNER_TEMP 'Arcium-Inno')
       - name: Test real setup lifecycle with a synthetic browser
         env:
           ARCIUM_RUN_INSTALLER_TESTS: "1"

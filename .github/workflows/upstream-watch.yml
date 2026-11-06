@@ -1,0 +1,45 @@
+name: Watch engine and feature updates
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/upstream-watch.yml"
+      - ".github/scripts/upstream-watch.cjs"
+      - "upstream/feature-watch.json"
+      - "upstream/arcium-core.sha"
+      - "upstream/helium-windows.sha"
+      - "upstream/chromium-version.txt"
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      report_only:
+        description: "Report without creating or updating the watch issue"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: arcium-feature-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compare engine, Arcium, Xelium and Windows sources
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const watch = require('./.github/scripts/upstream-watch.cjs');
+            const reportOnly = context.payload.inputs?.report_only;
+            await watch({github, context, core,
+              reportOnly: reportOnly === 'true' || reportOnly === true});

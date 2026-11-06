@@ -15,6 +15,7 @@ const path = require('node:path');
 const config = JSON.parse(fs.readFileSync(0, 'utf8'));
 const calls = [], warnings = [];
 let summary = '';
+let candidateExists = config.exists !== false;
 const pinned = config.pinned || 'a'.repeat(40);
 const latest = config.latest || 'b'.repeat(40);
 const base = 'c'.repeat(40);
@@ -29,10 +30,10 @@ const github = {rest: {
     getRef: invoke('getRef', args => {
       if (args.ref === 'heads/main') return {data: {object: {sha: base}}};
       if (config.refError) fail(config.refError, 'Candidate reference failed');
-      if (config.exists === false) fail(404, 'Not found');
+      if (!candidateExists) fail(404, 'Not found');
       return {data: {object: {sha: 'd'.repeat(40)}}};
     }),
-    createRef: invoke('createRef', () => ({data: {}}))
+    createRef: invoke('createRef', () => {candidateExists = true; return {data: {}};})
   },
   repos: {
     getCommit: invoke('getCommit', () => ({data: {sha: latest}})),
@@ -46,7 +47,9 @@ const github = {rest: {
     }),
     createOrUpdateFileContents: invoke('writePin', () => ({data: {}}))
   },
-  actions: {createWorkflowDispatch: invoke('dispatch', () => {
+  actions: {listWorkflowRuns: invoke('listRuns', args => ({data:{workflow_runs:
+    config.workflowRuns?.[args.workflow_id] || []}})),
+  createWorkflowDispatch: invoke('dispatch', () => {
     if (config.dispatchError) fail(403, 'Validation dispatch denied');
     return {status: 204};
   })},
@@ -131,8 +134,40 @@ class UpstreamMonitorTests(unittest.TestCase):
         self.assertLess(names.index('dispatch'), names.index('createPR'))
         self.assertEqual(self.call(output, 'writePin')[0]['sha'], 'e' * 40)
         self.assertEqual(self.call(output, 'dispatch')[0]['ref'], BRANCH)
+        self.assertEqual([item['workflow_id'] for item in self.call(output, 'dispatch')],
+                         ['validate.yml', 'patch-hunk-compatibility.yml', 'windows-build-experiment.yml'])
+        self.assertEqual(self.call(output, 'dispatch')[-1]['inputs'],
+                         {'compile_browser':'false', 'runner':'windows-2025'})
         self.assertTrue(self.call(output, 'createPR')[0]['draft'])
         self.assertIn('does not establish a browser build', output['summary'])
+
+    def test_same_candidate_reuses_current_head_validation_and_never_rebuilds_automatically(self):
+        workflows = ['validate.yml', 'patch-hunk-compatibility.yml', 'windows-build-experiment.yml']
+        runs = {name:[{'id':20,'head_sha':'d' * 40,'status':'completed','conclusion':'success'}]
+                for name in workflows}
+        output = self.run_monitor(workflowRuns=runs, candidate=LATEST)
+        self.assertFalse(self.call(output, 'dispatch'))
+        self.assertTrue(all(item['status'] == 'PASSED' for item in output['result']['validations']))
+        runs[workflows[-1]][0].update(status='in_progress', conclusion=None)
+        running = self.run_monitor(workflowRuns=runs, candidate=LATEST)
+        self.assertFalse(self.call(running, 'dispatch'))
+        self.assertIn('RUNNING', running['summary'])
+        runs[workflows[-1]][0].update(status='completed', conclusion='failure')
+        failed = self.run_monitor(workflowRuns=runs, candidate=LATEST)
+        self.assertEqual(failed['result']['status'], 'VALIDATION_FAILED')
+        self.assertFalse(self.call(failed, 'dispatch'))
+        self.assertIn('FAILED', failed['summary'])
+
+    def test_validation_from_another_head_is_not_reused_and_latest_retry_wins(self):
+        runs = {'validate.yml':[{'id':20,'head_sha':'a' * 40,'status':'completed','conclusion':'success'}]}
+        output = self.run_monitor(workflowRuns=runs)
+        self.assertEqual(len(self.call(output, 'dispatch')), 3)
+        runs['validate.yml'] = [
+            {'id':19,'head_sha':'d' * 40,'status':'completed','conclusion':'failure'},
+            {'id':21,'head_sha':'d' * 40,'status':'completed','conclusion':'success'}]
+        retried = self.run_monitor(workflowRuns=runs)
+        self.assertEqual(retried['result']['validations'][0]['status'], 'PASSED')
+        self.assertEqual(len(self.call(retried, 'dispatch')), 2)
 
     def test_new_candidate_starts_from_the_read_main_snapshot(self):
         output = self.run_monitor(exists=False)

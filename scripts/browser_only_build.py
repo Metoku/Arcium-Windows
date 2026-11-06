@@ -22,7 +22,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts.gn_smoke import RESTORE_ANCHOR, RESTORE_STEP
-from scripts.windows_port import ROOT, audit_staged
+from scripts.windows_port import ROOT, audit_staged, git
 from scripts.windows_sdk_compat import adapt_windows_vcvars, select_windows_sdk
 from scripts.chromium_sdk_pin import inject_chromium_sdk_pin
 from scripts.windows_version_compat import (
@@ -40,6 +40,15 @@ ONBOARDING_STEP = (
     "    from scripts.apply_windows_arc_workflow import (\n"
     "        ONBOARDING_PATCH, PASSWORD_PATCH, SERVICES_PATCH, integrate_bundle)\n"
     "    integrate_bundle(source_tree, catalogs=(PASSWORD_PATCH, ONBOARDING_PATCH, SERVICES_PATCH), apply=True)\n\n"
+)
+RELEASE_INTEGRATIONS_ANCHOR = "        if not args.dev:\n            # Substitute domains\n"
+RELEASE_INTEGRATIONS_STEP = (
+    "        # Apply reviewed Windows integrations before product-name substitution.\n"
+    "        from scripts.apply_windows_arc_workflow import (\n"
+    "            ROOT as arcium_integration_root, integrate, integrate_bundle)\n"
+    "        integrate_bundle(source_tree, apply=True)\n"
+    "        integrate(source_tree, patch=arcium_integration_root /\n"
+    "                  'patches/windows/mac-window-buttons.patch', apply=True)\n\n"
 )
 
 
@@ -134,7 +143,7 @@ def first_compiler_failure(log_path: Path, limit: int = 24) -> list[str]:
     return result
 
 
-def make_browser_only_builder(upstream: str) -> str:
+def make_browser_only_builder(upstream: str, *, release_candidate: bool = False) -> str:
     """Convert exact pinned Windows build.py to an ephemeral browser-only builder."""
     if upstream.count(RESTORE_ANCHOR) != 1:
         raise ValueError("Unknown pinned Windows patch-stage entry")
@@ -142,13 +151,19 @@ def make_browser_only_builder(upstream: str) -> str:
         raise ValueError("Unknown Windows Ninja target list; no installer may run")
     if upstream.count(ONBOARDING_ANCHOR) != 1:
         raise ValueError("Unknown Windows pre-GN onboarding entry")
+    if release_candidate and upstream.count(RELEASE_INTEGRATIONS_ANCHOR) != 1:
+        raise ValueError("Unknown Windows pre-branding integration entry")
     builder = adapt_builder_version_api(upstream)
     builder = adapt_windows_vcvars(builder)
     builder = inject_chromium_sdk_pin(builder)
     builder = builder.replace(RESTORE_ANCHOR, RESTORE_STEP, 1)
     builder = builder.replace(ORIGINAL_RELEASE_TARGETS, BROWSER_ONLY_TARGETS, 1)
-    builder = builder.replace(ONBOARDING_ANCHOR,
-                              ONBOARDING_STEP + ONBOARDING_ANCHOR, 1)
+    if release_candidate:
+        builder = builder.replace(RELEASE_INTEGRATIONS_ANCHOR,
+                                  RELEASE_INTEGRATIONS_STEP + RELEASE_INTEGRATIONS_ANCHOR, 1)
+    else:
+        builder = builder.replace(ONBOARDING_ANCHOR,
+                                  ONBOARDING_STEP + ONBOARDING_ANCHOR, 1)
     if "ninja_commandline.extend(['chrome', 'chromedriver', 'setup', 'mini_installer'])" in builder:
         raise AssertionError("Installer command remains in generated builder")
     compile(builder, "arcium_browser_only_builder.py", "exec")
@@ -157,7 +172,8 @@ def make_browser_only_builder(upstream: str) -> str:
 
 def run_experiment(
     platform: Path, report_path: Path, *,
-    execute: bool, jobs: int, max_minutes: int, require_cache: bool = False
+    execute: bool, jobs: int, max_minutes: int, require_cache: bool = False,
+    release_candidate: bool = False
 ) -> int:
     report_path.parent.mkdir(parents=True, exist_ok=True)
     log_path = report_path.with_suffix(".log")
@@ -170,6 +186,7 @@ def run_experiment(
         "browser_compiled": False,
         "browser_launched": False,
         "browser_distributed": False,
+        "release_candidate_integrations": release_candidate,
         "danger": (
             "Browser-only prototype. The separate Arcium identity is applied "
             "before GN; native isolation and release packaging still need "
@@ -190,7 +207,8 @@ def run_experiment(
             platform / "helium-chromium" / "utils" / "helium_version.py"
         )
         script = make_browser_only_builder(
-            (platform / "build.py").read_text(encoding="utf-8")
+            (platform / "build.py").read_text(encoding="utf-8"),
+            release_candidate=release_candidate,
         )
         report.update({
             "status": "VALIDATED",
@@ -200,6 +218,7 @@ def run_experiment(
             "source_patches": audit["shared_patch_count"],
             "windows_patches": audit["windows_patch_count"],
             "compilation_jobs": jobs,
+            "integration_commit": git("-C", ROOT, "rev-parse", "HEAD"),
         })
         save()
         if not execute:
@@ -346,11 +365,15 @@ def main() -> int:
         "--require-cache", action="store_true",
         help="Require sccache on PATH before downloading/building Chromium"
     )
+    parser.add_argument(
+        "--release-candidate", action="store_true",
+        help="Apply all reviewed Windows catalogs and optional Mac buttons before branding"
+    )
     args = parser.parse_args()
     return run_experiment(
         args.platform_dir.resolve(), args.report.resolve(),
         execute=args.execute, jobs=args.jobs, max_minutes=args.max_minutes,
-        require_cache=args.require_cache,
+        require_cache=args.require_cache, release_candidate=args.release_candidate,
     )
 
 
