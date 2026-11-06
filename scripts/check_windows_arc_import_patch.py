@@ -35,7 +35,8 @@ from scripts.check_patch_overlaps import discover_patch_paths, download_original
 from scripts.windows_port import audit_staged, chromium_version, git, read_pin, read_series
 from scripts.check_windows_mac_buttons import MAC_PATCH, MAC_API_FILES, check_mac_buttons
 from scripts.check_windows_onboarding import (
-    ONBOARDING_ROOT, ONBOARDING_API_FILES, prepare_onboarding_assets, check_onboarding,
+    ONBOARDING_ROOT, ONBOARDING_API_FILES, BRANDING_API_FILES,
+    prepare_onboarding_assets, check_onboarding,
 )
 
 
@@ -156,7 +157,7 @@ def check(core: Path, platform: Path | None = None,
                           set(patch_targets(SERVICES_PATCH.read_text(encoding="utf-8")))
                           if platform is not None else set())
     if onboarding_targets:
-        replay_targets |= onboarding_targets | set(ONBOARDING_API_FILES)
+        replay_targets |= onboarding_targets | set(ONBOARDING_API_FILES) | set(BRANDING_API_FILES)
         replay_targets |= {path for path in all_paths if path.startswith(ONBOARDING_ROOT + "/")}
     original_hashes = {}
     with tempfile.TemporaryDirectory(prefix="arcium-arc-import-replay-") as temporary:
@@ -438,7 +439,7 @@ def check(core: Path, platform: Path | None = None,
         mac_report = check_mac_buttons(source, originals | mac_originals, catalogs)
         onboarding_report = (check_onboarding(
             source, originals | mac_originals | onboarding_originals,
-            catalogs, onboarding_assets) if onboarding_targets else None)
+            catalogs, onboarding_assets, core) if onboarding_targets else None)
         if (sentinel.read_bytes() != b"existing compiled output" or
                 sentinel.stat().st_mtime_ns != sentinel_time):
             raise RuntimeError("The Mac caption helper changed retained compilation output")

@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PATCH = ROOT / "patches" / "windows" / "arc-workflow-settings.patch"
 ONBOARDING_PATCH = ROOT / "patches/windows/onboarding-windows.patch"
 SERVICES_PATCH = ROOT / "patches/windows/extension-services-windows.patch"
+SERVICES_STRINGS_SOURCE = "chrome/app/settings_strings.grdp"
 PASSWORD_PATCH = ROOT / "patches/windows/arc-password-import-windows.patch"
 MAC_CAPTION_SOURCE = "chrome/browser/ui/views/frame/browser_caption_button_container_win.cc"
 LEGACY_MAC_LAYOUT_INVALIDATION = b"    button->PreferredSizeChanged();"
@@ -146,6 +147,31 @@ def patch_targets(text: str) -> list[str]:
         ):
             raise ValueError(f"Unsafe patch target: {path}")
     return new_paths
+
+
+def services_branded_patch(patch_bytes: bytes) -> bytes | None:
+    """Match the pinned builder's displayed-name substitution in this hunk.
+
+    The release build brands message bodies, leaving GRIT names/descriptions
+    intact. Adapt only these two exact lines in a temporary catalog; never
+    unbrand, serialize or normalize the user's XML file.
+    """
+    marker = (f"--- a/{SERVICES_STRINGS_SOURCE}\n"
+              f"+++ b/{SERVICES_STRINGS_SOURCE}\n").encode()
+    if patch_bytes.count(marker) != 1:
+        return None
+    prefix, _, tail = patch_bytes.partition(marker)
+    section, next_header, remaining = tail.partition(b"--- a/")
+    for before, after in (
+        (b"-      Helium services are not available until setup is complete to ensure your privacy and consent.\n",
+         b"-      Arcium services are not available until setup is complete to ensure your privacy and consent.\n"),
+        (b"       Allow connecting to Helium services\n",
+         b"       Allow connecting to Arcium services\n"),
+    ):
+        if section.count(before) != 1:
+            return None
+        section = section.replace(before, after, 1)
+    return prefix + marker + section + next_header + remaining
 
 
 def appearance_css_addition(patch_bytes: bytes) -> bytes:
@@ -295,6 +321,19 @@ def integrate(source: Path, *, apply: bool = False, revert: bool = False,
         staged_patch.write_bytes(patch_bytes)
         forward = git_apply(staged_source, staged_patch, reverse=False, check=True)
         backward = git_apply(staged_source, staged_patch, reverse=True, check=True)
+        if (forward.returncode and backward.returncode
+                and patch.name == SERVICES_PATCH.name):
+            # A completed non-dev build has branded XML message bodies. The
+            # complete seven-file catalog must still pass in one direction.
+            branded = services_branded_patch(patch_bytes)
+            if branded is not None:
+                staged_patch.write_bytes(branded)
+                branded_forward = git_apply(staged_source, staged_patch, reverse=False, check=True)
+                branded_backward = git_apply(staged_source, staged_patch, reverse=True, check=True)
+                if not branded_forward.returncode or not branded_backward.returncode:
+                    forward, backward = branded_forward, branded_backward
+                else:
+                    staged_patch.write_bytes(patch_bytes)
         needs_upgrade = False
         if (forward.returncode and backward.returncode
                 and patch.name == "mac-window-buttons.patch"

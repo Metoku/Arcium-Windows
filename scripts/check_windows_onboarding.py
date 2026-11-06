@@ -8,6 +8,7 @@ from __future__ import annotations
 import ast
 import configparser
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import re
@@ -19,7 +20,8 @@ import urllib.request
 import xml.etree.ElementTree as ET
 
 from scripts.apply_windows_arc_workflow import (
-    ROOT, ONBOARDING_PATCH, SERVICES_PATCH, integrate, integrate_bundle,
+    ROOT, ONBOARDING_PATCH, SERVICES_PATCH, SERVICES_STRINGS_SOURCE,
+    git_apply, integrate, integrate_bundle,
     EXTERNAL_EXTENSION_SOURCE, LEGACY_EXTERNAL_EXTENSION_REGISTRY,
     EXTERNAL_EXTENSION_REGISTRY,
 )
@@ -32,6 +34,10 @@ ONBOARDING_API_FILES = (
     'chrome/install_static/install_util.cc',
     'chrome/common/chrome_paths_win.cc',
     'chrome/browser/ui/startup/startup_browser_creator_impl.cc',
+)
+BRANDING_API_FILES = (
+    'tools/grit/grit/extern/tclib.py',
+    'tools/grit/grit/extern/FP.py',
 )
 
 
@@ -166,8 +172,87 @@ def build_onboarding_frontend(source: Path) -> dict:
             'browser_compiled':False}
 
 
+def check_services_branding(source: Path, postimages: dict[str, dict[str, bytes]],
+                           core: Path) -> dict:
+    """Replay the real release builder's branding before/after this catalog."""
+    saved = {name:(source / name).read_bytes() for name in postimages['LF']}
+    original_path = sys.path[:]
+    checks = []
+    try:
+        sys.path.insert(0, str(core / 'utils'))
+        spec = importlib.util.spec_from_file_location(
+            'arcium_pinned_name_substitution', core / 'utils/name_substitution.py')
+        branding = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(branding)
+        if Path(branding.util.__file__).resolve() != (core / 'utils/name_substitution_utils.py').resolve():
+            raise RuntimeError('Unexpected name-substitution utility loaded')
+        branding.util.add_grit_to_path(source)
+        for style, postimage in postimages.items():
+            expected_old = None
+            for applied_first in (False, True):
+                for name, data in postimage.items():
+                    (source / name).write_bytes(data)
+                if not applied_first:
+                    integrate(source, patch=SERVICES_PATCH, revert=True)
+                strings = source / SERVICES_STRINGS_SOURCE
+                # This is the exact function called by do_substitution in the
+                # pinned Windows builder, including XML reserialization and
+                # Chromium's real translation fingerprints. No GRIT mocks.
+                branding.substitute_grit_file((strings, source, False, False))
+                data = strings.read_bytes().replace(b'\r\n', b'\n')
+                if style in ('CRLF', 'mixed'):
+                    data = data.replace(b'\n', b'\r\n')
+                strings.write_bytes(data)
+                snapshot = lambda: {name:((source / name).read_bytes(),
+                                          (source / name).stat().st_mtime_ns)
+                                    for name in saved}
+                before = snapshot()
+                if not applied_first:
+                    expected_old = {name:value[0] for name, value in before.items()}
+                    if style == 'LF':
+                        canonical = git_apply(source, SERVICES_PATCH, reverse=False, check=True)
+                        if (not canonical.returncode or SERVICES_STRINGS_SOURCE not in canonical.stderr
+                                or canonical.stderr.count('patch failed:') != 1):
+                            raise RuntimeError('The reported post-branding strings failure was not reproduced')
+                status = 'APPLIED' if applied_first else 'READY'
+                if integrate(source, patch=SERVICES_PATCH) != status or snapshot() != before:
+                    raise RuntimeError('Post-branding services check changed source or returned the wrong state')
+                integrate(source, patch=SERVICES_PATCH, apply=True)
+                after = snapshot()
+                integrate(source, patch=SERVICES_PATCH, apply=True)
+                if snapshot() != after:
+                    raise RuntimeError('Post-branding services reapplication rewrote source')
+                integrate(source, patch=SERVICES_PATCH, revert=True)
+                if {name:value[0] for name, value in snapshot().items()} != expected_old:
+                    raise RuntimeError('Services reversion did not preserve the builder branding exactly')
+                strings.write_bytes(strings.read_bytes().replace(
+                    b'Arcium services are not available', b'Unknown consent message', 1))
+                edited = snapshot()
+                try:
+                    integrate(source, patch=SERVICES_PATCH, apply=True)
+                except RuntimeError:
+                    pass
+                else:
+                    raise RuntimeError('Services branding fallback accepted unknown consent copy')
+                if snapshot() != edited:
+                    raise RuntimeError('Rejected post-branding application changed source')
+                checks.append({'endings':style, 'branding_after_apply':applied_first})
+        return {'status':'PINNED_BUILDER_BRANDING_REPLAY_PASSED', 'checks':checks,
+                'reported_failure_reproduced':True, 'unknown_copy_rejected':True,
+                'pinned_utility_sha256':{
+                    name:hashlib.sha256((core / 'utils' / name).read_bytes()).hexdigest()
+                    for name in ('name_substitution.py', 'name_substitution_utils.py')},
+                'grit_sha256':{name:hashlib.sha256((source / name).read_bytes()).hexdigest()
+                               for name in BRANDING_API_FILES}}
+    finally:
+        sys.path[:] = original_path
+        for name, data in saved.items():
+            if (source / name).read_bytes() != data:
+                (source / name).write_bytes(data)
+
+
 def check_onboarding(source: Path, originals: dict[str, bytes],
-                     catalogs: tuple[Path, ...], assets: dict) -> dict:
+                     catalogs: tuple[Path, ...], assets: dict, core: Path) -> dict:
     """Exercise fresh/already-patched bundles and retain native build output."""
     checks, postimages, proof, frontend = [], {}, None, None
     upgrades = []
@@ -251,8 +336,11 @@ def check_onboarding(source: Path, originals: dict[str, bytes],
             if sentinel.read_bytes() != sentinel_bytes or sentinel.stat().st_mtime_ns != sentinel_time:
                 raise RuntimeError('First-run patch helper changed an existing browser profile')
             checks.append({'endings':style, 'order':[p.name for p in order]})
+    branding = check_services_branding(source, postimages, core)
+    if sentinel.read_bytes() != sentinel_bytes or sentinel.stat().st_mtime_ns != sentinel_time:
+        raise RuntimeError('Services branding check changed an existing browser profile')
     return {'status':'ONBOARDING_REPLAY_AND_FRONTEND_CHECKS_PASSED',
             'assets':assets, 'checks':checks, 'native_contracts':proof,
             'earlier_version_upgrades':upgrades,
-            'frontend':frontend, 'existing_profile_retained':True,
+            'frontend':frontend, 'services_branding':branding, 'existing_profile_retained':True,
             'browser_compiled':False, 'windows_runtime_verified':False}

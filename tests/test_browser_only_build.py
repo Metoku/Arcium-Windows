@@ -8,6 +8,7 @@ from unittest.mock import Mock, patch
 from scripts.browser_only_build import (
     BROWSER_ONLY_TARGETS, ORIGINAL_RELEASE_TARGETS,
     ONBOARDING_ANCHOR, ONBOARDING_STEP,
+    RELEASE_INTEGRATIONS_ANCHOR, RELEASE_INTEGRATIONS_STEP,
     first_compiler_failure, make_browser_only_builder, print_diagnostic,
     REQUIRED_NATIVE_CHROMIUM_SDK, require_native_chromium_sdk,
     latest_build_progress, require_compilation_cache, stop_build_tree
@@ -29,6 +30,8 @@ def pinned_fixture() -> str:
         "    if True:\n"
         + RESTORE_ANCHOR +
         "            pass\n"
+        + RELEASE_INTEGRATIONS_ANCHOR +
+        "            pass\n"
         + OLD_VERSION_BLOCK +
         SDK_PIN_ANCHOR +
         "    ninja_commandline = []\n"
@@ -37,6 +40,18 @@ def pinned_fixture() -> str:
 
 
 class BrowserOnlyBuilderTests(unittest.TestCase):
+    def test_release_candidate_applies_complete_bundle_before_branding_exactly_once(self):
+        code = make_browser_only_builder(pinned_fixture(), release_candidate=True)
+        compile(code, 'release-builder.py', 'exec')
+        self.assertEqual(code.count(RELEASE_INTEGRATIONS_STEP), 1)
+        self.assertNotIn(ONBOARDING_STEP, code)
+        self.assertLess(code.index(RELEASE_INTEGRATIONS_STEP), code.index(RELEASE_INTEGRATIONS_ANCHOR))
+        self.assertIn(BROWSER_ONLY_TARGETS, code)
+        self.assertNotIn(ORIGINAL_RELEASE_TARGETS, code)
+        with self.assertRaisesRegex(ValueError, 'pre-branding integration'):
+            make_browser_only_builder(pinned_fixture().replace(RELEASE_INTEGRATIONS_ANCHOR, ''),
+                                      release_candidate=True)
+
     def test_version_restore_and_browser_only_target(self):
         code = make_browser_only_builder(pinned_fixture())
         self.assertIn("helium_version.refresh_version(", code)

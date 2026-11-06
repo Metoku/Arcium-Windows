@@ -9,6 +9,7 @@ Requires an existing chrome.exe from a prior separate browser-only build.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -69,6 +70,7 @@ def run_smoke(browser: Path, report: Path, *, timeout: int = 45) -> int:
         browser = browser.resolve(strict=True)
         if not browser.is_file() or browser.name.lower() != "chrome.exe":
             raise ValueError("Expected an existing compiled chrome.exe")
+        result["browser_sha256"] = hashlib.sha256(browser.read_bytes()).hexdigest()
         # Avoid passing browser arguments from an external source.
         with tempfile.TemporaryDirectory(
             prefix="arcium-browser-smoke-", ignore_cleanup_errors=True
@@ -90,6 +92,8 @@ def run_smoke(browser: Path, report: Path, *, timeout: int = 45) -> int:
             result["browser_launched"] = (
                 proc.returncode == 0 and result["stdout_has_html"]
             )
+            if hashlib.sha256(browser.read_bytes()).hexdigest() != result["browser_sha256"]:
+                raise RuntimeError("Browser executable changed during launch verification")
         result["isolated_profile_deleted"] = not profile.exists()
         result["status"] = (
             "HEADLESS_LAUNCH_PASSED"
