@@ -70,18 +70,20 @@ def verify(repo: Path, build: Path, dist: Path, version: str, commit: str,
     packaged = {}
     with zipfile.ZipFile(archive) as package:
         for entry in package.infolist():
-            if entry.is_dir():
-                continue
-            path = PurePosixPath(entry.filename)
+            normalized_name = entry.filename[:-1] if entry.is_dir() else entry.filename
+            path = PurePosixPath(normalized_name)
             if (stat.S_ISLNK(entry.external_attr >> 16) or
                     not entry.filename.startswith(name + '/') or path.is_absolute() or
                     '..' in path.parts or '\\' in entry.filename or ':' in entry.filename or
-                    path.as_posix() != entry.filename):
+                    path.as_posix() != normalized_name):
                 raise ValueError('Unsafe packaged path')
+            if any(part.casefold() in ('default', 'user data', 'local state') for part in path.parts[1:]):
+                raise ValueError('Private packaged path')
+            if entry.is_dir():
+                continue
             relative = PurePosixPath(*path.parts[1:]).as_posix()
             key = relative.casefold()
-            if key in packaged or any(part.casefold() in ('default', 'user data', 'local state')
-                                      for part in path.parts[1:]) or path.suffix.lower() in ('.csv', '.log'):
+            if key in packaged or path.suffix.lower() in ('.csv', '.log'):
                 raise ValueError('Duplicate or private packaged file')
             original = (repo / 'LICENSE' if relative == 'LICENSE.Arcium.txt' else build / relative)
             resolved = original.resolve(strict=True)

@@ -124,13 +124,16 @@ class ReleaseCandidateTests(unittest.TestCase):
 
     def test_unsafe_private_or_duplicate_entries_fail_before_candidate_receipt(self):
         prefix = f'Arcium-Windows-{self.version}/'
-        for entry in (prefix + '../escape', prefix + 'Default/Preferences',
+        for entry in (prefix + '../escape', prefix + '../escape/', prefix + 'Default/',
+                      prefix + 'Default/Preferences',
                       prefix + 'passwords.csv', prefix + 'CHROME.EXE', '/absolute',
                       prefix + 'locales\\en-US.pak'):
             with self.subTest(entry=entry):
                 self.make_archive([(entry, b'Unexpected')])
                 with self.assertRaises(ValueError):
                     self.check()
+        self.make_archive([(prefix, b''), (prefix + 'locales/', b'')])
+        self.assertEqual(self.check()['status'], 'WINDOWS_RELEASE_CANDIDATE_VERIFIED')
 
     def test_heavy_workflow_is_manual_and_candidate_upload_requires_success(self):
         workflow = (ROOT / '.github/workflows/windows-release-candidate.yml').read_text()
