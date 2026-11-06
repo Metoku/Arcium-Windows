@@ -17,6 +17,31 @@ function managedBody(body, status) {
   return body.slice(0, start) + block + body.slice(end + END.length);
 }
 
+async function validateCandidate(github, owner, repo, branch, head) {
+  const workflows = ['validate.yml', 'patch-hunk-compatibility.yml', 'windows-build-experiment.yml'];
+  const states = [];
+  for (const workflow_id of workflows) {
+    const response = await github.rest.actions.listWorkflowRuns({owner, repo,
+      workflow_id, branch, per_page:100});
+    if (!Array.isArray(response.data.workflow_runs)) throw new Error('Invalid validation run response');
+    const run = response.data.workflow_runs.filter(run => run.head_sha === head)
+      .sort((a, b) => b.id - a.id)[0];
+    if (run) {
+      states.push({workflow:workflow_id,
+        status:run.status !== 'completed' ? 'RUNNING' :
+          run.conclusion === 'success' ? 'PASSED' : 'FAILED',
+        url:`https://github.com/${owner}/${repo}/actions/runs/${run.id}`});
+      continue;
+    }
+    const inputs = workflow_id === 'windows-build-experiment.yml' ?
+      {compile_browser:'false', runner:'windows-2025'} : {};
+    await github.rest.actions.createWorkflowDispatch({owner, repo, workflow_id, ref:branch, inputs});
+    states.push({workflow:workflow_id, status:'REQUESTED',
+      url:`https://github.com/${owner}/${repo}/actions/workflows/${workflow_id}`});
+  }
+  return states;
+}
+
 module.exports = async function monitor({github, context, core}) {
   const {owner, repo} = context.repo;
   const base = context.payload.repository.default_branch;
@@ -75,9 +100,11 @@ module.exports = async function monitor({github, context, core}) {
     summary.push(`[Review candidate changes](${compare})`, '');
     // Token-authored commits do not trigger ordinary push/PR checks. A failed
     // explicit dispatch is a failed monitor run, not successful validation.
-    await github.rest.actions.createWorkflowDispatch({owner, repo,
-      workflow_id: 'validate.yml', ref: branch});
-    summary.push(`Source metadata validation requested on ${branch}.`,
+    const candidateHead = revision((await github.rest.git.getRef({owner, repo,
+      ref:`heads/${branch}`})).data.object.sha);
+    const validations = await validateCandidate(github, owner, repo, branch, candidateHead);
+    const checks = validations.map(item => `- [${item.workflow}](${item.url}): **${item.status}**`);
+    summary.push(`Validation for candidate \`${candidateHead}\`:`, ...checks,
       'This request does not establish a browser build or Windows compatibility.', '');
 
     const proposal = [
@@ -86,8 +113,10 @@ module.exports = async function monitor({github, context, core}) {
       `- Windows integration base: ${baseSha}`,
       `- [Upstream changes](https://github.com/dr-baker/Arcium/compare/${pinned}...${latest})`,
       `- [Candidate changes](${compare})`, '',
-      'Source metadata validation has been requested. Before merging, verify the',
-      'Windows platform/Chromium version pins, patch application and native build.',
+      `Validation head: \`${candidateHead}\``, ...checks, '',
+      'These checks cover metadata, Chromium hunks and the pinned Windows source replay.',
+      'Requested or running checks are not passed checks. Native compilation and',
+      'interactive acceptance remain separate gates before adopting the revision.',
       'The monitor does not merge proposals, publish releases or install updates.'
     ].join('\n');
     const prs = await github.rest.pulls.list({owner, repo, state: 'open', base,
@@ -99,13 +128,15 @@ module.exports = async function monitor({github, context, core}) {
         await github.rest.pulls.update({owner, repo, pull_number: pr.number, body});
       }
       summary.push(`Review PR: ${pr.html_url}`);
-      return {status: 'PROPOSAL_READY', url: pr.html_url};
+      return {status: validations.some(item => item.status === 'FAILED') ?
+        'VALIDATION_FAILED' : 'PROPOSAL_READY', url: pr.html_url, validations};
     }
     try {
       const pr = await github.rest.pulls.create({owner, repo, base, head: branch,
         title: 'chore: review Arcium core revision', body: managedBody('', proposal), draft: true});
       summary.push(`Draft review PR: ${pr.data.html_url}`);
-      return {status: 'PROPOSAL_READY', url: pr.data.html_url};
+      return {status: validations.some(item => item.status === 'FAILED') ?
+        'VALIDATION_FAILED' : 'PROPOSAL_READY', url: pr.data.html_url, validations};
     } catch (error) {
       if (error.status !== 403 ||
           !/GitHub Actions is not permitted to create or approve pull requests/i.test(error.message)) {
@@ -120,7 +151,8 @@ module.exports = async function monitor({github, context, core}) {
         'Under Workflow permissions, enable **Allow GitHub Actions to create and',
         'approve pull requests**, then save. This workflow creates draft proposals;',
         'it does not approve or merge them. You may instead keep manual PR creation.',
-        'Source validation was requested separately; inspect its result before review.'
+        'Candidate validation status:', ...checks,
+        'Inspect the actual results before review; no native build was requested.'
       ].join('\n');
       const issues = await github.paginate(github.rest.issues.listForRepo,
         {owner, repo, state: 'open', per_page: 100});

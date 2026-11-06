@@ -1,6 +1,7 @@
 """Offline acceptance tests for the isolated Windows headless browser launch."""
 
 import json
+import hashlib
 from pathlib import Path
 import subprocess
 import sys
@@ -67,7 +68,24 @@ class BrowserLaunchSmokeTests(unittest.TestCase):
             self.assertEqual(data["status"], "HEADLESS_LAUNCH_PASSED")
             self.assertTrue(data["browser_launched"])
             self.assertTrue(data["isolated_profile_deleted"])
+            self.assertEqual(data['browser_sha256'], hashlib.sha256(b'placeholder').hexdigest())
             self.assertFalse(observed["profile"].exists())
+
+    def test_executable_changed_during_launch_cannot_produce_accepted_evidence(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            browser = root / 'chrome.exe'
+            browser.write_bytes(b'before')
+            report = root / 'launch.json'
+            def replace(command, **kwargs):
+                browser.write_bytes(b'after')
+                return subprocess.CompletedProcess(command, 0, '<html></html>', '')
+            with patch.object(smoke.sys, 'platform', 'win32'), \
+                    patch.object(smoke.subprocess, 'run', side_effect=replace):
+                self.assertEqual(smoke.run_smoke(browser, report), 1)
+            data = json.loads(report.read_text())
+            self.assertEqual(data['status'], 'ERROR')
+            self.assertIn('changed during launch', data['error'])
 
     def test_nonzero_exit_does_not_claim_browser_success(self):
         with tempfile.TemporaryDirectory() as folder:

@@ -1,0 +1,142 @@
+name: Build Windows release candidate
+
+# Manual only. This is a fresh native build, not repackaging an old release.
+on:
+  workflow_dispatch:
+    inputs:
+      package_version:
+        description: "New candidate version (no v prefix)"
+        type: string
+        required: true
+        default: "0.1.0-alpha.4"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: arcium-native-release-candidate
+  cancel-in-progress: false
+
+jobs:
+  candidate:
+    runs-on: ${{ vars.ARCIUM_NATIVE_WINDOWS_RUNNER || 'windows-2025' }}
+    timeout-minutes: 350
+    env:
+      PACKAGE_VERSION: ${{ inputs.package_version }}
+      SCCACHE_GHA_ENABLED: "on"
+      SCCACHE_GHA_VERSION: "chromium-156-windows-sdk28000-v1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check version and dedicated runner capacity before downloads
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          . ./installer/windows/Distribution.ps1
+          $null=ConvertTo-ArciumVersion $env:PACKAGE_VERSION
+          $logical=[Environment]::ProcessorCount
+          $ram=[math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory/1GB,1)
+          $disk=[math]::Round(([IO.DriveInfo]::new([IO.Path]::GetPathRoot($env:GITHUB_WORKSPACE))).AvailableFreeSpace/1GB,1)
+          Write-Host "Runner: $logical CPUs; $ram GiB RAM; $disk GiB free"
+          if ($logical -lt 16 -or $ram -lt 56 -or $disk -lt 145) {
+            throw 'Configure ARCIUM_NATIVE_WINDOWS_RUNNER for a dedicated Windows runner with >=16 logical CPUs, >=64 GiB RAM and >=150 GiB free SSD. Standard hosted runners are too small.'
+          }
+          $vswhere=Join-Path ([Environment]::GetFolderPath('ProgramFilesX86')) 'Microsoft Visual Studio/Installer/vswhere.exe'
+          if (-not (Test-Path -LiteralPath $vswhere)) { throw 'Visual Studio C++ build tools are missing.' }
+          $vs=& $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if ($LASTEXITCODE -ne 0 -or -not $vs) { throw 'Install the Visual Studio Desktop development with C++ workload.' }
+          $jobs=[Math]::Min(32,[Math]::Min($logical,[int][Math]::Floor($ram/3.5)))
+          "ARCIUM_NATIVE_JOBS=$jobs" >> $env:GITHUB_ENV
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Run repository contracts
+        run: python -m unittest discover -s tests -v
+      - name: Stage exact core and Windows source pins
+        run: python scripts/windows_port.py stage
+      - name: Verify shared and Windows Chromium hunks
+        run: python -m scripts.check_patch_overlaps --scope windows
+      - name: Install pinned frontend validation tools
+        run: npm install --prefix work/appearance-ui --no-save --ignore-scripts --no-audit --no-fund typescript@6.0.2 stylelint@17.0.0 "@stylistic/stylelint-plugin@5.0.0" postcss@8.5.3 eslint@10.2.0 "@typescript-eslint/eslint-plugin@8.58.2" "@typescript-eslint/parser@8.58.2" eslint-plugin-lit@2.2.1
+      - name: Replay all optional Windows integrations and frontend gates
+        run: python -m scripts.check_windows_arc_import_patch --core-dir work/windows-platform/helium-chromium --platform-dir work/windows-platform --typescript work/appearance-ui/node_modules/typescript
+      - name: Validate exact pre-branding release integration entry
+        run: python scripts/browser_only_build.py --validate --release-candidate --report work/release-builder-validation.json
+      - uses: mozilla-actions/sccache-action@v0.0.11
+        with:
+          version: "v0.16.0"
+      - name: Expose compiler cache credentials without printing them
+        uses: actions/github-script@v7
+        with:
+          script: |
+            if (!process.env.ACTIONS_RESULTS_URL || !process.env.ACTIONS_RUNTIME_TOKEN) {
+              throw new Error('Missing compiler-cache credentials');
+            }
+            core.exportVariable('ACTIONS_RESULTS_URL', process.env.ACTIONS_RESULTS_URL);
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN);
+      - name: Provision the reviewed Windows SDK
+        shell: pwsh
+        run: ./scripts/provision_chromium_sdk.ps1 -Install
+      - name: Install source preparation dependencies
+        run: python -m pip install requests Pillow
+      - name: Compile fresh browser with every reviewed Windows integration
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python scripts/browser_only_build.py --execute --release-candidate --require-cache --jobs $env:ARCIUM_NATIVE_JOBS --max-minutes 310
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify native browser launch in a disposable profile
+        run: python scripts/windows_browser_smoke.py --timeout 60
+      - name: Package this newly compiled runtime
+        shell: pwsh
+        run: ./scripts/package_windows_portable.ps1 -Version $env:PACKAGE_VERSION
+      - name: Verify packaged browser launch in a disposable profile
+        shell: pwsh
+        run: |
+          $browser=Join-Path $env:GITHUB_WORKSPACE "dist/Arcium-Windows-$($env:PACKAGE_VERSION)/chrome.exe"
+          python scripts/windows_browser_smoke.py --browser $browser --timeout 60 --report work/packaged-browser-smoke.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Install pinned installer compiler
+        shell: pwsh
+        run: ./scripts/install_inno_setup.ps1 -OutputDirectory (Join-Path $env:RUNNER_TEMP 'Arcium-Inno')
+      - name: Build installer from this runtime only
+        shell: pwsh
+        run: |
+          $zip=Join-Path $env:GITHUB_WORKSPACE "dist/Arcium-Windows-$($env:PACKAGE_VERSION).zip"
+          ./scripts/package_windows_installer.ps1 -PortableZip $zip -Version $env:PACKAGE_VERSION
+      - name: Verify source, runtime bytes, launch evidence and installer provenance
+        shell: pwsh
+        run: |
+          python scripts/verify_windows_release_candidate.py --version $env:PACKAGE_VERSION --commit $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload complete candidate after every gate passes
+        uses: actions/upload-artifact@v4
+        with:
+          name: Arcium-Windows-release-candidate-${{ github.run_number }}
+          path: |
+            dist/*.zip
+            dist/*.zip.sha256
+            dist/*-Setup.exe
+            dist/*-Setup.exe.sha256
+            dist/*-Setup.exe.json
+            dist/*-release-candidate.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+      - name: Upload diagnostics and source reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release-candidate-diagnostics-${{ github.run_number }}
+          path: |
+            work/*.json
+            work/browser-only-build.log
+          if-no-files-found: warn
+          retention-days: 7
+# No release publication, installation, signing, or automatic upstream merging.
+# Test interactive behavior and an installed upgrade before publishing a release.
