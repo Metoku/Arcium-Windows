@@ -31,6 +31,14 @@ frontend and build-input changes; no native C++ source is changed by this
 catalog. Resume performs an incremental build. New browser-only builds and
 `--feature all` include the catalog.
 
+An existing non-dev build has already changed displayed Helium names to Arcium
+and serialized the GRIT XML. The helper accepts both the pre-build and branded
+versions of the two relevant message lines. It validates all seven files in
+temporary copies before writing, preserves the existing branding and line
+endings, and still rejects unknown or partial edits. If an earlier helper
+stopped at `chrome/app/settings_strings.grdp:1696`, update the repository and
+retry the focused `services` command above. No cleaning or restaging is needed.
+
 Launch the rebuilt `work\windows-platform\build\src\out\Default\chrome.exe`.
 An installed copy still runs its earlier resources until it is repackaged and
 updated with the existing installer process.
@@ -65,3 +73,9 @@ These checks do not compile Chromium or prove Windows runtime installation.
 After rebuilding, confirm that the review returns to settings, the switches
 remain enabled after restart, and a Chrome Web Store extension installs and
 opens. Keep that runtime result separate from source validation.
+
+The replay also runs the pinned builder's actual name-substitution function,
+including its XML serializer and Chromium GRIT fingerprints. It reproduces the
+old settings-string hunk failure and checks branding before and after catalog
+application, read-only checks, repeat application, exact reversion and rejection
+of unknown consent copy with LF, CRLF, mixed and missing-final-newline inputs.
