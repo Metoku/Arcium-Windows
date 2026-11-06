@@ -53,10 +53,18 @@ def verify_prepared_state(platform: Path, report: dict, log: Path) -> Path:
         raise FileExistsError("GN marker already exists; do not run GN recovery")
     if not generated.is_file():
         raise FileNotFoundError("Original generated GN-only builder is missing")
-    expected_builder = create_gn_only_builder(
-        (platform / "build.py").read_text(encoding="utf-8")
-    )
-    if generated.read_text(encoding="utf-8") != expected_builder:
+    release_candidate = report.get("release_candidate_integrations", False)
+    if type(release_candidate) is not bool:
+        raise ValueError("GN recovery refused: release candidate mode is not a boolean")
+    upstream = (platform / "build.py").read_text(encoding="utf-8")
+    # Accept complete reviewed snapshots for this recorded mode, including
+    # the pre-fix builder already used to prepare the user's Chromium tree.
+    expected_builders = {
+        create_gn_only_builder(upstream, release_candidate=release_candidate,
+                               pin_python=pin_python)
+        for pin_python in (True, False)
+    }
+    if generated.read_text(encoding="utf-8") not in expected_builders:
         raise ValueError("Generated GN-only builder differs from reviewed pinned input")
 
     files = (

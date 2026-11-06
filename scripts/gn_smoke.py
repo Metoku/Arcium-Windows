@@ -42,6 +42,13 @@ GN_EXIT = (
     "    return\n\n"
 )
 BUILDER_IDENTIFIER = "Helium build script for Windows"
+GN_PYTHON_ANCHOR = (
+    "            'buildtools\\\\win\\\\gn.exe', 'gen', 'out\\\\Default', '--fail-on-unused-args')"
+)
+GN_PYTHON_PINNED = (
+    "            'buildtools\\\\win\\\\gn.exe', 'gen', 'out\\\\Default', '--fail-on-unused-args',\n"
+    "            '--script-executable=' + sys.executable)"
+)
 RESTORE_ANCHOR = (
     "        if not args.dev:\n"
     "            # Apply patches\n"
@@ -59,7 +66,8 @@ RESTORE_STEP = (
 
 
 
-def create_gn_only_builder(upstream: str, *, release_candidate: bool = False) -> str:
+def create_gn_only_builder(upstream: str, *, release_candidate: bool = False,
+                           pin_python: bool = True) -> str:
     """Fail closed if the pinned upstream script structure changes."""
     if BUILDER_IDENTIFIER not in upstream:
         raise ValueError("Unexpected Windows builder identity")
@@ -80,6 +88,12 @@ def create_gn_only_builder(upstream: str, *, release_candidate: bool = False) ->
     candidate = inject_chromium_sdk_pin(candidate)
     candidate = candidate.replace(RESTORE_ANCHOR, RESTORE_STEP, 1)
     candidate = candidate.replace(GN_ANCHOR, GN_EXIT + GN_ANCHOR, 1)
+    if pin_python:
+        if candidate.count(GN_PYTHON_ANCHOR) != 1:
+            raise ValueError("Unknown pinned Windows GN Python invocation")
+        candidate = candidate.replace(GN_PYTHON_ANCHOR, GN_PYTHON_PINNED, 1)
+    # pin_python=False reconstructs only the complete earlier builder for
+    # read-only recovery verification. New preparations always use the default.
     compile(candidate, "arcium_gn_only.py", "exec")
     return candidate
 

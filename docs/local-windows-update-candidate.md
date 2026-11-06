@@ -80,6 +80,21 @@ partial workspace. The existing Python-alias recovery helper applies only to
 the documented Store-alias failure. Avoid deleting `out\Default` to retry a
 compiler error.
 
+For the confirmed WindowsApps/python3.exe Store-alias failure, update the
+candidate scripts to the reviewed recovery fix, then run:
+
+```powershell
+python scripts\recover_gn_python_alias.py
+python scripts\recover_gn_python_alias.py --execute
+```
+
+Run the second command only after the read-only check succeeds. Recovery
+recognizes the complete earlier release-candidate builder and current builders
+using the mode recorded in the original report. It selects installed Python
+explicitly and repeats only GN, retaining source archives, applied patches and
+completed objects. Success creates the GN marker for the normal resume helper.
+New preparation runs also pass installed Python to GN explicitly.
+
 ## Verify launch before accepting the candidate
 
 After compilation succeeds:
