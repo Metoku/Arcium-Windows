@@ -25,6 +25,7 @@ SERVICES_PATCH = ROOT / "patches/windows/extension-services-windows.patch"
 SERVICES_STRINGS_SOURCE = "chrome/app/settings_strings.grdp"
 PASSWORD_PATCH = ROOT / "patches/windows/arc-password-import-windows.patch"
 PROFILE_KEEP_ALIVE_PATCH = ROOT / "patches/windows/profile-keep-alive-windows.patch"
+TAB_TOOLS_PATCH = ROOT / "patches/windows/sidebar-tab-tools-windows.patch"
 PROFILE_KEEP_ALIVE_METRICS = "tools/metrics/histograms/metadata/profile/enums.xml"
 MAC_CAPTION_SOURCE = "chrome/browser/ui/views/frame/browser_caption_button_container_win.cc"
 LEGACY_MAC_LAYOUT_INVALIDATION = b"    button->PreferredSizeChanged();"
@@ -596,7 +597,8 @@ def integrate_bundle(source: Path, *, apply: bool = False, revert: bool = False,
         catalogs = (PATCH, ROOT / "patches/windows/arc-import-windows.patch",
                     PASSWORD_PATCH,
                     ROOT / "patches/windows/arc-appearance-windows.patch",
-                    ONBOARDING_PATCH, SERVICES_PATCH, PROFILE_KEEP_ALIVE_PATCH)
+                    ONBOARDING_PATCH, SERVICES_PATCH, PROFILE_KEEP_ALIVE_PATCH,
+                    TAB_TOOLS_PATCH)
     source = source.resolve(strict=True)
     if not (source / "BUILD.gn").is_file():
         raise ValueError("Expected a prepared Chromium source root containing BUILD.gn")
@@ -637,7 +639,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-dir", type=Path,
                         default=ROOT / "work/windows-platform/build/src")
-    parser.add_argument("--feature", choices=("workflow", "arc-import", "passwords", "appearance", "mac-buttons", "onboarding", "services", "profile-keep-alive", "all"),
+    parser.add_argument("--feature", choices=("workflow", "arc-import", "passwords", "appearance", "mac-buttons", "onboarding", "services", "profile-keep-alive", "tab-tools", "all"),
                         default="workflow", help="Optional Windows integration to apply")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--check", action="store_true", help="Read-only applicability check (default)")
@@ -654,6 +656,7 @@ def main() -> int:
             "onboarding": ONBOARDING_PATCH,
             "services": SERVICES_PATCH,
             "profile-keep-alive": PROFILE_KEEP_ALIVE_PATCH,
+            "tab-tools": TAB_TOOLS_PATCH,
         }
         if args.feature == "all":
             status = integrate_bundle(args.source_dir, apply=args.apply, revert=args.revert)
@@ -668,6 +671,7 @@ def main() -> int:
               "onboarding": "ONBOARDING",
               "services": "SERVICES",
               "profile-keep-alive": "PROFILE_KEEP_ALIVE",
+              "tab-tools": "TAB_TOOLS",
               "all": "ALL"}[args.feature]
     print(f"ARCIUM_WINDOWS_{marker}_{status}")
     if args.apply or args.revert:
