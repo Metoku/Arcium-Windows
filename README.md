@@ -21,6 +21,7 @@ Mac-style red/yellow/green buttons are optional. Enable `helium://flags/#arcium-
 The shared core supplies Spaces, profiles, Pins, Favorites, folders, split views, the command bar, Peek, recent-tab previews and Little Arc. Windows integrations expose their workflow and appearance controls, Arc sidebar discovery, password CSV import, first-run setup and separate browser identity.
 
 - [Workflow and shortcuts](docs/arc-workflow-windows.md)
+- [Sidebar Tidy, Clear and optional inactive-tab cleanup](docs/sidebar-tab-tools.md): local website grouping and Chromium tab recovery; requires a native rebuild of this candidate.
 - [Space colors, customization and Windows Mica/Acrylic](docs/arc-appearance-windows.md)
 - [Arc sidebar import](docs/arc-import-windows.md): supported Spaces, Pins, folders and Favorites; optional history. Imported split layouts are flattened and some source identities remain unavailable.
 - [Saved passwords](docs/arc-password-import-windows.md): separate CSV import into the chosen profile. Cookies, existing sign-ins, extensions and passkeys are not transferred by that flow.
@@ -36,7 +37,7 @@ The [upstream monitor](.github/workflows/upstream-sync.yml) checks Arcium every 
 
 The manual [Windows release-candidate workflow](.github/workflows/windows-release-candidate.yml) can build fresh browser code on a suitable dedicated runner, verify the runtime and packaged launches, and produce a ZIP, installer, checksums and correlated receipts. It uploads candidates for testing; it does not publish or install updates automatically.
 
-Windows source is pinned to Chromium **156.0.8078.47**, Arcium core [4e8f8e2b](https://github.com/dr-baker/Arcium/tree/4e8f8e2bd3cdcab014ae9663907db93e915cb850), and the tracked [Windows platform revision](upstream/helium-windows.sha). Upstream compatibility and security changes need review before adopting a new pin.
+Windows source is pinned to Chromium **156.0.8078.47**, Arcium core [ea530f48](https://github.com/dr-baker/Arcium/tree/ea530f4818599a12754b77daaea8e593feb0b443), and the tracked [Windows platform revision](upstream/helium-windows.sha). Upstream compatibility and security changes need review before adopting a new pin.
 
 Existing local builds use [incremental resume](docs/local-windows-incremental-build.md). Keep `out\Default`; Git updates alone do not change the compiled browser. [Portable packaging](docs/windows-portable-package.md) copies a finished runtime. [Installer packaging](docs/windows-installer-updates.md) wraps that ZIP without recompiling Chromium.
 

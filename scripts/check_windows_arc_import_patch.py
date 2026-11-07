@@ -8,6 +8,7 @@ Run as: python -m scripts.check_windows_arc_import_patch --core-dir PATH
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 from itertools import permutations
@@ -29,7 +30,7 @@ from scripts.apply_windows_arc_workflow import (
     LEGACY_APPEARANCE_CSS, LEGACY_DISCONNECT, PATCH, ROOT,
     appearance_css_addition, git_apply, integrate, integrate_bundle,
     patch_targets, preserve_line_endings,
-    ONBOARDING_PATCH, SERVICES_PATCH, PROFILE_KEEP_ALIVE_PATCH,
+    ONBOARDING_PATCH, SERVICES_PATCH, PROFILE_KEEP_ALIVE_PATCH, TAB_TOOLS_PATCH,
 )
 from scripts.check_patch_overlaps import discover_patch_paths, download_original, select_patch_sections
 from scripts.windows_port import audit_staged, chromium_version, git, read_pin, read_series
@@ -39,6 +40,7 @@ from scripts.check_windows_onboarding import (
     prepare_onboarding_assets, check_onboarding,
 )
 from scripts.check_windows_profile_keep_alive import PROFILE_KEEP_ALIVE_CONSUMERS
+from scripts.check_windows_tab_tools import API_FILES as TAB_TOOLS_API_FILES
 
 
 IMPORT_PATCH = ROOT / "patches/windows/arc-import-windows.patch"
@@ -156,10 +158,12 @@ def check(core: Path, platform: Path | None = None,
     all_paths, created = discover_patch_paths(patches)
     onboarding_targets = (set(patch_targets(ONBOARDING_PATCH.read_text(encoding="utf-8"))) |
                           set(patch_targets(SERVICES_PATCH.read_text(encoding="utf-8"))) |
-                          set(patch_targets(PROFILE_KEEP_ALIVE_PATCH.read_text(encoding="utf-8")))
+                          set(patch_targets(PROFILE_KEEP_ALIVE_PATCH.read_text(encoding="utf-8"))) |
+                          set(patch_targets(TAB_TOOLS_PATCH.read_text(encoding="utf-8")))
                           if platform is not None else set())
     if onboarding_targets:
         replay_targets |= set(PROFILE_KEEP_ALIVE_CONSUMERS)
+        replay_targets |= set(TAB_TOOLS_API_FILES)
         replay_targets |= onboarding_targets | set(ONBOARDING_API_FILES) | set(BRANDING_API_FILES)
         replay_targets |= {path for path in all_paths if path.startswith(ONBOARDING_ROOT + "/")}
     original_hashes = {}
@@ -174,14 +178,22 @@ def check(core: Path, platform: Path | None = None,
         (source / "BUILD.gn").write_text("# Partial patch replay fixture; not buildable.\n")
         onboarding_assets = (prepare_onboarding_assets(core, source, onboarding_archive)
                              if onboarding_targets else None)
-        for target in sorted(replay_targets - created):
+        def fetch_target(target):
             if target.startswith(ONBOARDING_ROOT + "/"):
                 # Sources and tools came from the SHA256-verified release.
                 if not (source / target).is_file():
                     raise RuntimeError(f"Missing pinned onboarding asset: {target}")
-                continue
-            original_hashes[target] = download_original(
+                return None
+            return target, download_original(
                 chromium_version(), target, source / target, mirror_first=True)
+
+        # Independent files retain their pinned provenance checks. Consume
+        # results in target order before applying any patch sections.
+        with ThreadPoolExecutor(max_workers=6) as executor:
+            for result in executor.map(fetch_target, sorted(replay_targets - created)):
+                if result is not None:
+                    target, digest = result
+                    original_hashes[target] = digest
         replayed = []
         selected_patch = temporary / "selected.patch"
         for patch in patches:

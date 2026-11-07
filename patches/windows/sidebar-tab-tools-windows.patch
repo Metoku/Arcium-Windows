@@ -1,0 +1,643 @@
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc
+@@ -12,13 +12,13 @@
+ 
+ #include "base/callback_list.h"
+ #include "base/functional/bind.h"
+-#include "base/task/sequenced_task_runner.h"
+ #include "base/i18n/number_formatting.h"
+ #include "base/i18n/rtl.h"
+ #include "base/metrics/histogram_functions.h"
+ #include "base/metrics/user_metrics.h"
+ #include "base/metrics/user_metrics_action.h"
+ #include "base/numerics/safe_conversions.h"
++#include "base/task/sequenced_task_runner.h"
+ #include "base/time/time.h"
+ #include "chrome/browser/ui/actions/chrome_action_id.h"
+ #include "chrome/browser/ui/animation/browser_animation_controller.h"
+@@ -37,10 +37,10 @@
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_state.h"
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+ #include "chrome/browser/ui/ui_features.h"
++#include "chrome/browser/ui/view_ids.h"
+ #include "chrome/browser/ui/views/animations/tab_strip_animations.h"
+ #include "chrome/browser/ui/views/frame/base_tab_strip_region_view.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+-#include "chrome/browser/ui/view_ids.h"
+ #include "chrome/browser/ui/views/frame/custom_corners_background.h"
+ #include "chrome/browser/ui/views/frame/frame_separator.h"
+ #include "chrome/browser/ui/views/frame/safe_invoke/safe_invoke.h"
+@@ -70,9 +70,14 @@
+ #include "ui/base/l10n/l10n_util.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ #include "ui/compositor/layer.h"
++#include "ui/compositor/layer_animator.h"
+ #include "ui/display/screen.h"
+ #include "ui/events/event.h"
++#include "ui/gfx/animation/animation.h"
++#include "ui/gfx/animation/tween.h"
+ #include "ui/gfx/geometry/point.h"
++#include "ui/gfx/geometry/transform.h"
++#include "ui/views/animation/animation_builder.h"
+ #include "ui/views/controls/button/label_button.h"
+ #include "ui/views/controls/focus_ring.h"
+ #include "ui/views/controls/menu/menu_runner.h"
+@@ -87,15 +92,427 @@
+ #include "ui/views/layout/proposed_layout.h"
+ #include "ui/views/view.h"
+ #include "ui/views/view_class_properties.h"
+-#include "ui/compositor/layer.h"
+-#include "ui/compositor/layer_animator.h"
+-#include "ui/gfx/animation/animation.h"
+-#include "ui/gfx/animation/tween.h"
+-#include "ui/gfx/geometry/transform.h"
+-#include "ui/views/animation/animation_builder.h"
+ #include "ui/views/view_utils.h"
+ 
++#include <cstdint>
++#include <map>
++#include <string>
++#include <vector>
++
++#include "base/memory/raw_ptr.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/timer/timer.h"
++#include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/helium/helium_space_service.h"
++#include "chrome/browser/ui/helium/helium_space_service_factory.h"
++#include "chrome/browser/ui/helium/arcium_settings_prefs.h"
++#include "components/history/core/common/pref_names.h"
++#include "components/performance_manager/public/decorators/page_live_state_decorator.h"
++#include "components/performance_manager/public/graph/page_node.h"
++#include "components/performance_manager/public/performance_manager.h"
++#include "components/prefs/pref_change_registrar.h"
++#include "components/prefs/pref_service.h"
++#include "components/tab_groups/tab_group_visual_data.h"
++#include "content/public/browser/web_contents.h"
++#include "net/base/registry_controlled_domains/registry_controlled_domain.h"
++#include "ui/color/color_id.h"
++#include "ui/menus/simple_menu_model.h"
++#include "ui/views/border.h"
++
+ namespace {
++// ARCIUM_TAB_TOOLS_POLICY_BEGIN
++int ArciumCleanupHours(int value) {
++  switch (value) {
++    case 12:
++    case 24:
++    case 72:
++    case 168:
++      return value;
++    default:
++      return 0;
++  }
++}
++
++bool ArciumShouldAutoClean(int hours,
++                           int64_t inactive_seconds,
++                           bool protected_tab,
++                           bool has_user_edits,
++                           bool has_activity) {
++  hours = ArciumCleanupHours(hours);
++  return hours > 0 && inactive_seconds >= int64_t{hours} * 3600 &&
++         !protected_tab && !has_user_edits && !has_activity;
++}
++
++std::vector<std::vector<int>> ArciumTidyBuckets(
++    const std::vector<std::string>& sites) {
++  std::map<std::string, std::vector<int>> by_site;
++  for (size_t i = 0; i < sites.size(); ++i) {
++    if (!sites[i].empty()) {
++      by_site[sites[i]].push_back(static_cast<int>(i));
++    }
++  }
++  std::vector<std::vector<int>> result;
++  for (auto& [site, indices] : by_site) {
++    if (indices.size() >= 2) {
++      result.push_back(std::move(indices));
++    }
++  }
++  return result;
++}
++// ARCIUM_TAB_TOOLS_POLICY_END
++
++class ArciumSidebarTabToolsView : public views::FlexLayoutView,
++                                  public ui::SimpleMenuModel::Delegate {
++  METADATA_HEADER(ArciumSidebarTabToolsView, views::FlexLayoutView)
++
++ public:
++  ArciumSidebarTabToolsView(BrowserWindowInterface* browser,
++                            base::RepeatingClosure menu_will_show,
++                            base::RepeatingClosure menu_closed)
++      : browser_(browser->GetWeakPtr()),
++        menu_will_show_(std::move(menu_will_show)),
++        menu_closed_(std::move(menu_closed)),
++        menu_(this) {
++    SetOrientation(views::LayoutOrientation::kHorizontal);
++    SetMainAxisAlignment(views::LayoutAlignment::kEnd);
++    auto add_button = [this](int text, int tooltip,
++                             base::RepeatingClosure callback) {
++      auto button = std::make_unique<views::LabelButton>(
++          std::move(callback), l10n_util::GetStringUTF16(text));
++      button->SetTooltipText(l10n_util::GetStringUTF16(tooltip));
++      button->SetBorder(views::CreateEmptyBorder(gfx::Insets::VH(4, 5)));
++      button->SetTextColor(views::Button::STATE_NORMAL,
++                           ui::kColorLabelForegroundSecondary);
++      return AddChildView(std::move(button));
++    };
++    add_button(IDS_ARCIUM_TAB_TOOLS_TIDY, IDS_ARCIUM_TAB_TOOLS_TIDY_HELP,
++               base::BindRepeating(&ArciumSidebarTabToolsView::Tidy,
++                                   weak_factory_.GetWeakPtr()));
++    add_button(IDS_ARCIUM_TAB_TOOLS_CLEAR, IDS_ARCIUM_TAB_TOOLS_CLEAR_HELP,
++               base::BindRepeating(&ArciumSidebarTabToolsView::Clear,
++                                   weak_factory_.GetWeakPtr()));
++    menu_button_ =
++        add_button(IDS_ARCIUM_TAB_TOOLS_MENU, IDS_ARCIUM_TAB_TOOLS_MENU_HELP,
++                   base::BindRepeating(&ArciumSidebarTabToolsView::ShowMenu,
++                                       weak_factory_.GetWeakPtr()));
++    menu_button_->GetViewAccessibility().SetName(
++        l10n_util::GetStringUTF16(IDS_ARCIUM_TAB_TOOLS_MENU_HELP));
++
++    menu_.AddTitle(l10n_util::GetStringUTF16(IDS_ARCIUM_TAB_TOOLS_CLEANUP));
++    for (const auto& [hours, label] : kCleanupOptions) {
++      menu_.AddRadioItem(kCleanupBase + hours, l10n_util::GetStringUTF16(label),
++                         1);
++    }
++    menu_.AddSeparator(ui::NORMAL_SEPARATOR);
++    menu_.AddItem(kRestore,
++                  l10n_util::GetStringUTF16(IDS_ARCIUM_TAB_TOOLS_RESTORE));
++    menu_.AddItem(kRecentlyClosed,
++                  l10n_util::GetStringUTF16(IDS_ARCIUM_TAB_TOOLS_RECENT));
++
++    pref_registrar_.Init(browser->GetProfile()->GetPrefs());
++    pref_registrar_.Add(
++        arcium_settings::kTabCleanupHoursPref,
++        base::BindRepeating(&ArciumSidebarTabToolsView::UpdateCleanupTimer,
++                            weak_factory_.GetWeakPtr()));
++    UpdateCleanupTimer();
++  }
++  ~ArciumSidebarTabToolsView() override = default;
++
++ private:
++  using WeakTab = base::WeakPtr<tabs::TabInterface>;
++  static constexpr int kCleanupBase = 1000;
++  static constexpr int kRestore = 1;
++  static constexpr int kRecentlyClosed = 2;
++  static constexpr std::pair<int, int> kCleanupOptions[] = {
++      {0, IDS_ARCIUM_TAB_TOOLS_OFF},
++      {12, IDS_ARCIUM_TAB_TOOLS_12_HOURS},
++      {24, IDS_ARCIUM_TAB_TOOLS_24_HOURS},
++      {72, IDS_ARCIUM_TAB_TOOLS_3_DAYS},
++      {168, IDS_ARCIUM_TAB_TOOLS_7_DAYS}};
++
++  Browser* GetBrowser() const {
++    if (!browser_ ||
++        browser_->GetType() != BrowserWindowInterface::TYPE_NORMAL) {
++      return nullptr;
++    }
++    Browser* browser = browser_->GetBrowserForMigrationOnly();
++    return browser && !browser->IsAttemptingToCloseBrowser() ? browser
++                                                             : nullptr;
++  }
++
++  static std::string SpaceId(Browser* browser) {
++    auto* spaces =
++        helium::HeliumSpaceServiceFactory::GetForProfile(browser->profile());
++    return spaces ? std::string(spaces->GetSpaceIdForBrowser(browser))
++                  : std::string();
++  }
++
++  static bool IsDurable(tabs::TabInterface* tab, Browser* browser) {
++    auto* spaces =
++        helium::HeliumSpaceServiceFactory::GetForProfile(browser->profile());
++    // Without the durable-item service, fail closed rather than risk a Pin.
++    return !spaces || tab->IsPinned() || spaces->IsPersistentItemTab(tab);
++  }
++
++  static std::string TidySite(tabs::TabInterface* tab, Browser* browser) {
++    if (!tab || tab->GetBrowserWindowInterface() != browser || tab->IsSplit() ||
++        tab->GetGroup() || IsDurable(tab, browser)) {
++      return {};
++    }
++    const GURL url = tab->GetURL();
++    if (!url.SchemeIsHTTPOrHTTPS()) {
++      return {};
++    }
++    std::string site = net::registry_controlled_domains::GetDomainAndRegistry(
++        url, net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
++    return site.empty() ? url.host() : site;
++  }
++
++  void Tidy() {
++    Browser* browser = GetBrowser();
++    if (!browser || !browser->tab_strip_model()->SupportsTabGroups()) {
++      return;
++    }
++    const std::string space_id = SpaceId(browser);
++    auto self = weak_factory_.GetWeakPtr();
++    std::vector<WeakTab> tabs;
++    std::vector<std::string> sites;
++    for (auto* tab : *browser->tab_strip_model()) {
++      tabs.push_back(tab->GetWeakPtr());
++      sites.push_back(TidySite(tab, browser));
++    }
++    for (const auto& bucket : ArciumTidyBuckets(sites)) {
++      browser = GetBrowser();
++      if (!browser || SpaceId(browser) != space_id) {
++        return;
++      }
++      TabStripModel* model = browser->tab_strip_model();
++      if (!model->SupportsTabGroups()) {
++        return;
++      }
++      std::vector<int> indices;
++      const std::string& site = sites[bucket.front()];
++      for (int index : bucket) {
++        if (tabs[index] && TidySite(tabs[index].get(), browser) == site) {
++          const int current = model->GetIndexOfTab(tabs[index].get());
++          if (current != TabStripModel::kNoTab) {
++            indices.push_back(current);
++          }
++        }
++      }
++      std::sort(indices.begin(), indices.end());
++      if (indices.size() < 2) {
++        continue;
++      }
++      const auto group = model->AddToNewGroup(indices);
++      if (!self) {
++        return;
++      }
++      browser = GetBrowser();
++      if (!browser || SpaceId(browser) != space_id) {
++        return;
++      }
++      model = browser->tab_strip_model();
++      if (model->group_model() &&
++          model->group_model()->ContainsTabGroup(group)) {
++        model->ChangeTabGroupVisuals(
++            group,
++            tab_groups::TabGroupVisualData(base::UTF8ToUTF16(site),
++                                           tab_groups::TabGroupColorId::kGrey));
++        if (!self) {
++          return;
++        }
++      }
++    }
++  }
++
++  void Clear() {
++    if (GetBrowser() &&
++        chrome::IsCommandEnabled(browser_.get(), IDC_ARCIUM_CLEAR_UNPINNED)) {
++      chrome::ExecuteCommand(browser_.get(), IDC_ARCIUM_CLEAR_UNPINNED);
++    }
++  }
++
++  int CleanupHours() const {
++    Browser* browser = GetBrowser();
++    return browser && !browser->profile()->IsOffTheRecord()
++               ? ArciumCleanupHours(browser->profile()->GetPrefs()->GetInteger(
++                     arcium_settings::kTabCleanupHoursPref))
++               : 0;
++  }
++
++  void UpdateCleanupTimer() {
++    cleanup_timer_.Stop();
++    if (CleanupHours() > 0) {
++      // No immediate sweep when enabling, changing a duration or starting up.
++      cleanup_timer_.Start(
++          FROM_HERE, base::Minutes(5),
++          base::BindRepeating(&ArciumSidebarTabToolsView::Cleanup,
++                              weak_factory_.GetWeakPtr()));
++    }
++  }
++
++  static bool CanAutoClean(tabs::TabInterface* tab,
++                           Browser* browser,
++                           int hours) {
++    if (!tab || tab->GetBrowserWindowInterface() != browser ||
++        !performance_manager::PerformanceManager::IsAvailable()) {
++      return false;
++    }
++    content::WebContents* contents = tab->GetContents();
++    if (!contents || !tab->GetURL().SchemeIsHTTPOrHTTPS()) {
++      return false;
++    }
++    const auto page = performance_manager::PerformanceManager::
++        GetPrimaryPageNodeForWebContents(contents);
++    if (!page) {
++      return false;
++    }
++    const auto* live =
++        performance_manager::PageLiveStateDecorator::Data::FromPageNode(
++            page.get());
++    if (!live) {
++      return false;
++    }
++    const base::Time last_active = tab->GetLastActiveTime();
++    if (last_active.is_null()) {
++      return false;
++    }
++    const bool protected_tab =
++        IsDurable(tab, browser) || tab->IsActivated() || tab->IsVisible() ||
++        tab->IsSelected() || tab->IsSplit() || page->IsVisible() ||
++        page->IsOffTheRecord() || !live->IsAutoDiscardable();
++    const bool has_user_edits =
++        page->HadFormInteraction() || page->HadUserEdits() ||
++        contents->NeedToFireBeforeUnloadOrUnloadEvents();
++    const bool has_activity =
++        contents->IsLoading() || contents->IsBeingCaptured() ||
++        contents->GetCurrentlyPlayingVideoCount() > 0 || page->IsAudible() ||
++        page->HasPictureInPicture() || page->UsesWebRTC() ||
++        page->IsHoldingWebLock() || page->IsHoldingBlockingIndexedDBLock() ||
++        live->IsCapturingAudio() || live->IsCapturingVideo() ||
++        live->IsBeingMirrored() || live->IsCapturingWindow() ||
++        live->IsCapturingDisplay() || live->IsDevToolsOpen() ||
++        live->IsConnectedToUSBDevice() ||
++        live->IsConnectedToBluetoothDevice() ||
++        live->IsConnectedToHidDevice() || live->IsConnectedToSerialPort() ||
++        live->IsWithheldFromView() ||
++        page->GetTimeSinceLastNavigation() < base::Hours(hours);
++    return ArciumShouldAutoClean(hours,
++                                 (base::Time::Now() - last_active).InSeconds(),
++                                 protected_tab, has_user_edits, has_activity);
++  }
++
++  void Cleanup() {
++    Browser* browser = GetBrowser();
++    if (!browser || CleanupHours() == 0) {
++      return;
++    }
++    if (browser->profile()->GetPrefs()->GetBoolean(
++            prefs::kSavingBrowserHistoryDisabled)) {
++      return;
++    }
++    const auto self = weak_factory_.GetWeakPtr();
++    const std::string space_id = SpaceId(browser);
++    std::vector<WeakTab> candidates;
++    for (auto* tab : *browser->tab_strip_model()) {
++      if (CanAutoClean(tab, browser, CleanupHours())) {
++        candidates.push_back(tab->GetWeakPtr());
++      }
++      if (candidates.size() >= 8) {
++        break;
++      }
++    }
++    for (const auto& candidate : candidates) {
++      browser = GetBrowser();
++      if (!browser || SpaceId(browser) != space_id || CleanupHours() == 0 ||
++          browser->profile()->GetPrefs()->GetBoolean(
++              prefs::kSavingBrowserHistoryDisabled)) {
++        return;
++      }
++      TabStripModel* model = browser->tab_strip_model();
++      if (!candidate || model->count() <= 1 ||
++          !CanAutoClean(candidate.get(), browser, CleanupHours())) {
++        continue;
++      }
++      const int index = model->GetIndexOfTab(candidate.get());
++      if (index != TabStripModel::kNoTab) {
++        model->CloseWebContentsAt(index,
++                                  TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB);
++        if (!self) {
++          return;
++        }
++      }
++    }
++  }
++
++  bool IsCommandIdChecked(int command_id) const override {
++    return command_id >= kCleanupBase &&
++           command_id - kCleanupBase == CleanupHours();
++  }
++
++  bool IsCommandIdEnabled(int command_id) const override {
++    Browser* browser = GetBrowser();
++    if (!browser) {
++      return false;
++    }
++    if (command_id >= kCleanupBase) {
++      return !browser->profile()->IsOffTheRecord() &&
++             !browser->profile()->GetPrefs()->IsManagedPreference(
++                 arcium_settings::kTabCleanupHoursPref);
++    }
++    return command_id != kRestore ||
++           chrome::IsCommandEnabled(browser_.get(), IDC_RESTORE_TAB);
++  }
++
++  void ExecuteCommand(int command_id, int event_flags) override {
++    if (!IsCommandIdEnabled(command_id)) {
++      return;
++    }
++    if (command_id >= kCleanupBase) {
++      GetBrowser()->profile()->GetPrefs()->SetInteger(
++          arcium_settings::kTabCleanupHoursPref,
++          ArciumCleanupHours(command_id - kCleanupBase));
++    } else if (command_id == kRestore) {
++      chrome::RestoreTab(browser_.get());
++    } else if (command_id == kRecentlyClosed) {
++      chrome::ShowTabSearch(browser_.get());
++    }
++  }
++
++  void ShowMenu() {
++    if (!GetWidget() || (menu_runner_ && menu_runner_->IsRunning())) {
++      return;
++    }
++    menu_will_show_.Run();
++    menu_runner_ = std::make_unique<views::MenuRunner>(
++        &menu_, views::MenuRunner::HAS_MNEMONICS,
++        base::BindRepeating(&ArciumSidebarTabToolsView::OnMenuClosed,
++                            weak_factory_.GetWeakPtr()));
++    menu_runner_->RunMenuAt(
++        GetWidget(), nullptr, menu_button_->GetBoundsInScreen(),
++        views::MenuAnchorPosition::kTopRight, ui::mojom::MenuSourceType::kNone);
++  }
++
++  void OnMenuClosed() { menu_closed_.Run(); }
++
++  base::WeakPtr<BrowserWindowInterface> browser_;
++  base::RepeatingClosure menu_will_show_;
++  base::RepeatingClosure menu_closed_;
++  raw_ptr<views::LabelButton> menu_button_ = nullptr;
++  ui::SimpleMenuModel menu_;
++  std::unique_ptr<views::MenuRunner> menu_runner_;
++  PrefChangeRegistrar pref_registrar_;
++  base::RepeatingTimer cleanup_timer_;
++  base::WeakPtrFactory<ArciumSidebarTabToolsView> weak_factory_{this};
++};
++
++BEGIN_METADATA(ArciumSidebarTabToolsView)
++END_METADATA
++
+ constexpr int kResizeAreaWidth = 5;
+ constexpr int kCollapsedResizeAreaWidth = 2;
+ constexpr int kKeyboardResizeWidth = 50;
+@@ -164,6 +581,18 @@
+ 
+   const int region_horizontal_padding = arcium::GetChromeLayoutConstant(
+       this, LayoutConstant::kVerticalTabStripHorizontalPadding);
++
++  tab_tools_ = content_area_view_->AddChildView(
++      std::make_unique<ArciumSidebarTabToolsView>(
++          browser_view->browser(),
++          base::BindRepeating(
++              &VerticalTabStripRegionView::OnNewTabButtonContextMenuWillShow,
++              weak_factory_.GetWeakPtr()),
++          base::BindRepeating(
++              &VerticalTabStripRegionView::OnNewTabButtonContextMenuClosed,
++              weak_factory_.GetWeakPtr())));
++  tab_tools_->SetProperty(views::kMarginsKey,
++                          gfx::Insets::VH(0, region_horizontal_padding));
+ 
+   auto new_tab_button =
+       std::make_unique<VerticalNewTabButton>(browser_view->browser());
+@@ -610,9 +1039,10 @@
+   editor->SetProperty(views::kMarginsKey,
+                       gfx::Insets::VH(0, horizontal_padding));
+   space_editor_ = content_area_view_->AddChildViewAt(
+-      std::move(editor), content_area_view_->GetIndexOf(tab_area_spacer_).value_or(0));
++      std::move(editor),
++      content_area_view_->GetIndexOf(tab_area_spacer_).value_or(0));
+   for (views::View* view :
+-       {static_cast<views::View*>(new_tab_button_.get()),
++       {tab_tools_.get(), static_cast<views::View*>(new_tab_button_.get()),
+         tab_area_spacer_.get(), static_cast<views::View*>(tab_strip_view())}) {
+     if (view) {
+       view->SetVisible(false);
+@@ -638,13 +1068,14 @@
+   base::SequencedTaskRunner::GetCurrentDefault()->DeleteSoon(
+       FROM_HERE, content_area_view_->RemoveChildViewT(editor));
+   for (views::View* view :
+-       {static_cast<views::View*>(new_tab_button_.get()),
++       {tab_tools_.get(), static_cast<views::View*>(new_tab_button_.get()),
+         tab_area_spacer_.get(), static_cast<views::View*>(tab_strip_view())}) {
+     if (view) {
+       view->SetVisible(true);
+     }
+   }
+   InvalidateLayout();
++  UpdateTabToolsVisibility();
+   if (collapse_after_space_editor_) {
+     collapse_after_space_editor_ = false;
+     state_controller_->RequestCollapse(true);
+@@ -1094,15 +1525,17 @@
+       views::kFlexBehaviorKey,
+       views::FlexSpecification(
+           base::BindRepeating(&GetTopAnchoredTabStripSize)));
+-  view->SetProperty(views::kMarginsKey,
+-                    gfx::Insets::TLBR(0, 0, arcium::ScaleChromeDip(this, kBottomContainerGap), 0));
++  view->SetProperty(
++      views::kMarginsKey,
++      gfx::Insets::TLBR(0, 0, arcium::ScaleChromeDip(this, kBottomContainerGap),
++                        0));
+ 
+   views::View* const content_parent =
+       content_area_view_ ? content_area_view_.get() : this;
+-  std::optional<size_t> new_tab_button_index =
+-      content_parent->GetIndexOf(new_tab_button_);
+-  CHECK(new_tab_button_index.has_value());
+-  content_parent->AddChildViewAt(std::move(view), new_tab_button_index.value());
++  std::optional<size_t> tab_tools_index =
++      content_parent->GetIndexOf(tab_tools_);
++  CHECK(tab_tools_index.has_value());
++  content_parent->AddChildViewAt(std::move(view), tab_tools_index.value());
+ 
+   // Pre-set the animation values to the appropriate state.
+   auto* const animation_controller =
+@@ -1212,6 +1645,8 @@
+     InvalidateLayout();
+   }
+ 
++  UpdateTabToolsVisibility();
++
+   // Apply padding immediately at the start of the animation by including
+   // the collapsing state.
+   bool collapsed = state != tabs::VerticalTabStripCollapseState::kExpanded;
+@@ -1232,6 +1667,16 @@
+   if (state == tabs::VerticalTabStripCollapseState::kExpanded ||
+       state == tabs::VerticalTabStripCollapseState::kCollapsed) {
+     UpdateExpandOnHoverState();
++  }
++}
++
++void VerticalTabStripRegionView::UpdateTabToolsVisibility() {
++  if (tab_tools_) {
++    tab_tools_->SetVisible(
++        !space_editor_ &&
++        (state_controller_->GetCollapseState() ==
++             tabs::VerticalTabStripCollapseState::kExpanded ||
++         is_expanded_on_hover_ || IsSidebarNavigationTemporarilyExpanded()));
+   }
+ }
+ 
+@@ -1266,6 +1711,7 @@
+   if (!is_attached_to_widget_) {
+     return;
+   }
++  UpdateTabToolsVisibility();
+   UpdateResizeAreaVisibility();
+   SchedulePaint();
+ }
+--- a/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
++++ b/chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h
+@@ -236,6 +236,7 @@
+   void OnCollapseStateChanged(
+       tabs::VerticalTabStripCollapseState collapse_state);
+   void UpdateResizeAreaVisibility();
++  void UpdateTabToolsVisibility();
+ 
+   void UpdateTemporaryExpandedPresentation();
+   void OnAnimationProgressed(const BrowserAnimationController* controller,
+@@ -292,6 +293,7 @@
+ 
+   raw_ptr<VerticalTabStripBottomContainer> bottom_button_container_ = nullptr;
+   raw_ptr<VerticalNewTabButton> new_tab_button_ = nullptr;
++  raw_ptr<views::View> tab_tools_ = nullptr;
+   raw_ptr<views::View> tab_area_spacer_ = nullptr;
+   raw_ptr<ArciumSpaceEditorView> space_editor_ = nullptr;
+   bool collapse_after_space_editor_ = false;
+--- a/chrome/browser/ui/helium/arcium_settings_prefs.h
++++ b/chrome/browser/ui/helium/arcium_settings_prefs.h
+@@ -15,6 +15,9 @@
+ 
+ inline constexpr char kSharedPalettePref[] = "arcium.appearance.palette";
+ 
++// Automatic sidebar cleanup: Off (0), 12, 24, 72 or 168 inactive hours.
++inline constexpr char kTabCleanupHoursPref[] = "arcium.tabs.cleanup_hours";
++
+ // Returns the SettingsUI-projected browser chrome canvas color for the active
+ // profile. The projection is valid only while the saved palette owns the
+ // matching ThemeService user color; policy and extension themes remain
+--- a/chrome/browser/ui/browser_ui_prefs.cc
++++ b/chrome/browser/ui/browser_ui_prefs.cc
+@@ -204,6 +204,7 @@
+   registry->RegisterBooleanPref(prefs::kPinSplitTabButton, false,
+                                 pref_registration_flags);
+ 
++  registry->RegisterIntegerPref(arcium_settings::kTabCleanupHoursPref, 0);
+   registry->RegisterBooleanPref(prefs::kShowBackButton, true);
+   registry->RegisterBooleanPref(prefs::kShowReloadButton, true);
+   registry->RegisterBooleanPref(prefs::kShowAvatarButton, false);
+--- a/chrome/app/settings_strings.grdp
++++ b/chrome/app/settings_strings.grdp
+@@ -3,2 +3,16 @@
+ <grit-part>
++  <message name="IDS_ARCIUM_TAB_TOOLS_TIDY" desc="Sidebar button to group ordinary tabs locally by website.">Tidy</message>
++  <message name="IDS_ARCIUM_TAB_TOOLS_TIDY_HELP" desc="Tooltip for local tab grouping.">Group ungrouped tabs by website. Pins, Favorites and split views stay in place.</message>
++  <message name="IDS_ARCIUM_TAB_TOOLS_CLEAR" desc="Sidebar button to close ordinary tabs.">Clear</message>
++  <message name="IDS_ARCIUM_TAB_TOOLS_CLEAR_HELP" desc="Tooltip for clearing ordinary tabs.">Close unpinned tabs in this window. Restore closed tabs with Ctrl+Shift+T.</message>
++  <message name="IDS_ARCIUM_TAB_TOOLS_MENU" desc="Compact button label opening tab cleanup and recovery options.">…</message>
++  <message name="IDS_ARCIUM_TAB_TOOLS_MENU_HELP" desc="Accessible name and tooltip for tab cleanup menu.">Tab cleanup and recently closed tabs</message>
++  <message name="IDS_ARCIUM_TAB_TOOLS_CLEANUP" desc="Title of the tab cleanup duration menu.">Automatically clean up inactive tabs</message>
++  <message name="IDS_ARCIUM_TAB_TOOLS_OFF" desc="Disable automatic inactive tab cleanup.">Off</message>
++  <message name="IDS_ARCIUM_TAB_TOOLS_12_HOURS" desc="Automatic tab cleanup after twelve inactive hours.">After 12 hours</message>
++  <message name="IDS_ARCIUM_TAB_TOOLS_24_HOURS" desc="Automatic tab cleanup after twenty four inactive hours.">After 24 hours</message>
++  <message name="IDS_ARCIUM_TAB_TOOLS_3_DAYS" desc="Automatic tab cleanup after three inactive days.">After 3 days</message>
++  <message name="IDS_ARCIUM_TAB_TOOLS_7_DAYS" desc="Automatic tab cleanup after seven inactive days.">After 7 days</message>
++  <message name="IDS_ARCIUM_TAB_TOOLS_RESTORE" desc="Restore the most recently closed tab from Chromium session recovery.">Restore last closed tab</message>
++  <message name="IDS_ARCIUM_TAB_TOOLS_RECENT" desc="Open tab search including recently closed tabs.">Search tabs and recently closed</message>
+   <message name="IDS_SETTINGS_OPENS_IN_NEW_TAB" desc="ARIA (accessibility) label describing a link which opens in a new tab.">

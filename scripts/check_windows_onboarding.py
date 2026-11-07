@@ -21,6 +21,7 @@ import xml.etree.ElementTree as ET
 
 from scripts.apply_windows_arc_workflow import (
     ROOT, ONBOARDING_PATCH, SERVICES_PATCH, SERVICES_STRINGS_SOURCE, PROFILE_KEEP_ALIVE_PATCH,
+    TAB_TOOLS_PATCH,
     git_apply, integrate, integrate_bundle,
     EXTERNAL_EXTENSION_SOURCE, LEGACY_EXTERNAL_EXTENSION_REGISTRY,
     EXTERNAL_EXTENSION_REGISTRY,
@@ -29,6 +30,7 @@ from scripts.check_windows_mac_buttons import MAC_PATCH, cpp_function
 from scripts.check_windows_profile_keep_alive import (
     PROFILE_KEEP_ALIVE_CONSUMERS, verify_profile_keep_alive,
 )
+from scripts.check_windows_tab_tools import verify_tab_tools
 
 
 ONBOARDING_ROOT = 'components/helium_onboarding'
@@ -197,6 +199,7 @@ def check_services_branding(source: Path, postimages: dict[str, dict[str, bytes]
                     (source / name).write_bytes(data)
                 if not applied_first:
                     integrate(source, patch=SERVICES_PATCH, revert=True)
+                    integrate(source, patch=TAB_TOOLS_PATCH, revert=True)
                 strings = source / SERVICES_STRINGS_SOURCE
                 # This is the exact function called by do_substitution in the
                 # pinned Windows builder, including XML reserialization and
@@ -218,6 +221,13 @@ def check_services_branding(source: Path, postimages: dict[str, dict[str, bytes]
                                 or canonical.stderr.count('patch failed:') != 1):
                             raise RuntimeError('The reported post-branding strings failure was not reproduced')
                 status = 'APPLIED' if applied_first else 'READY'
+                if integrate(source, patch=TAB_TOOLS_PATCH) != status or snapshot() != before:
+                    raise RuntimeError('Post-branding tab-tools check changed source or returned the wrong state')
+                integrate(source, patch=TAB_TOOLS_PATCH, apply=True)
+                before = snapshot()
+                integrate(source, patch=TAB_TOOLS_PATCH, apply=True)
+                if snapshot() != before:
+                    raise RuntimeError('Post-branding tab-tools reapplication rewrote source')
                 if integrate(source, patch=SERVICES_PATCH) != status or snapshot() != before:
                     raise RuntimeError('Post-branding services check changed source or returned the wrong state')
                 integrate(source, patch=SERVICES_PATCH, apply=True)
@@ -226,6 +236,7 @@ def check_services_branding(source: Path, postimages: dict[str, dict[str, bytes]
                 if snapshot() != after:
                     raise RuntimeError('Post-branding services reapplication rewrote source')
                 integrate(source, patch=SERVICES_PATCH, revert=True)
+                integrate(source, patch=TAB_TOOLS_PATCH, revert=True)
                 if {name:value[0] for name, value in snapshot().items()} != expected_old:
                     raise RuntimeError('Services reversion did not preserve the builder branding exactly')
                 strings.write_bytes(strings.read_bytes().replace(
@@ -241,6 +252,7 @@ def check_services_branding(source: Path, postimages: dict[str, dict[str, bytes]
                     raise RuntimeError('Rejected post-branding application changed source')
                 checks.append({'endings':style, 'branding_after_apply':applied_first})
         return {'status':'PINNED_BUILDER_BRANDING_REPLAY_PASSED', 'checks':checks,
+                'tab_tools_branding_verified':True,
                 'reported_failure_reproduced':True, 'unknown_copy_rejected':True,
                 'pinned_utility_sha256':{
                     name:hashlib.sha256((core / 'utils' / name).read_bytes()).hexdigest()
@@ -273,7 +285,7 @@ def check_onboarding(source: Path, originals: dict[str, bytes],
                 data = data.removesuffix(b'\n')
             baseline[name] = data
             (source / name).write_bytes(data)
-        others = (*catalogs, MAC_PATCH, PROFILE_KEEP_ALIVE_PATCH)
+        others = (*catalogs, MAC_PATCH, PROFILE_KEEP_ALIVE_PATCH, TAB_TOOLS_PATCH)
         for order in ((ONBOARDING_PATCH, SERVICES_PATCH, *others),
                       (*others, SERVICES_PATCH, ONBOARDING_PATCH)):
             for patch in order:
@@ -291,6 +303,7 @@ def check_onboarding(source: Path, originals: dict[str, bytes],
                 proof = verify_native_sources(source)
                 proof['profile_keep_alive'] = verify_profile_keep_alive(
                     source, compile_cpp=True, consumers=PROFILE_KEEP_ALIVE_CONSUMERS)
+                proof['tab_tools'] = verify_tab_tools(source)
                 frontend = build_onboarding_frontend(source)
                 # Unknown extension roots must not be silently replaced.
                 path = source / EXTERNAL_EXTENSION_SOURCE
